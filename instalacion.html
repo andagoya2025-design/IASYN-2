@@ -88,6 +88,24 @@
     .secondary{background:#fff7fb;color:var(--primary);border:1px solid #edcade}
     .line{background:#fff;color:#475569;border:1px solid #dbe2ea}
     button:disabled{opacity:.55;cursor:not-allowed}
+    .mode{
+      display:inline-flex;
+      align-items:center;
+      gap:7px;
+      margin-top:14px;
+      border-radius:999px;
+      padding:7px 10px;
+      font-size:12px;
+      font-weight:900;
+      border:1px solid #fde68a;
+      background:var(--warnbg);
+      color:var(--warn)
+    }
+    .mode.ok{
+      border-color:#bbf7d0;
+      background:var(--okbg);
+      color:var(--ok)
+    }
     .status-list{display:grid;gap:10px}
     .status{
       display:grid;grid-template-columns:32px 1fr auto;gap:10px;align-items:center;
@@ -105,6 +123,7 @@
     .status.bad .dot,.pill.bad{background:var(--dangerbg);color:var(--danger)}
     .notice{margin-top:16px;padding:13px 14px;border-radius:15px;border:1px solid #dbe2ea;background:#f8fafc;color:#475569;line-height:1.5;font-size:13px}
     .notice.ok{border-color:#bbf7d0;background:var(--okbg);color:var(--ok)}
+    .notice.warn{border-color:#fde68a;background:var(--warnbg);color:var(--warn)}
     .notice.bad{border-color:#fecdd3;background:var(--dangerbg);color:var(--danger)}
     .credentials{
       display:none;margin-top:16px;padding:16px;border-radius:18px;
@@ -124,15 +143,61 @@
     .footer{margin-top:18px;color:#7c8798;font-size:12px;text-align:center;line-height:1.5}
     .spinner{display:none;width:16px;height:16px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
     .loading .spinner{display:inline-block}
+
+    .modal-backdrop{
+      display:none;
+      position:fixed;
+      inset:0;
+      z-index:1000;
+      padding:18px;
+      background:rgba(15,23,42,.58);
+      backdrop-filter:blur(5px);
+      align-items:center;
+      justify-content:center
+    }
+    .modal-backdrop.show{display:flex}
+    .modal-card{
+      width:min(590px,100%);
+      background:#fff;
+      border-radius:22px;
+      border:1px solid #ead8e3;
+      box-shadow:0 28px 80px rgba(15,23,42,.30);
+      padding:22px
+    }
+    .modal-card h3{margin:0 0 8px;font-size:22px}
+    .modal-card p{margin:0 0 13px;color:#475569;line-height:1.55}
+    .modal-warning{
+      padding:13px 14px;
+      border-radius:15px;
+      border:1px solid #fde68a;
+      background:var(--warnbg);
+      color:var(--warn);
+      font-size:13px;
+      line-height:1.5
+    }
+    .confirm-grid{
+      display:grid;
+      gap:9px;
+      margin-top:14px
+    }
+    .confirm-item{
+      padding:10px 12px;
+      border:1px solid #e5e7eb;
+      border-radius:13px;
+      background:#f8fafc
+    }
+    .confirm-item strong{display:block;font-size:12px;margin-bottom:4px}
+    .confirm-item code{font-size:12px;padding:0;border:0;background:transparent}
+
     @keyframes spin{to{transform:rotate(360deg)}}
     @media(max-width:850px){.grid{grid-template-columns:1fr}.wrap{margin-top:18px}.hero,.card{border-radius:20px}}
-    @media(max-width:540px){.cred-row{grid-template-columns:1fr}.actions button{width:100%}}
+    @media(max-width:540px){.cred-row{grid-template-columns:1fr}.actions button{width:100%}.modal-card{padding:18px}}
   </style>
 </head>
 <body>
   <main class="wrap">
     <section class="hero">
-      <small>IASYN Clinical ERP · Setup V1</small>
+      <small>IASYN Clinical ERP · Setup V1.1</small>
       <h1>Instalación del sistema</h1>
       <p>
         Asistente técnico independiente. Conecta la copia del Google Sheet, prepara
@@ -167,12 +232,21 @@
           <div class="help">Si está vacío, IASYN crea una carpeta raíz propia en el Drive del propietario del Web App.</div>
         </div>
 
+        <div id="modoInstalacion" class="mode warn">
+          Modo instalación · pendiente de completar
+        </div>
+
         <div class="actions">
           <button id="btnVerificar" class="secondary" type="button">Verificar conexión</button>
           <button id="btnInstalar" class="primary" type="button">
             <span class="spinner"></span>
             <span class="btn-text">Instalar IASYN</span>
           </button>
+        </div>
+
+        <div id="proteccionInstalacion" class="notice warn">
+          Antes de instalar, IASYN verificará nuevamente el estado y pedirá confirmación explícita.
+          Una instalación ya completa no se volverá a ejecutar desde esta pantalla.
         </div>
 
         <div id="mensaje" class="notice" aria-live="polite">
@@ -250,11 +324,49 @@
     </div>
 
     <div class="footer">
-      IASYN Setup V1 · El instalador no administra nombre, logo, médicos, servicios,
+      IASYN Setup V1.1 · El instalador no administra nombre, logo, médicos, servicios,
       finanzas ni permisos cotidianos. Esas funciones permanecen en sus módulos propietarios.
     </div>
   </main>
 
-  <script src="instalacion.js?v=1.0.0"></script>
+  <div id="modalConfirmacion"
+       class="modal-backdrop"
+       role="dialog"
+       aria-modal="true"
+       aria-hidden="true"
+       aria-labelledby="modalConfirmacionTitulo">
+    <div class="modal-card">
+      <h3 id="modalConfirmacionTitulo">Confirmar instalación IASYN</h3>
+      <p>
+        Revise que el Web App y el Google Sheet correspondan a esta misma copia
+        antes de continuar.
+      </p>
+
+      <div class="modal-warning">
+        <strong>¿Desea instalar IASYN en esta base?</strong><br>
+        Esta operación preparará la infraestructura. No elimina datos clínicos.
+      </div>
+
+      <div class="confirm-grid">
+        <div class="confirm-item">
+          <strong>Google Sheet</strong>
+          <code id="confirmSheet">—</code>
+        </div>
+        <div class="confirm-item">
+          <strong>Web App</strong>
+          <code id="confirmWebApp">—</code>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="btnCancelarInstalacion" class="line" type="button">Cancelar</button>
+        <button id="btnConfirmarInstalacion" class="primary" type="button">
+          Confirmar e instalar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="instalacion.js?v=1.1.0"></script>
 </body>
 </html>
