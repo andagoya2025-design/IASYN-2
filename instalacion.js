@@ -2,7 +2,7 @@
  * IASYN CLINICAL ERP
  * Archivo: instalacion.js
  * Módulo: Instalador técnico independiente
- * Versión: 1.1.0
+ * Versión: 1.2.0
  *
  * REGLAS
  * - NO depende de iasyn-config.js para poder arrancar una copia nueva.
@@ -10,23 +10,28 @@
  * - El Web App se pega una sola vez en esta pantalla para bootstrap.
  * - Después de instalar, muestra la línea exacta que debe quedar en iasyn-config.js.
  *
- * BLINDAJE V1.1.0
+ * BLINDAJE V1.2.0
  * - Confirmación explícita antes de la primera instalación.
  * - Verificación de estado inmediatamente antes del POST de instalación.
  * - Si el backend reporta instalación COMPLETA, NO vuelve a ejecutar instalación.
  * - El botón Instalar queda deshabilitado en modo diagnóstico.
  * - Protección contra doble clic / ejecución concurrente desde esta interfaz.
+ * - Una sola verificación de diagnóstico puede estar activa a la vez.
+ * - Timeout controlado: una respuesta lenta no deja la interfaz indefinidamente ocupada.
+ * - La primera instalación exige un código bootstrap temporal creado en Apps Script.
  *
  * IMPORTANTE
  * - Esta capa protege la interfaz y reduce reinstalaciones accidentales.
- * - La autorización criptográfica/bootstrap del endpoint pertenece al backend
- *   y debe implementarse en un bloque separado, sin inventar contratos aquí.
+ * - El código bootstrap vive solo en sessionStorage durante la instalación y
+ *   nunca se incorpora al repositorio, a iasyn-config.js ni al HTML.
  */
 (function () {
   'use strict';
 
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const STORAGE_WEBAPP = 'iasyn_setup_webapp_url_v1';
+  const STORAGE_BOOTSTRAP = 'iasyn_setup_bootstrap_session_v1';
+  const TIEMPO_ESPERA_MS = 60000;
 
   const $ = (id) => document.getElementById(id);
   const refs = {
@@ -61,6 +66,8 @@
 
   let instalacionCompleta = false;
   let operacionEnCurso = false;
+  let verificacionEnCurso = false;
+  let promesaVerificacion = null;
   let resolverConfirmacion = null;
 
   function texto(v) {
@@ -156,18 +163,28 @@
         : 'Antes de instalar, IASYN verificará nuevamente el estado y pedirá confirmación explícita. Una instalación ya completa no se volverá a ejecutar desde esta pantalla.';
     }
 
+    if (
+      instalacionCompleta &&
+      refs.modalConfirmacion &&
+      refs.modalConfirmacion.classList.contains('show')
+    ) {
+      cerrarConfirmacion(false);
+    }
+
     const t = refs.btnInstalar.querySelector('.btn-text');
     if (t && !operacionEnCurso) {
       t.textContent = instalacionCompleta ? 'Instalación completa' : 'Instalar IASYN';
     }
 
-    refs.btnInstalar.disabled = operacionEnCurso || instalacionCompleta;
+    refs.btnInstalar.disabled =
+      operacionEnCurso || verificacionEnCurso || instalacionCompleta;
   }
 
   function setLoading(cargando) {
     operacionEnCurso = Boolean(cargando);
-    refs.btnInstalar.disabled = operacionEnCurso || instalacionCompleta;
-    refs.btnVerificar.disabled = operacionEnCurso;
+    refs.btnInstalar.disabled =
+      operacionEnCurso || verificacionEnCurso || instalacionCompleta;
+    refs.btnVerificar.disabled = operacionEnCurso || verificacionEnCurso;
     refs.btnInstalar.classList.toggle('loading', operacionEnCurso);
 
     const t = refs.btnInstalar.querySelector('.btn-text');
@@ -177,6 +194,18 @@
         : (instalacionCompleta ? 'Instalación completa' : 'Instalar IASYN');
     }
   }
+
+  function setVerificando(cargando) {
+    verificacionEnCurso = Boolean(cargando);
+    refs.btnVerificar.disabled = verificacionEnCurso || operacionEnCurso;
+    refs.btnInstalar.disabled =
+      verificacionEnCurso || operacionEnCurso || instalacionCompleta;
+
+    refs.btnVerificar.textContent = verificacionEnCurso
+      ? 'Verificando…'
+      : 'Verificar conexión';
+  }
+
 
   async function leerJson(res) {
     const txt = await res.text();
@@ -190,14 +219,14 @@
   async function apiGet(accion) {
     const base = endpoint();
     const url = base + '?accion=' + encodeURIComponent(accion) + '&t=' + Date.now();
-    const res = await fetch(url, { method: 'GET', cache: 'no-store' });
+    const res = await fetchConTiempoLimite(url, { method: 'GET', cache: 'no-store' });
     if (!res.ok) throw new Error('Error HTTP ' + res.status + '.');
     return leerJson(res);
   }
 
   async function apiPost(accion, data) {
     const base = endpoint();
-    const res = await fetch(base, {
+    const res = await fetchConTiempoLimite(base, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify({ accion: accion, data: data || {} })
@@ -205,6 +234,49 @@
     if (!res.ok) throw new Error('Error HTTP ' + res.status + '.');
     return leerJson(res);
   }
+
+  async function fetchConTiempoLimite(url, opciones) {
+    const controlador = new AbortController();
+    const temporizador = window.setTimeout(function () {
+      controlador.abort();
+    }, TIEMPO_ESPERA_MS);
+
+    try {
+      return await fetch(
+        url,
+        Object.assign({}, opciones || {}, { signal: controlador.signal })
+      );
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        throw new Error(
+          'La verificación tardó demasiado. Puede intentar “Verificar conexión” nuevamente.'
+        );
+      }
+      throw error;
+    } finally {
+      window.clearTimeout(temporizador);
+    }
+  }
+
+  function obtenerBootstrapInstalacion_() {
+    let codigo = texto(sessionStorage.getItem(STORAGE_BOOTSTRAP));
+    if (codigo) return codigo;
+
+    codigo = texto(window.prompt(
+      'Código temporal de instalación IASYN\n\n' +
+      'En el Apps Script de ESTA copia ejecute manualmente:\n' +
+      'iasynInstaladorCrearBootstrapManual()\n\n' +
+      'Luego copie aquí el código temporal mostrado.\n' +
+      'El código no se guarda en GitHub y caduca automáticamente.'
+    ));
+
+    if (codigo) {
+      sessionStorage.setItem(STORAGE_BOOTSTRAP, codigo);
+    }
+
+    return codigo;
+  }
+
 
   function pintarEstado(data) {
     data = data || {};
@@ -254,9 +326,11 @@
     setStatus(
       'stSeguridad',
       seguridad.hoja_usuarios_existe === true ? 'ok' : (base.instalado ? 'warn' : 'pending'),
-      seguridad.total_usuarios !== undefined
-        ? (seguridad.total_usuarios + ' usuario(s) registrado(s)')
-        : 'Pendiente'
+      seguridad.usuarios_configurados === true
+        ? 'Seguridad configurada'
+        : (seguridad.total_usuarios !== undefined
+            ? (seguridad.total_usuarios + ' usuario(s) registrado(s)')
+            : 'Pendiente')
     );
 
     setStatus(
@@ -343,35 +417,67 @@
   }
 
   async function verificar() {
-    if (operacionEnCurso) return;
+    if (operacionEnCurso) return null;
 
-    resetStatus();
-    refs.credenciales.style.display = 'none';
-    refs.frontendPaso.style.display = 'none';
+    /*
+     * Una verificación ya activa se reutiliza. Esto conserva el botón y su
+     * función, pero evita dos diagnósticos simultáneos contra Apps Script.
+     */
+    if (promesaVerificacion) return promesaVerificacion;
 
-    try {
-      const url = endpoint();
-      localStorage.setItem(STORAGE_WEBAPP, url);
-      setStatus('stWebApp','ok','Endpoint /exec válido');
-      setMensaje('Conectando con el Web App…');
+    const completoConocidoAntes = instalacionCompleta;
 
-      const estado = await verificarEstadoActual();
+    promesaVerificacion = (async function () {
+      setVerificando(true);
+      resetStatus();
+      refs.credenciales.style.display = 'none';
+      refs.frontendPaso.style.display = 'none';
 
-      setMensaje(
-        estado.completo
-          ? 'IASYN ya está instalado. La pantalla quedó en modo diagnóstico y no permitirá reinstalar accidentalmente.'
-          : 'Conexión correcta. Puede ejecutar la instalación cuando haya confirmado que este Sheet y este Web App pertenecen a la misma copia.',
-        estado.completo ? 'ok' : ''
-      );
-    } catch (error) {
-      setModoInstalacion(false);
-      setStatus('stWebApp','bad','No se pudo validar el endpoint');
-      setMensaje(error.message || String(error), 'bad');
-    }
+      try {
+        const url = endpoint();
+        localStorage.setItem(STORAGE_WEBAPP, url);
+        setStatus('stWebApp','ok','Endpoint /exec válido');
+        setMensaje('Conectando con el Web App…');
+
+        const estado = await verificarEstadoActual();
+
+        setMensaje(
+          estado.completo
+            ? 'IASYN ya está instalado. La pantalla quedó en modo diagnóstico y puede verificar la conexión cuando lo necesite.'
+            : 'Conexión correcta. Puede ejecutar la instalación cuando haya confirmado que este Sheet y este Web App pertenecen a la misma copia.',
+          estado.completo ? 'ok' : ''
+        );
+
+        return estado;
+      } catch (error) {
+        /*
+         * Un fallo temporal de red no debe convertir una instalación que ya
+         * conocíamos como COMPLETA en una pantalla instalable. Se conserva
+         * el bloqueo previo hasta una verificación válida posterior.
+         */
+        setModoInstalacion(completoConocidoAntes === true);
+        setStatus('stWebApp','bad','No se pudo validar el endpoint');
+        if (completoConocidoAntes === true) {
+          setStatus('stFinal','warn','Instalación completa conocida · diagnóstico no disponible temporalmente');
+        }
+        setMensaje(error.message || String(error), 'bad');
+        return null;
+      } finally {
+        setVerificando(false);
+        promesaVerificacion = null;
+      }
+    })();
+
+    return promesaVerificacion;
   }
 
   async function instalar() {
     if (operacionEnCurso) return;
+
+    if (verificacionEnCurso) {
+      setMensaje('Espere a que termine la verificación actual antes de instalar.');
+      return;
+    }
 
     if (instalacionCompleta) {
       setMensaje(
@@ -449,6 +555,12 @@
         return;
       }
 
+      const bootstrap = obtenerBootstrapInstalacion_();
+      if (!bootstrap) {
+        setMensaje('Instalación cancelada: no se ingresó el código temporal de instalación.');
+        return;
+      }
+
       setMensaje('IASYN está preparando la instalación. No cierre esta página…');
 
       const r = await apiPost('iasynInstaladorEjecutar', {
@@ -457,7 +569,8 @@
         spreadsheet_ref: sheet,
         drive_root_ref: root,
         crear_drive_si_falta: true,
-        crear_administrador_si_vacio: true
+        crear_administrador_si_vacio: true,
+        bootstrap_token: bootstrap
       });
 
       if (!r || r.success !== true) {
@@ -468,6 +581,7 @@
         );
       }
 
+      sessionStorage.removeItem(STORAGE_BOOTSTRAP);
       mostrarResultadoInstalacion(r);
 
       setMensaje(
@@ -478,8 +592,12 @@
       );
 
     } catch (error) {
+      const msg = error && error.message ? error.message : String(error);
+      if (/bootstrap|código temporal|codigo temporal/i.test(msg)) {
+        sessionStorage.removeItem(STORAGE_BOOTSTRAP);
+      }
       setStatus('stFinal','bad','Instalación no completada');
-      setMensaje(error.message || String(error), 'bad');
+      setMensaje(msg, 'bad');
     } finally {
       setLoading(false);
     }
