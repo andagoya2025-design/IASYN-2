@@ -1,0 +1,1847 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#8b1e5a">
+  <meta name="description" content="Asistente Comercial de respuestas rápidas mediante plantillas reutilizables.">
+  <title>Asistente Comercial</title>
+
+  <link rel="icon" type="image/png" href="asistente.png">
+  <link rel="apple-touch-icon" href="asistente.png">
+
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="asistente_comercial.css?v=1.7.6">
+
+  <!-- =========================================================
+       FASE 2 · ESTILOS ADITIVOS / ANTIRREGRESIVOS
+       No reemplazan asistente_comercial.css v1.7.6.
+       ========================================================= -->
+  <style>
+    .ac-crm-card{margin-top:18px;border-color:#ead1df;background:linear-gradient(180deg,#fff 0%,#fffafd 100%)}
+    .ac-crm-kicker{display:inline-flex;align-items:center;gap:6px;margin-bottom:5px;color:var(--ac-primary-dark);font-size:11px;font-weight:900;letter-spacing:.06em;text-transform:uppercase}
+    .ac-crm-grid{display:grid;grid-template-columns:1.2fr 1fr .85fr 1fr;gap:12px;align-items:end}
+    .ac-crm-grid-secondary{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+    .ac-crm-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:14px}
+    .ac-crm-actions .ac-btn{min-height:44px}
+    .ac-crm-note{min-height:88px!important}
+    .ac-crm-statusline{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:12px;padding:10px 12px;border:1px solid var(--ac-line-soft);border-radius:13px;background:#f8fafc;color:var(--ac-muted);font-size:12px;font-weight:750}
+    .ac-crm-statusline[data-type="success"]{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
+    .ac-crm-statusline[data-type="warning"]{border-color:#fde68a;background:#fffbeb;color:#92400e}
+    .ac-crm-statusline[data-type="danger"]{border-color:#fecaca;background:#fef2f2;color:#991b1b}
+    .ac-crm-pill{display:inline-flex;align-items:center;gap:5px;min-height:29px;padding:5px 9px;border:1px solid #ecd5e1;border-radius:999px;background:#fff;color:var(--ac-primary-dark);font-size:11px;font-weight:850}
+    .ac-crm-pending{margin-top:14px;border-top:1px solid var(--ac-line-soft);padding-top:12px}
+    .ac-crm-pending summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px;color:var(--ac-title);font-size:13px;font-weight:900}
+    .ac-crm-pending summary::-webkit-details-marker{display:none}
+    .ac-crm-count{display:inline-grid;place-items:center;min-width:25px;height:25px;padding:0 7px;border-radius:999px;background:var(--ac-soft);color:var(--ac-primary-dark);font-size:11px}
+    .ac-crm-list{display:grid;gap:8px;margin-top:10px}
+    .ac-crm-item{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:11px 12px;border:1px solid var(--ac-line-soft);border-radius:14px;background:#fff}
+    .ac-crm-item strong{display:block;color:var(--ac-title);font-size:13px}
+    .ac-crm-item small{display:block;margin-top:3px;color:var(--ac-muted);font-size:11px;line-height:1.35}
+    .ac-crm-item-time{white-space:nowrap;color:var(--ac-primary-dark);font-size:11px;font-weight:850}
+    .ac-crm-empty{padding:13px;border:1px dashed #dbe2ea;border-radius:14px;color:var(--ac-muted);font-size:12px;text-align:center}
+    .ac-stage-btn.active{border-color:var(--ac-primary);background:var(--ac-primary);color:#fff;box-shadow:0 7px 18px rgba(139,30,90,.16)}
+    .ac-stage-btn.active i{color:#fff}
+    .ac-crm-sync{display:inline-flex;align-items:center;gap:6px;margin-left:auto;color:var(--ac-muted);font-size:11px;font-weight:800}
+    .ac-crm-sync.is-remote{color:#166534}
+    .ac-crm-sync.is-local{color:#92400e}
+
+    /* FASE 3.1 · HISTORIAL COMERCIAL ADITIVO
+       Solo lectura de state.remoteRecords. No modifica backend ni responsive existente. */
+    .ac-crm-history{margin-top:16px;padding-top:14px;border-top:1px solid var(--ac-line-soft)}
+    .ac-crm-history-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+    .ac-crm-history-head strong{color:var(--ac-title);font-size:13px;font-weight:950}
+    .ac-crm-history-head small{color:var(--ac-muted);font-size:10px;font-weight:750}
+    .ac-crm-history-list{display:grid;gap:8px}
+    .ac-crm-history-item{padding:11px 12px;border:1px solid var(--ac-line-soft);border-radius:14px;background:#fff}
+    .ac-crm-history-meta{display:flex;align-items:center;gap:7px;flex-wrap:wrap;color:var(--ac-primary-dark);font-size:10px;font-weight:900}
+    .ac-crm-history-response{margin-top:6px;color:#334155;font-size:12px;line-height:1.45;white-space:pre-wrap;overflow-wrap:anywhere}
+
+    /* FASE 13 · CONTACTO ACTIVO CONTEXTUAL / UX MANUAL
+       Aditivo. No registra ni envía automáticamente. */
+    .ac-response-contact{display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding:10px 12px;border:1px solid #d8eadf;border-radius:13px;background:#f4fbf7}
+    .ac-response-contact.is-active{display:flex}
+    .ac-response-contact-main{display:flex;align-items:center;gap:9px;min-width:0}
+    .ac-response-contact-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#e8f7ee;color:#166534;flex:0 0 auto}
+    .ac-response-contact-copy{min-width:0}
+    .ac-response-contact-kicker{display:block;color:#166534;font-size:10px;font-weight:950;letter-spacing:.045em;text-transform:uppercase}
+    .ac-response-contact-name{display:block;color:var(--ac-title);font-size:13px;font-weight:950;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ac-response-contact-meta{display:block;margin-top:2px;color:var(--ac-muted);font-size:10px;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ac-response-contact-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+    #acRegistrarInteraccionRespuesta[hidden]{display:none!important}
+    @media(max-width:760px){.ac-response-contact{align-items:stretch}.ac-response-contact-actions{width:100%}.ac-response-contact-actions .ac-btn{flex:1 1 auto}}
+
+    /* FASE 14 · UX PROFESIONAL / SIMETRÍA DE ACCIONES
+       Solo presentación. No altera lógica, persistencia, JSON ni backend. */
+    .ac-response-contact-actions{
+      display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));
+      gap:8px;
+      width:100%;
+      margin-top:2px
+    }
+    .ac-response-contact-actions .ac-btn{
+      width:100%;
+      min-height:44px;
+      height:100%;
+      padding:8px 10px;
+      justify-content:center;
+      text-align:center;
+      line-height:1.2
+    }
+    .ac-response-actions{
+      display:grid!important;
+      grid-template-columns:repeat(2,minmax(0,1fr))!important;
+      gap:10px!important;
+      align-items:stretch!important;
+      width:100%!important
+    }
+    .ac-response-actions>.ac-btn{
+      width:100%!important;
+      min-width:0!important;
+      min-height:54px!important;
+      height:100%!important;
+      margin:0!important;
+      padding:10px 12px!important;
+      display:inline-flex!important;
+      align-items:center!important;
+      justify-content:center!important;
+      gap:8px!important;
+      text-align:center!important;
+      line-height:1.2!important;
+      border-radius:15px!important
+    }
+    .ac-response-actions>.ac-btn i{flex:0 0 auto}
+    @media(max-width:760px){
+      .ac-response-contact-actions{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+      .ac-response-contact-actions .ac-btn{min-height:44px;padding:7px 6px;font-size:11px}
+      .ac-response-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}
+      .ac-response-actions>.ac-btn{min-height:58px!important;padding:9px 8px!important}
+    }
+    @media(max-width:380px){
+      .ac-response-contact-actions .ac-btn{font-size:10px;padding:7px 4px}
+      .ac-response-actions>.ac-btn{font-size:11px!important}
+    }
+
+    /* FASE 15 · UX REGISTRO / ANTIDUPLICIDAD / SELECCIÓN DIRECTA
+       Solo presentación y coordinación del flujo ya existente. */
+    .ac-register-feedback{display:none;width:100%;margin:9px 0 0;padding:9px 11px;border:1px solid #dbe7df;border-radius:12px;background:#f7fbf8;color:#166534;font-size:11px;font-weight:850;line-height:1.35}
+    .ac-register-feedback.is-visible{display:block}
+    .ac-register-feedback.is-saving{border-color:#fde68a;background:#fffbeb;color:#92400e}
+    .ac-register-feedback.is-error{border-color:#fecaca;background:#fef2f2;color:#991b1b}
+    [data-ac-register-button][disabled]{opacity:.62!important;cursor:wait!important;pointer-events:none!important}
+    .ac-response-contact-actions .ac-register-direct{font-weight:900;white-space:normal}
+    @media(max-width:760px){
+      .ac-response-contact-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px!important}
+      .ac-response-contact-actions .ac-register-direct{grid-column:1/-1;grid-row:1;min-height:50px!important;font-size:13px!important}
+      .ac-response-contact-actions #acRespuestaContactoFicha{grid-column:1;grid-row:2}
+      .ac-response-contact-actions #acRespuestaContactoEditarDirecto{grid-column:2;grid-row:2}
+      .ac-response-contact-actions #acRespuestaContactoQuitar{grid-column:3;grid-row:2}
+      .ac-response-contact-actions .ac-btn{min-height:44px!important;font-size:11px!important;padding:7px 5px!important}
+    }
+
+    /* FASE 16 · MOBILE PREMIUM / DRAWER DE PLANTILLAS / FEEDBACK UNIFICADO
+       Responsive-first. No altera backend, IDs, JSON ni motor de interpretación. */
+    .ac-mobile-library-backdrop{display:none}
+    .ac-library-mobile-close{display:none}
+    .ac-write-busy{position:relative;overflow:hidden}
+    .ac-write-busy::after{
+      content:"";position:absolute;inset:auto 10% 0 10%;height:2px;
+      border-radius:999px;background:currentColor;opacity:.35;
+      animation:acWritePulse .8s ease-in-out infinite alternate
+    }
+    @keyframes acWritePulse{from{transform:scaleX(.2);opacity:.2}to{transform:scaleX(1);opacity:.65}}
+    .ac-write-success{box-shadow:0 0 0 3px rgba(22,101,52,.10)!important}
+    @media(max-width:760px){
+      body.ac-library-open{overflow:hidden}
+      .ac-mobile-library-backdrop{
+        display:block;position:fixed;inset:0;z-index:1190;
+        background:rgba(15,23,42,.32);backdrop-filter:blur(4px);
+        opacity:0;pointer-events:none;transition:opacity .22s ease
+      }
+      body.ac-library-open .ac-mobile-library-backdrop{opacity:1;pointer-events:auto}
+      #acBibliotecaCard{
+        position:fixed!important;z-index:1200!important;
+        top:max(10px,env(safe-area-inset-top));right:0!important;bottom:0!important;
+        width:min(92vw,430px)!important;max-width:430px!important;
+        height:calc(100dvh - max(10px,env(safe-area-inset-top)))!important;
+        margin:0!important;border-radius:24px 0 0 0!important;
+        box-shadow:-18px 0 50px rgba(15,23,42,.18)!important;
+        transform:translateX(105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);
+        overflow:hidden!important;background:var(--ac-card,#fff)!important
+      }
+      body.ac-library-open #acBibliotecaCard{transform:translateX(0)}
+      #acBibliotecaCard>.ac-card-head{
+        position:sticky;top:0;z-index:3;background:inherit;
+        padding-right:54px!important;border-bottom:1px solid rgba(148,163,184,.18)
+      }
+      #acBibliotecaCard>.ac-card-body{
+        height:calc(100% - 92px);overflow-y:auto!important;overscroll-behavior:contain;
+        padding-bottom:calc(28px + env(safe-area-inset-bottom))!important
+      }
+      .ac-library-mobile-close{
+        display:grid;place-items:center;position:absolute;right:12px;top:12px;z-index:5;
+        width:38px;height:38px;border:1px solid #e5e7eb;border-radius:12px;
+        background:#fff;color:#334155;font-size:18px
+      }
+      #acModoPlantillas{position:relative}
+      body.ac-library-open #acModoPlantillas{box-shadow:0 0 0 3px rgba(157,28,91,.12)}
+      .ac-mobile-template-picker{margin-top:4px}
+      #acPlantillas{padding-bottom:18px}
+    }
+
+    /* FASE 17 · CONSOLIDACIÓN UX PREMIUM / ANTIRREGRESIVA
+       Solo estados visuales y coordinación. Conserva base responsive, simetría y paleta. */
+    .ac-crm-mobile-action{position:relative;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease,background .18s ease}
+    .ac-crm-mobile-action:active{transform:translateY(1px) scale(.99)}
+    #acCrmPendientesMovil[data-pending-count]:not([data-pending-count="0"])::after{
+      content:attr(data-pending-count);position:absolute;top:-7px;right:-7px;display:grid;place-items:center;
+      min-width:23px;height:23px;padding:0 6px;border:2px solid #fff;border-radius:999px;
+      background:linear-gradient(135deg,#dc2626,#f97316);color:#fff;font-size:10px;font-weight:950;
+      box-shadow:0 6px 16px rgba(220,38,38,.24)
+    }
+    .ac-pending-state{display:inline-flex;align-items:center;min-height:22px;margin-top:6px;padding:3px 8px;border-radius:999px;font-size:9px;font-weight:950;letter-spacing:.035em;text-transform:uppercase}
+    .ac-pending-state.is-appointment{border:1px solid #bfdbfe;background:#eff6ff;color:#1d4ed8}
+    .ac-pending-state.is-confirmed{border:1px solid #bbf7d0;background:#f0fdf4;color:#166534}
+    .ac-followup-unsaved{border-color:#f59e0b!important;background:#fffbeb!important;box-shadow:0 0 0 3px rgba(245,158,11,.10)!important}
+    .ac-active-contact.is-active{transition:border-color .18s ease,box-shadow .18s ease,background .18s ease}
+    .ac-active-contact.is-active{border-color:#e5bfd5;background:linear-gradient(135deg,#fff 0%,#fff8fc 58%,#fdf2f8 100%);box-shadow:0 10px 28px rgba(139,30,90,.075)}
+    .ac-response-contact.is-active{box-shadow:0 8px 22px rgba(22,101,52,.055)}
+    .ac-crm-statusline[data-type="success"] i{color:#16a34a}
+    .ac-crm-statusline[data-type="warning"] i{color:#d97706}
+    .ac-crm-statusline[data-type="danger"] i{color:#dc2626}
+    @media(max-width:760px){
+      body.ac-library-open #acBibliotecaCard{transform:translateX(0)!important;visibility:visible!important;opacity:1!important}
+      body.ac-library-open #acModoResponder{background:transparent!important;color:var(--ac-muted)!important}
+      body.ac-library-open #acModoPlantillas{background:var(--ac-soft)!important;color:var(--ac-primary-dark)!important}
+      .ac-mobile-library-backdrop{background:rgba(15,23,42,.48)!important;backdrop-filter:blur(7px)!important;-webkit-backdrop-filter:blur(7px)!important}
+      #acBibliotecaCard{box-shadow:-22px 0 70px rgba(15,23,42,.28)!important}
+      .ac-library-mobile-close{box-shadow:0 6px 18px rgba(15,23,42,.08);transition:transform .16s ease,background .16s ease}
+      .ac-library-mobile-close:active{transform:scale(.96);background:#fff7fb}
+      .ac-pending-state{font-size:9px}
+    }
+
+    /* FASE 3.2 · FICHA DIRECTA / EDICIÓN CONTROLADA
+       Solo presentación y control de edición del Mini CRM. */
+    .ac-crm-editbar{display:none;align-items:center;justify-content:flex-end;gap:8px;margin:0 0 12px}
+    .ac-crm-card[data-crm-mode="FORM"] .ac-crm-editbar{display:flex}
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-actions{display:none!important}
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-form-note{pointer-events:none}
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-grid input,
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-grid select,
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-grid-secondary input,
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] .ac-crm-form-note textarea{
+      pointer-events:none;
+      background:#f8fafc!important;
+      color:#475569!important;
+      border-color:#e7ebf0!important;
+      box-shadow:none!important
+    }
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] input:focus,
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] select:focus,
+    .ac-crm-card[data-crm-mode="FORM"][data-editing="false"] textarea:focus{
+      outline:none!important;
+      box-shadow:none!important
+    }
+
+    /* FASE 3.3 · ESTABILIDAD MODAL / HISTORIAL / LISTAS LARGAS */
+    html{scrollbar-gutter:stable}
+    .ac-crm-card.is-open>.ac-card-body{overflow-x:hidden!important;box-sizing:border-box}
+    .ac-crm-card.is-open>.ac-card-body *,
+    .ac-crm-card.is-open>.ac-card-body *::before,
+    .ac-crm-card.is-open>.ac-card-body *::after{box-sizing:border-box;min-width:0}
+    .ac-crm-grid input,.ac-crm-grid select,
+    .ac-crm-grid-secondary input,.ac-crm-form-note textarea{width:100%;max-width:100%}
+    .ac-crm-list-tools{position:sticky;top:72px;z-index:3;display:flex;align-items:center;gap:8px;margin:10px 0 8px;padding:8px;border:1px solid #edf1f5;border-radius:14px;background:rgba(255,255,255,.97);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+    .ac-crm-list-search{width:100%;min-height:40px;padding:8px 11px;border:1px solid var(--ac-line);border-radius:11px;background:#fff;color:var(--ac-text);font:inherit;font-size:12px;outline:none}
+    .ac-crm-list-search:focus{border-color:rgba(139,30,90,.45);box-shadow:0 0 0 3px rgba(139,30,90,.08)}
+    .ac-crm-list{max-height:min(56vh,560px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-right:2px}
+    .ac-crm-history-meta .ac-history-stage{display:inline-flex;align-items:center;min-height:22px;padding:3px 7px;border-radius:999px;background:#fdf2f8;color:var(--ac-primary-dark);font-weight:950}
+
+    /* FASE 3.4 · PENDIENTES INTELIGENTES */
+    .ac-pending-time{display:flex;align-items:flex-end;flex-direction:column;gap:5px;min-width:116px;text-align:right}
+    .ac-pending-badge{display:inline-flex;align-items:center;justify-content:center;min-height:23px;padding:3px 8px;border-radius:999px;font-size:9px;font-weight:950;letter-spacing:.045em;text-transform:uppercase;white-space:nowrap}
+    .ac-pending-badge.is-overdue{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+    .ac-pending-badge.is-today{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+    .ac-pending-badge.is-next{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+    .ac-pending-human{color:var(--ac-primary-dark);font-size:10px;font-weight:900;line-height:1.25;white-space:nowrap}
+    .ac-pending-exact{color:var(--ac-muted);font-size:9px;font-weight:750;line-height:1.2;white-space:nowrap}
+
+    /* FASE 3.5 · WHATSAPP 24H MANUAL */
+    .ac-wa-window{display:none;margin-top:12px;padding:11px 12px;border:1px solid var(--ac-line-soft);border-radius:14px;background:#f8fafc}
+    .ac-wa-window.is-visible{display:block}
+    .ac-wa-window-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+    .ac-wa-window-title{display:flex;align-items:center;gap:7px;color:var(--ac-title);font-size:12px;font-weight:950}
+    .ac-wa-window-badge{display:inline-flex;align-items:center;justify-content:center;min-height:24px;padding:3px 8px;border-radius:999px;font-size:9px;font-weight:950;letter-spacing:.045em;text-transform:uppercase;white-space:nowrap}
+    .ac-wa-window-badge.is-open{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+    .ac-wa-window-badge.is-warning{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
+    .ac-wa-window-badge.is-closed{background:#fef2f2;color:#991b1b;border:1px solid #fecaca}
+    .ac-wa-window-badge.is-empty{background:#f8fafc;color:#64748b;border:1px solid #e2e8f0}
+    .ac-wa-window-detail{margin-top:6px;color:var(--ac-muted);font-size:10px;font-weight:750;line-height:1.35}
+
+    /* FASE 3.6 · PENDIENTES + VENTANA WHATSAPP */
+    .ac-pending-wa{display:flex;align-items:center;justify-content:flex-end;gap:5px;margin-top:2px;font-size:9px;font-weight:900;line-height:1.2}
+    .ac-pending-wa.is-open{color:#166534}
+    .ac-pending-wa.is-warning{color:#92400e}
+    .ac-pending-wa.is-closed{color:#991b1b}
+    .ac-pending-wa.is-empty{color:#64748b}
+    .ac-pending-wa i{font-size:10px}
+    .ac-pending-priority{display:inline-flex;align-items:center;justify-content:center;min-height:22px;padding:3px 8px;border-radius:999px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:9px;font-weight:950;letter-spacing:.045em;text-transform:uppercase;white-space:nowrap;margin-top:6px}
+    .ac-crm-item.is-wa-priority{border-color:#fed7aa;background:#fffaf5;box-shadow:0 0 0 1px rgba(234,88,12,.05)}
+
+    /* FASE 12 · USABILIDAD VISUAL CONSOLIDADA */
+    .ac-crm-item{min-height:76px;padding:13px 14px;gap:12px}
+    .ac-crm-item strong{font-size:14px;line-height:1.25}
+    .ac-crm-item small{margin-top:4px;font-size:12px;line-height:1.4;color:#64748b}
+    .ac-pending-time{gap:6px;min-width:132px}
+    .ac-pending-badge{min-height:25px;padding:4px 9px;font-size:10px}
+    .ac-pending-human{font-size:11px;line-height:1.3}
+    .ac-pending-exact{font-size:10px;line-height:1.25;color:#64748b}
+    .ac-pending-wa{margin-top:3px;font-size:10px;line-height:1.25}
+    .ac-pending-wa i{font-size:11px}
+    .ac-pending-priority{min-height:24px;padding:4px 9px;margin-top:7px;font-size:10px}
+    .ac-wa-window-title{font-size:13px}
+    .ac-wa-window-badge{min-height:26px;padding:4px 9px;font-size:10px}
+    .ac-wa-window-detail{font-size:11px;line-height:1.4}
+    .ac-crm-history-meta{font-size:11px}
+    .ac-crm-history-response{font-size:13px;line-height:1.5}
+    .ac-crm-list-search{min-height:42px;font-size:13px}
+
+    @media (max-width:760px){
+      .ac-crm-item{min-height:0;padding:12px 12px;gap:9px}
+      .ac-crm-item strong{font-size:14px}
+      .ac-crm-item small{font-size:11px}
+      .ac-pending-time{width:100%;min-width:0;gap:5px}
+      .ac-pending-badge,.ac-pending-priority{font-size:10px}
+      .ac-pending-human{font-size:11px}
+      .ac-pending-exact,.ac-pending-wa{font-size:10px}
+      .ac-wa-window{padding:11px}
+      .ac-wa-window-title{font-size:12px}
+      .ac-wa-window-detail{font-size:11px}
+      .ac-crm-history-response{font-size:12px}
+      .ac-crm-list-tools{top:66px;padding:7px}
+    }
+
+    /* FASE 2.2 · LANZADOR CRM COMPACTO / PANEL MÓVIL PREMIUM */
+    .ac-crm-launchbar{display:none}
+    .ac-crm-sheet-head{display:none}
+    .ac-crm-mobile-action{min-height:44px;border:1px solid #ecd5e1;border-radius:14px;background:#fff;color:var(--ac-primary-dark);font-size:12px;font-weight:900;padding:9px 11px;cursor:pointer;align-items:center;justify-content:center;gap:7px;box-shadow:0 7px 20px rgba(15,23,42,.04)}
+    .ac-crm-mobile-action.is-primary{color:#fff;border-color:transparent;background:linear-gradient(135deg,var(--ac-primary-dark),var(--ac-primary-2) 72%,var(--ac-primary-3));box-shadow:0 11px 24px rgba(139,30,90,.18)}
+    .ac-crm-sheet-title{min-width:0}
+    .ac-crm-sheet-title strong{display:block;color:var(--ac-title);font-size:16px;font-weight:950;letter-spacing:-.015em}
+    .ac-crm-sheet-title small{display:block;margin-top:2px;color:var(--ac-muted);font-size:11px;font-weight:700}
+    .ac-crm-sheet-close{appearance:none;width:40px;height:40px;flex:0 0 40px;border:1px solid var(--ac-line);border-radius:12px;background:#fff;color:#475569;display:grid;place-items:center;cursor:pointer}
+
+    /* FASE 2.3 · RESPUESTA MÓVIL UNIFICADA */
+    .ac-quick-stage-wrap{display:none}
+    .ac-quick-stage-label{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}
+    .ac-quick-stage-label strong{color:var(--ac-title);font-size:11px;font-weight:950}
+    .ac-quick-stage-label small{color:var(--ac-muted);font-size:9px;font-weight:750}
+    .ac-quick-stage-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+    .ac-quick-stage-btn{min-width:0;min-height:39px;padding:7px 5px;border:1px solid var(--ac-line);border-radius:12px;background:#fff;color:#475569;font-size:9px;font-weight:900;line-height:1.1;cursor:pointer;display:grid;place-items:center;align-content:center;gap:3px;-webkit-tap-highlight-color:transparent}
+    .ac-quick-stage-btn i{font-size:13px}
+    .ac-quick-stage-btn.active{border-color:var(--ac-primary);background:var(--ac-soft);color:var(--ac-primary-dark);box-shadow:inset 0 0 0 1px rgba(139,30,90,.06)}
+    .ac-quick-sheet-backdrop{display:none}
+
+    /* FASE 2.5 · CONTACTO ACTIVO / FLUJO CRM */
+    .ac-active-contact{display:none;margin:0 16px 14px;padding:12px 13px;border:1px solid #ead1df;border-radius:16px;background:linear-gradient(135deg,#fff 0%,#fff7fb 100%);box-shadow:0 8px 24px rgba(15,23,42,.05)}
+    .ac-active-contact.is-active{display:block}
+    .ac-active-contact-main{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+    .ac-active-contact-kicker{display:block;color:var(--ac-primary-dark);font-size:9px;font-weight:950;letter-spacing:.08em;text-transform:uppercase}
+    .ac-active-contact-name{display:block;margin-top:3px;color:var(--ac-title);font-size:15px;font-weight:950;line-height:1.15}
+    .ac-active-contact-meta{display:block;margin-top:4px;color:var(--ac-muted);font-size:11px;font-weight:750;line-height:1.35}
+    .ac-active-contact-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+    .ac-active-contact-actions .ac-btn{min-height:38px;padding:7px 10px;font-size:11px}
+    .ac-active-contact-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border-radius:999px;background:#fdf2f8;color:var(--ac-primary-dark);font-size:10px;font-weight:900;white-space:nowrap}
+    .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-grid,
+    .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-grid-secondary,
+    .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-form-note,
+    .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-actions,
+    .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-statusline,
+    .ac-crm-card[data-crm-mode="CONTACTS"] #acPendientesDetalle{display:none!important}
+    .ac-crm-card[data-crm-mode="CONTACTS"] #acContactosDetalle{display:block!important;border-top:0;margin-top:0;padding-top:0}
+    .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-grid,
+    .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-grid-secondary,
+    .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-form-note,
+    .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-actions,
+    .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-statusline,
+    .ac-crm-card[data-crm-mode="PENDING"] #acContactosDetalle{display:none!important}
+    .ac-crm-card[data-crm-mode="PENDING"] #acPendientesDetalle{display:block!important;border-top:0;margin-top:0;padding-top:0}
+    .ac-crm-card[data-crm-mode="NEW"] #acContactosDetalle,
+    .ac-crm-card[data-crm-mode="NEW"] #acPendientesDetalle,
+    .ac-crm-card[data-crm-mode="FORM"] #acContactosDetalle,
+    .ac-crm-card[data-crm-mode="FORM"] #acPendientesDetalle{display:none!important}
+    .ac-crm-card:not([data-crm-mode="FORM"]) #acHistorialComercial{display:none!important}
+
+    @media (max-width:1180px){.ac-crm-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ac-crm-grid-secondary{grid-template-columns:1fr 1fr}}
+
+    /* CRM ESCRITORIO · CORRECCIÓN CONSOLIDADA */
+    @media (min-width:761px){
+      body.ac-crm-panel-open{overflow:hidden}
+      .ac-crm-card .ac-card-head>#acNuevoContacto{display:none}
+      .ac-crm-launchbar{display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:10px;padding:0 18px 16px}
+      .ac-crm-mobile-action{display:inline-flex;min-height:46px}
+      .ac-active-contact{margin:0 18px 18px}
+      .ac-active-contact.is-active{display:block}
+      .ac-crm-card>.ac-card-body{display:none}
+      .ac-crm-card.is-open:before{content:"";position:fixed;inset:0;z-index:1190;background:rgba(15,23,42,.46);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+      .ac-crm-card.is-open>.ac-card-body{display:block;position:fixed;z-index:1200;top:50%;left:50%;width:min(1080px,calc(100vw - 64px));max-height:calc(100vh - 64px);overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;transform:translate(-50%,-50%);padding:0 24px 24px;border:1px solid rgba(139,30,90,.14);border-radius:26px;background:linear-gradient(180deg,#fff 0%,#fffafd 100%);box-shadow:0 32px 100px rgba(15,23,42,.30);animation:acCrmDesktopIn .18s ease-out}
+      .ac-crm-sheet-head{position:sticky;top:0;z-index:4;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 -24px 18px;padding:16px 24px 14px;border-bottom:1px solid #f1e5eb;background:rgba(255,255,255,.985);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+      .ac-crm-sheet-title strong{font-size:18px}.ac-crm-sheet-title small{font-size:12px}.ac-crm-sheet-close{width:42px;height:42px;flex-basis:42px}
+      .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-list,.ac-crm-card[data-crm-mode="PENDING"] .ac-crm-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+      .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-item,.ac-crm-card[data-crm-mode="PENDING"] .ac-crm-item{min-height:70px;text-align:left;cursor:pointer}
+      @keyframes acCrmDesktopIn{from{opacity:.35;transform:translate(-50%,-48%) scale(.988)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+    }
+
+    @media (max-width:760px){
+      body.ac-crm-panel-open{overflow:hidden}
+      .ac-crm-card{margin-top:14px;overflow:visible;border-radius:20px;box-shadow:0 12px 34px rgba(15,23,42,.065)}
+      .ac-crm-card .ac-card-head{align-items:center;flex-direction:row;padding:14px 14px 10px}
+      .ac-crm-card .ac-card-head>div{min-width:0}.ac-crm-card .ac-card-head .ac-crm-kicker{display:none}.ac-crm-card .ac-card-head .ac-card-title{font-size:16px}
+      .ac-crm-card .ac-card-head .ac-card-help{margin-top:3px;font-size:11px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+      .ac-crm-card .ac-card-head>#acNuevoContacto{display:none}
+      .ac-crm-launchbar{display:grid;grid-template-columns:1.15fr 1fr 1fr;gap:8px;padding:0 12px 12px}.ac-crm-mobile-action{display:inline-flex}.ac-active-contact{margin:0 12px 12px}.ac-active-contact-main{align-items:center}.ac-active-contact-actions{display:grid;grid-template-columns:1fr 1fr}.ac-active-contact-actions .ac-btn{width:100%;min-height:42px}
+      .ac-crm-card>.ac-card-body{display:none}
+      .ac-crm-card.is-open:before{content:"";position:fixed;inset:0;z-index:1190;background:rgba(15,23,42,.48);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px)}
+      .ac-crm-card.is-open>.ac-card-body{display:block;position:fixed;z-index:1200;top:max(8px,env(safe-area-inset-top));right:8px;bottom:max(8px,env(safe-area-inset-bottom));left:8px;width:auto;max-height:none;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:0 16px 18px;border:1px solid rgba(139,30,90,.14);border-radius:26px;background:linear-gradient(180deg,#ffffff 0%,#fffafd 100%);box-shadow:0 30px 90px rgba(15,23,42,.28);animation:acCrmModalIn .18s ease-out}
+      .ac-crm-sheet-head{position:sticky;top:0;z-index:4;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 -16px 14px;padding:14px 16px 12px;border-bottom:1px solid #f1e5eb;background:rgba(255,255,255,.98);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+      .ac-crm-sheet-head:before{display:none}.ac-crm-sheet-close{width:38px;height:38px;flex-basis:38px;border-radius:12px}
+      .ac-crm-grid,.ac-crm-grid-secondary{grid-template-columns:1fr;gap:10px}.ac-crm-grid-secondary{margin-top:10px}
+      .ac-crm-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));width:100%;gap:8px}.ac-crm-actions .ac-btn{width:100%;min-height:48px}.ac-crm-actions .ac-btn-primary{grid-column:1/-1}.ac-crm-sync{grid-column:1/-1;margin:2px 0 0;justify-content:center}.ac-crm-statusline{font-size:11px}.ac-crm-pending{padding-top:11px}.ac-crm-item{grid-template-columns:1fr}.ac-crm-item-time{white-space:normal}.ac-pending-time{width:100%;min-width:0;align-items:flex-start;text-align:left}.ac-pending-human,.ac-pending-exact{white-space:normal}.ac-pending-wa{justify-content:flex-start;text-align:left}
+      body:has(#acQuickSheet:not([hidden])){overflow:hidden}
+      .ac-quick-sheet{top:max(8px,env(safe-area-inset-top))!important;right:8px!important;bottom:max(8px,env(safe-area-inset-bottom))!important;left:8px!important;width:auto!important;height:auto!important;max-height:none!important;z-index:10020!important;overflow:hidden!important;padding:12px!important;border:1px solid rgba(139,30,90,.14)!important;border-radius:26px!important;background:linear-gradient(180deg,#ffffff 0%,#fffafd 100%)!important;box-shadow:0 32px 95px rgba(15,23,42,.32)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;display:grid!important;grid-template-rows:auto auto minmax(0,1fr) auto;gap:10px!important;isolation:isolate;animation:acQuickModalIn .18s ease-out}
+      .ac-quick-sheet[hidden]{display:none!important}.ac-quick-sheet-backdrop{display:block;position:fixed;inset:-20px;z-index:-1;background:rgba(15,23,42,.50);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);pointer-events:none}.ac-quick-sheet-grabber{display:none!important}
+      .ac-quick-sheet-head{position:relative!important;top:auto!important;z-index:4;align-items:center!important;margin:0!important;padding:13px 14px!important;border:1px solid rgba(196,65,132,.20)!important;border-radius:20px!important;background:linear-gradient(135deg,#ffffff 0%,#fff6fb 100%)!important;box-shadow:0 9px 24px rgba(139,30,90,.075)!important}.ac-quick-sheet-head strong{font-size:16px!important;white-space:normal!important;letter-spacing:-.012em!important;line-height:1.22!important}.ac-quick-category{font-size:10px!important;margin-bottom:3px!important;color:var(--ac-primary-dark)!important;font-weight:950!important;letter-spacing:.07em!important}.ac-quick-close{width:38px!important;height:38px!important;flex-basis:38px!important;border-color:#efd9e5!important;border-radius:14px!important;background:#fffafd!important;box-shadow:0 5px 14px rgba(15,23,42,.055)!important}
+      .ac-quick-stage-wrap{display:block;margin:0!important;padding:12px!important;border:1px solid rgba(196,65,132,.16)!important;border-radius:20px!important;background:linear-gradient(180deg,#ffffff 0%,#fffafd 100%)!important;box-shadow:0 8px 22px rgba(15,23,42,.055)!important}.ac-quick-stage-label{margin-bottom:10px!important}.ac-quick-stage-btn{border-radius:15px!important;background:#fff!important;box-shadow:0 4px 12px rgba(15,23,42,.045)!important}.ac-quick-stage-btn.active{border-color:var(--ac-primary)!important;background:linear-gradient(135deg,#fff4f9 0%,#fdf2f8 100%)!important;box-shadow:0 7px 18px rgba(139,30,90,.10)!important}
+      .ac-quick-response{min-height:0!important;max-height:none!important;overflow-y:auto!important;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;margin:0!important;padding:16px!important;border:1px solid rgba(196,65,132,.17)!important;border-radius:22px!important;background:linear-gradient(180deg,#ffffff 0%,#fffefe 100%)!important;box-shadow:0 9px 24px rgba(15,23,42,.055)!important;font-size:14px!important;line-height:1.52!important}
+      .ac-quick-actions{position:relative!important;bottom:auto!important;z-index:4;grid-template-columns:1fr 1fr!important;gap:8px!important;margin:0!important;padding:10px!important;border:1px solid rgba(196,65,132,.14)!important;border-radius:20px!important;background:linear-gradient(180deg,#ffffff 0%,#fffafd 100%)!important;box-shadow:0 9px 24px rgba(15,23,42,.06)!important}.ac-quick-actions .ac-btn{min-height:48px!important;padding:9px 8px!important;font-size:12px!important;border-radius:15px!important;box-shadow:0 5px 14px rgba(15,23,42,.045)!important}.ac-quick-actions .ac-btn-primary{box-shadow:0 8px 18px rgba(139,30,90,.15)!important}.ac-quick-actions .ac-btn i{font-size:16px}body.ac-library-focus .ac-response-actions{position:static!important}
+      @keyframes acQuickModalIn{from{transform:scale(.985);opacity:.35}to{transform:scale(1);opacity:1}}@keyframes acCrmModalIn{from{transform:scale(.985);opacity:.35}to{transform:scale(1);opacity:1}}
+    }
+
+    @media (max-width:420px){.ac-crm-launchbar{grid-template-columns:1fr 1fr}.ac-crm-launchbar .is-primary{grid-column:1/-1}.ac-crm-actions{grid-template-columns:1fr 1fr}.ac-crm-actions .ac-btn-primary{grid-column:1/-1}.ac-crm-sync{grid-column:1/-1}.ac-quick-stage-actions{grid-template-columns:1fr 1fr}.ac-quick-stage-btn{min-height:44px;font-size:10px}.ac-quick-actions .ac-btn{min-height:46px!important;font-size:11px!important}}
+
+    /* =========================================================
+       RESPONSIVE PRO · ANDROID + IPHONE + PC · ANTIRREGRESIVO
+       2026-08-27
+       Objetivo:
+       - Corregir jerarquía, densidad, modales y safe-area en móvil.
+       - Mantener escritorio estable.
+       - No modifica backend, IDs, JSON, CRM ni motor semántico.
+       ========================================================= */
+
+    /* Base defensiva: evita desbordes por controles o textos largos. */
+    #acApp,
+    #acApp *{min-width:0}
+    #acApp img,
+    #acApp svg{max-width:100%}
+    .ac-card,
+    .ac-card-body,
+    .ac-card-head,
+    .ac-crm-card,
+    .ac-crm-card>.ac-card-body{max-width:100%}
+
+    /* Escritorio: conserva el esquema actual y mejora legibilidad modal. */
+    @media (min-width:761px){
+      .ac-crm-card.is-open>.ac-card-body{
+        width:min(1040px,calc(100vw - 48px))!important;
+        max-height:calc(100dvh - 48px)!important;
+        border-radius:24px!important;
+        box-shadow:0 28px 90px rgba(15,23,42,.26)!important
+      }
+      .ac-crm-card[data-crm-mode="CONTACTS"] .ac-crm-list,
+      .ac-crm-card[data-crm-mode="PENDING"] .ac-crm-list{
+        grid-template-columns:repeat(2,minmax(0,1fr))!important
+      }
+      .ac-crm-list-tools{top:70px!important}
+    }
+
+    /* MÓVIL REAL: una sola jerarquía, menos altura y overlays tipo app. */
+    @media (max-width:760px){
+      html,body{max-width:100%;overflow-x:hidden}
+      body{overscroll-behavior-y:none}
+      #acApp{min-height:100dvh}
+      #acApp .ac-shell{
+        width:100%;
+        padding:
+          calc(10px + env(safe-area-inset-top))
+          12px
+          calc(18px + env(safe-area-inset-bottom))!important
+      }
+
+      /* Cabecera compacta. */
+      .ac-topbar{
+        gap:10px!important;
+        margin-bottom:10px!important;
+        align-items:center!important
+      }
+      .ac-title{font-size:25px!important;line-height:1.05!important}
+      .ac-subtitle{font-size:12px!important;line-height:1.35!important;margin-top:4px!important}
+      .ac-brand-chip{min-height:36px!important;padding:6px 10px!important;font-size:11px!important}
+      .ac-brand-chip img,
+      #acBrandLogoFallback{width:22px!important;height:22px!important}
+
+      /* Hero menos invasivo: información útil sin consumir media pantalla. */
+      .ac-hero{
+        margin-bottom:10px!important;
+        padding:14px!important;
+        border-radius:20px!important
+      }
+      .ac-hero-title{font-size:18px!important;line-height:1.15!important}
+      .ac-hero-text{font-size:12px!important;line-height:1.4!important}
+      .ac-hero-badges{gap:6px!important;margin-top:2px!important}
+      .ac-badge{min-height:28px!important;padding:5px 8px!important;font-size:10px!important}
+
+      /* Navegación principal: táctil y estable. */
+      .ac-mobile-modebar{
+        position:sticky!important;
+        top:max(6px,env(safe-area-inset-top))!important;
+        z-index:80!important;
+        margin:0 0 10px!important;
+        padding:4px!important;
+        border-radius:18px!important;
+        background:rgba(255,255,255,.94)!important;
+        backdrop-filter:blur(16px)!important;
+        -webkit-backdrop-filter:blur(16px)!important;
+        box-shadow:0 8px 24px rgba(15,23,42,.08)!important
+      }
+      .ac-mode-btn{
+        min-height:44px!important;
+        border-radius:14px!important;
+        font-size:13px!important
+      }
+
+      /* Modo vendedor/administración: secundario y compacto. */
+      .ac-view-tools{
+        display:flex!important;
+        align-items:center!important;
+        justify-content:space-between!important;
+        gap:8px!important;
+        margin:0 0 10px!important;
+        padding:8px 10px!important;
+        border:1px solid #f0d8e5!important;
+        border-radius:15px!important;
+        background:#fff!important;
+        box-shadow:none!important
+      }
+      .ac-view-tools .ac-btn{
+        min-height:38px!important;
+        padding:7px 10px!important;
+        font-size:11px!important;
+        flex:0 0 auto!important
+      }
+      .ac-view-tools small{
+        margin:0!important;
+        font-size:10px!important;
+        line-height:1.25!important;
+        text-align:right!important
+      }
+
+      /* Tarjetas principales más densas. */
+      .ac-card{border-radius:20px!important}
+      .ac-card+.ac-card{margin-top:12px!important}
+      .ac-card-head{padding:14px 14px 0!important;gap:10px!important}
+      .ac-card-body{padding:14px!important}
+      .ac-card-title{font-size:17px!important}
+      .ac-card-help{font-size:11px!important;line-height:1.35!important}
+
+      /* CRM compacto: la pantalla principal no debe parecer un formulario gigante. */
+      .ac-crm-card{
+        margin-top:10px!important;
+        overflow:visible!important;
+        border-radius:20px!important;
+        box-shadow:0 10px 28px rgba(15,23,42,.055)!important
+      }
+      .ac-crm-card>.ac-card-head{
+        padding:13px 13px 9px!important
+      }
+      .ac-crm-launchbar{
+        grid-template-columns:1fr 1fr!important;
+        gap:8px!important;
+        padding:0 12px 12px!important
+      }
+      .ac-crm-launchbar .is-primary{
+        grid-column:1/-1!important
+      }
+      .ac-crm-mobile-action{
+        min-height:44px!important;
+        border-radius:13px!important;
+        font-size:11px!important;
+        padding:8px 9px!important
+      }
+      .ac-active-contact{
+        margin:0 12px 12px!important;
+        padding:11px 12px!important;
+        border-radius:14px!important
+      }
+
+      /* MENSAJE: prioriza la tarea y reduce el espacio vacío. */
+      #acMensajeCard>.ac-card-head{
+        flex-direction:column!important;
+        align-items:stretch!important
+      }
+      #acMensajeCard .ac-head-actions{
+        display:grid!important;
+        grid-template-columns:1fr 1fr!important;
+        gap:8px!important;
+        width:100%!important
+      }
+      #acMensajeCard .ac-head-actions .ac-btn{
+        width:100%!important;
+        min-height:42px!important
+      }
+      .ac-textarea.ac-message{
+        min-height:150px!important;
+        height:150px
+      }
+      .ac-textarea.ac-response{
+        min-height:180px!important
+      }
+      #acEstado{font-size:11px!important;padding:9px 10px!important}
+      .ac-safety-note{font-size:10px!important;line-height:1.35!important}
+
+      /* =====================================================
+         CRM SHEET MÓVIL
+         Una sola superficie blanca desde abajo.
+         Elimina la apariencia de "tarjeta dentro de tarjeta".
+         ===================================================== */
+      body.ac-crm-panel-open{overflow:hidden!important}
+      .ac-crm-card.is-open:before{
+        content:""!important;
+        position:fixed!important;
+        inset:0!important;
+        z-index:1190!important;
+        background:rgba(15,23,42,.38)!important;
+        backdrop-filter:blur(3px)!important;
+        -webkit-backdrop-filter:blur(3px)!important
+      }
+      .ac-crm-card.is-open>.ac-card-body{
+        display:block!important;
+        position:fixed!important;
+        z-index:1200!important;
+        top:auto!important;
+        right:0!important;
+        bottom:0!important;
+        left:0!important;
+        width:100%!important;
+        height:min(88dvh,760px)!important;
+        max-height:88dvh!important;
+        margin:0!important;
+        padding:0 14px calc(16px + env(safe-area-inset-bottom))!important;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch!important;
+        transform:none!important;
+        border:0!important;
+        border-radius:24px 24px 0 0!important;
+        background:#fff!important;
+        box-shadow:0 -18px 60px rgba(15,23,42,.24)!important;
+        animation:acCrmSheetUp .20s ease-out!important
+      }
+      @keyframes acCrmSheetUp{
+        from{transform:translateY(18px);opacity:.6}
+        to{transform:translateY(0);opacity:1}
+      }
+      .ac-crm-sheet-head{
+        position:sticky!important;
+        top:0!important;
+        z-index:10!important;
+        display:flex!important;
+        align-items:center!important;
+        justify-content:space-between!important;
+        gap:10px!important;
+        margin:0 -14px 10px!important;
+        padding:14px 14px 11px!important;
+        border-bottom:1px solid #f1e5eb!important;
+        background:rgba(255,255,255,.98)!important;
+        backdrop-filter:blur(14px)!important;
+        -webkit-backdrop-filter:blur(14px)!important
+      }
+      .ac-crm-sheet-title strong{
+        font-size:17px!important;
+        line-height:1.2!important
+      }
+      .ac-crm-sheet-title small{
+        font-size:10px!important;
+        line-height:1.25!important
+      }
+      .ac-crm-sheet-close{
+        width:40px!important;
+        height:40px!important;
+        flex:0 0 40px!important;
+        border-radius:13px!important
+      }
+
+      /* En listas el título ya está en el encabezado; evita duplicación. */
+      .ac-crm-card[data-crm-mode="CONTACTS"] #acContactosDetalle>summary,
+      .ac-crm-card[data-crm-mode="PENDING"] #acPendientesDetalle>summary{
+        display:none!important
+      }
+      .ac-crm-card[data-crm-mode="CONTACTS"] #acContactosDetalle,
+      .ac-crm-card[data-crm-mode="PENDING"] #acPendientesDetalle{
+        margin:0!important;
+        padding:0!important;
+        border:0!important
+      }
+
+      /* Buscador sólido, ancho completo y sin recortes. */
+      .ac-crm-list-tools{
+        position:sticky!important;
+        top:64px!important;
+        z-index:8!important;
+        display:block!important;
+        width:100%!important;
+        margin:0 0 10px!important;
+        padding:8px!important;
+        border:1px solid #edf1f5!important;
+        border-radius:14px!important;
+        background:rgba(255,255,255,.98)!important;
+        box-shadow:0 6px 18px rgba(15,23,42,.045)!important
+      }
+      .ac-crm-list-search{
+        display:block!important;
+        width:100%!important;
+        max-width:100%!important;
+        min-height:44px!important;
+        margin:0!important;
+        padding:10px 12px!important;
+        border-radius:11px!important;
+        font-size:13px!important;
+        box-sizing:border-box!important
+      }
+      .ac-crm-list{
+        display:grid!important;
+        grid-template-columns:1fr!important;
+        gap:8px!important;
+        width:100%!important;
+        max-height:none!important;
+        overflow:visible!important;
+        padding:0 0 8px!important
+      }
+      .ac-crm-item{
+        appearance:none!important;
+        -webkit-appearance:none!important;
+        display:grid!important;
+        grid-template-columns:minmax(0,1fr)!important;
+        gap:6px!important;
+        width:100%!important;
+        min-height:0!important;
+        margin:0!important;
+        padding:12px!important;
+        text-align:left!important;
+        border:1px solid #e8edf2!important;
+        border-radius:14px!important;
+        background:#fff!important;
+        color:inherit!important;
+        box-shadow:none!important
+      }
+      .ac-crm-item:active{
+        transform:scale(.995);
+        background:#fffafd!important
+      }
+      .ac-crm-item-time{
+        white-space:normal!important;
+        font-size:10px!important
+      }
+      .ac-pending-time{
+        align-items:flex-start!important;
+        text-align:left!important
+      }
+
+      /* Formularios CRM: una columna, campos cómodos pero compactos. */
+      .ac-crm-grid,
+      .ac-crm-grid-secondary{
+        grid-template-columns:1fr!important;
+        gap:9px!important
+      }
+      .ac-crm-grid-secondary{margin-top:9px!important}
+      .ac-crm-grid .ac-field,
+      .ac-crm-grid .ac-select,
+      .ac-crm-grid-secondary .ac-field,
+      .ac-crm-grid-secondary .ac-select{
+        min-height:44px!important
+      }
+      .ac-crm-actions{
+        grid-template-columns:1fr 1fr!important;
+        gap:8px!important
+      }
+      .ac-crm-actions .ac-btn{
+        min-height:46px!important;
+        font-size:11px!important
+      }
+      .ac-crm-actions .ac-btn-primary{
+        grid-column:1/-1!important
+      }
+
+      /* =====================================================
+         PLANTILLAS MÓVIL
+         Bottom sheet estable en Android/iPhone.
+         ===================================================== */
+      body.ac-library-open{overflow:hidden!important}
+      .ac-mobile-library-backdrop{
+        position:fixed!important;
+        inset:0!important;
+        z-index:1290!important;
+        background:rgba(15,23,42,.36)!important;
+        backdrop-filter:blur(3px)!important;
+        -webkit-backdrop-filter:blur(3px)!important;
+        opacity:0!important;
+        pointer-events:none!important;
+        transition:opacity .18s ease!important
+      }
+      body.ac-library-open .ac-mobile-library-backdrop{
+        display:block!important;
+        opacity:1!important;
+        pointer-events:auto!important
+      }
+      #acBibliotecaCard{
+        position:fixed!important;
+        z-index:1300!important;
+        top:auto!important;
+        right:0!important;
+        bottom:0!important;
+        left:0!important;
+        width:100%!important;
+        max-width:none!important;
+        height:min(90dvh,800px)!important;
+        max-height:90dvh!important;
+        margin:0!important;
+        overflow:hidden!important;
+        border-radius:24px 24px 0 0!important;
+        background:#fff!important;
+        box-shadow:0 -18px 60px rgba(15,23,42,.24)!important;
+        transform:translateY(105%)!important;
+        transition:transform .22s cubic-bezier(.2,.8,.2,1)!important
+      }
+      body.ac-library-open #acBibliotecaCard{
+        transform:translateY(0)!important;
+        visibility:visible!important;
+        opacity:1!important
+      }
+      #acBibliotecaCard>.ac-card-head{
+        position:sticky!important;
+        top:0!important;
+        z-index:6!important;
+        padding:14px 54px 11px 14px!important;
+        border-bottom:1px solid #f1e5eb!important;
+        background:#fff!important
+      }
+      #acBibliotecaCard>.ac-card-body{
+        display:block!important;
+        height:calc(100% - 72px)!important;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        padding:12px 14px calc(20px + env(safe-area-inset-bottom))!important
+      }
+      .ac-library-mobile-close{
+        display:grid!important;
+        position:absolute!important;
+        top:12px!important;
+        right:12px!important;
+        z-index:8!important;
+        width:40px!important;
+        height:40px!important;
+        border-radius:13px!important
+      }
+      #acBibliotecaCard .ac-mobile-template-picker{
+        position:static!important;
+        margin:0 0 10px!important;
+        padding:10px!important
+      }
+      #acBibliotecaCard .ac-filter-bar{
+        position:sticky!important;
+        top:0!important;
+        z-index:5!important;
+        display:grid!important;
+        grid-template-columns:1fr 1fr!important;
+        gap:7px!important;
+        margin:0 0 10px!important;
+        padding:8px 0!important;
+        background:#fff!important
+      }
+      #acBibliotecaCard .ac-filter-bar .ac-search-wrap{
+        grid-column:1/-1!important
+      }
+      #acBibliotecaCard .ac-filter-bar .ac-btn{
+        width:100%!important;
+        min-height:40px!important;
+        padding:7px 8px!important;
+        font-size:10px!important
+      }
+      #acPlantillas{
+        grid-template-columns:1fr!important;
+        gap:9px!important
+      }
+
+      /* Quick response: una sola superficie, no mosaico de tarjetas. */
+      .ac-quick-sheet{
+        top:auto!important;
+        right:0!important;
+        bottom:0!important;
+        left:0!important;
+        width:100%!important;
+        height:min(88dvh,760px)!important;
+        max-height:88dvh!important;
+        padding:12px 14px calc(14px + env(safe-area-inset-bottom))!important;
+        border:0!important;
+        border-radius:24px 24px 0 0!important;
+        background:#fff!important;
+        box-shadow:0 -18px 60px rgba(15,23,42,.26)!important
+      }
+      .ac-quick-sheet-backdrop{
+        inset:-100vh 0 0!important;
+        background:rgba(15,23,42,.38)!important;
+        backdrop-filter:blur(3px)!important;
+        -webkit-backdrop-filter:blur(3px)!important
+      }
+      .ac-quick-sheet-head,
+      .ac-quick-stage-wrap,
+      .ac-quick-response,
+      .ac-quick-actions{
+        box-shadow:none!important
+      }
+
+      /* Evita animaciones molestas o mareo. */
+      @media (prefers-reduced-motion:reduce){
+        *,*::before,*::after{
+          scroll-behavior:auto!important;
+          animation-duration:.01ms!important;
+          animation-iteration-count:1!important;
+          transition-duration:.01ms!important
+        }
+      }
+    }
+
+    /* Teléfonos muy estrechos: evita botones comprimidos. */
+    @media (max-width:380px){
+      #acApp .ac-shell{padding-left:9px!important;padding-right:9px!important}
+      .ac-title{font-size:23px!important}
+      .ac-view-tools{align-items:stretch!important;flex-direction:column!important}
+      .ac-view-tools small{text-align:left!important}
+      .ac-crm-launchbar{grid-template-columns:1fr!important}
+      .ac-crm-launchbar .is-primary{grid-column:auto!important}
+      #acMensajeCard .ac-head-actions{grid-template-columns:1fr!important}
+      .ac-response-actions{grid-template-columns:1fr!important}
+      .ac-response-actions>.ac-btn{min-height:50px!important}
+    }
+
+
+    /* =========================================================
+       PULIDO RESPONSIVE · LEGIBILIDAD + ESTADOS HUMANOS
+       ANTIRREGRESIVO · 2026-08-27
+       Solo presentación. No altera IDs, JSON, backend, CRM ni motor.
+       ========================================================= */
+    @media (max-width:760px){
+      /* +1 px selectivo: mejora lectura sin redimensionar la estructura. */
+      .ac-subtitle{font-size:13px!important}
+      .ac-hero-text{font-size:13px!important}
+      .ac-badge{font-size:11px!important}
+      .ac-view-tools .ac-btn{font-size:12px!important}
+      .ac-view-tools small{font-size:11px!important;line-height:1.3!important}
+      .ac-card-help{font-size:12px!important;line-height:1.4!important}
+      .ac-crm-mobile-action{font-size:12px!important}
+      .ac-active-contact-kicker{font-size:10px!important}
+      .ac-active-contact-name{font-size:16px!important}
+      .ac-active-contact-meta{font-size:12px!important;line-height:1.4!important}
+      .ac-active-contact-badge{font-size:11px!important}
+      .ac-crm-statusline{font-size:12px!important;line-height:1.4!important}
+      .ac-safety-note{font-size:11px!important;line-height:1.4!important}
+      .ac-crm-sheet-title small{font-size:11px!important}
+      .ac-pending-exact,
+      .ac-pending-wa{font-size:11px!important}
+      .ac-crm-history-meta{font-size:12px!important}
+      .ac-crm-history-response{font-size:13px!important}
+      .ac-register-feedback{font-size:12px!important}
+
+      /* Contacto activo: jerarquía más limpia sin crecer la tarjeta. */
+      .ac-active-contact-main{gap:10px!important}
+      .ac-active-contact-badge{
+        align-self:flex-start!important;
+        max-width:46%!important;
+        white-space:normal!important;
+        text-align:center!important;
+        line-height:1.2!important
+      }
+    }
+
+
+    /* =========================================================
+       MODO DE TRABAJO · SIN CONTACTO + PULIDO PENDIENTES
+       ANTIRREGRESIVO · 2026-08-28
+       El control vendedor legado permanece en DOM oculto.
+       ========================================================= */
+    .ac-legacy-seller-control{display:none!important}
+    .ac-work-mode{align-items:center!important}
+    .ac-work-mode-copy{min-width:0;display:flex;flex-direction:column;gap:2px}
+    .ac-work-mode-kicker{font-size:9px;font-weight:950;letter-spacing:.08em;text-transform:uppercase;color:var(--ac-primary-dark)}
+    .ac-work-mode-title{font-size:13px;line-height:1.2;color:var(--ac-title);font-weight:950}
+    .ac-work-mode-copy small{font-size:10px;line-height:1.3;color:var(--ac-muted);text-align:left!important}
+    .ac-work-mode-action{white-space:nowrap}
+    .ac-work-mode.is-contact .ac-work-mode-action{border-color:#f0c9dc;background:#fff8fc;color:var(--ac-primary-dark)}
+    .ac-work-mode:not(.is-contact) .ac-work-mode-action{border-color:#dce3eb;background:#fff;color:#334155}
+
+    @media(max-width:760px){
+      .ac-work-mode{flex-direction:row!important;align-items:center!important;padding:10px 11px!important}
+      .ac-work-mode-copy{flex:1 1 auto!important}
+      .ac-work-mode-kicker{font-size:10px!important}
+      .ac-work-mode-title{font-size:13px!important}
+      .ac-work-mode-copy small{font-size:11px!important;line-height:1.3!important}
+      .ac-work-mode-action{flex:0 0 auto!important;min-height:38px!important;font-size:11px!important}
+      .ac-pending-state{text-transform:none!important;letter-spacing:0!important}
+    }
+
+
+    /* =========================================================
+       HOTFIX VISUAL · MODO DE TRABAJO EN MÓVIL
+       ANTIRREGRESIVO · 2026-08-28
+       Solo composición CSS. Sin cambios funcionales.
+       ========================================================= */
+    @media(max-width:760px){
+      .ac-view-tools.ac-work-mode{
+        display:flex!important;
+        flex-direction:column!important;
+        align-items:stretch!important;
+        justify-content:flex-start!important;
+        gap:9px!important;
+        padding:11px 12px!important;
+        min-width:0!important
+      }
+      .ac-work-mode-copy{
+        display:flex!important;
+        flex-direction:column!important;
+        flex:0 0 auto!important;
+        width:100%!important;
+        min-width:0!important;
+        max-width:100%!important;
+        gap:2px!important
+      }
+      .ac-work-mode-kicker{
+        display:block!important;
+        width:100%!important;
+        white-space:normal!important
+      }
+      .ac-work-mode-title{
+        display:block!important;
+        width:100%!important;
+        max-width:100%!important;
+        white-space:normal!important;
+        overflow-wrap:anywhere!important;
+        word-break:normal!important
+      }
+      .ac-work-mode-copy small{
+        display:block!important;
+        width:100%!important;
+        max-width:100%!important;
+        margin:0!important;
+        text-align:left!important;
+        white-space:normal!important;
+        overflow-wrap:anywhere!important
+      }
+      .ac-view-tools.ac-work-mode .ac-work-mode-action{
+        display:flex!important;
+        width:100%!important;
+        max-width:100%!important;
+        flex:0 0 auto!important;
+        align-items:center!important;
+        justify-content:center!important;
+        min-height:40px!important;
+        margin:0!important;
+        white-space:normal!important
+      }
+    }
+
+
+    /* =========================================================
+       MULTIDISPOSITIVO + ANDROID SCROLL SAFE · 2026-08-28
+       ANTIRREGRESIVO
+       - No bloquea el scroll global en Android/iOS.
+       - Los paneles siguen siendo overlays fixed con scroll propio.
+       - No altera motor, CRM, IDs, JSON ni backend.
+       ========================================================= */
+    @media(max-width:760px){
+      html,body{
+        min-height:100%!important;
+        overflow-x:hidden!important;
+        overflow-y:auto!important;
+        touch-action:pan-y!important;
+        -webkit-overflow-scrolling:touch!important
+      }
+      body.ac-crm-panel-open,
+      body.ac-library-open,
+      body.ac-library-focus,
+      body:has(#acQuickSheet:not([hidden])){
+        overflow-y:auto!important;
+        position:static!important;
+        height:auto!important;
+        touch-action:pan-y!important
+      }
+      #acContactoCard.is-open,
+      body.ac-library-open #acBibliotecaCard,
+      #acQuickSheet:not([hidden]){
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch!important
+      }
+    }
+
+
+    /* =========================================================
+       ANDROID · COMPATIBILIDAD LIMPIA ANTIRREGRESIVA
+       2026-08-28
+       Recupera la mecánica táctil estable del archivo base.
+       No cambia iPhone, escritorio, motor ni datos.
+       ========================================================= */
+    @media(max-width:760px){
+      html.ac-android,
+      html.ac-android body{
+        position:static!important;
+        width:100%!important;
+        height:auto!important;
+        min-height:100%!important;
+        overflow-x:hidden!important;
+        overflow-y:auto!important;
+        touch-action:auto!important;
+        overscroll-behavior-y:auto!important;
+        -webkit-overflow-scrolling:touch!important
+      }
+
+      /* Un panel cerrado jamás debe interceptar el gesto vertical. */
+      html.ac-android #acBibliotecaCard{
+        pointer-events:none!important
+      }
+      html.ac-android body.ac-library-open #acBibliotecaCard{
+        pointer-events:auto!important
+      }
+      html.ac-android .ac-mobile-library-backdrop{
+        pointer-events:none!important
+      }
+      html.ac-android body.ac-library-open .ac-mobile-library-backdrop{
+        pointer-events:auto!important
+      }
+      html.ac-android .ac-crm-card:not(.is-open)>.ac-card-body{
+        pointer-events:none!important
+      }
+      html.ac-android .ac-crm-card.is-open>.ac-card-body{
+        pointer-events:auto!important
+      }
+
+      /* CRM Android: mecanismo probado del archivo base.
+         Conserva contenido, botones, modo de trabajo y diseño interno. */
+      html.ac-android body.ac-crm-panel-open{
+        overflow-y:hidden!important;
+        position:static!important;
+        height:auto!important
+      }
+      html.ac-android .ac-crm-card.is-open>.ac-card-body{
+        display:block!important;
+        position:fixed!important;
+        z-index:1200!important;
+        top:8px!important;
+        right:8px!important;
+        bottom:8px!important;
+        left:8px!important;
+        width:auto!important;
+        height:auto!important;
+        max-height:none!important;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch!important;
+        touch-action:pan-y!important;
+        padding:0 14px 18px!important;
+        border-radius:24px!important
+      }
+
+      /* Plantillas Android: drawer lateral del mecanismo base,
+         más estable que el bottom-sheet con WebView/Chrome Android. */
+      html.ac-android body.ac-library-open{
+        overflow-y:hidden!important;
+        position:static!important;
+        height:auto!important
+      }
+      html.ac-android #acBibliotecaCard{
+        top:8px!important;
+        right:0!important;
+        bottom:0!important;
+        left:auto!important;
+        width:min(92vw,430px)!important;
+        max-width:430px!important;
+        height:calc(100vh - 8px)!important;
+        max-height:none!important;
+        border-radius:24px 0 0 0!important;
+        transform:translateX(105%)!important;
+        transition:transform .22s cubic-bezier(.2,.8,.2,1)!important
+      }
+      html.ac-android body.ac-library-open #acBibliotecaCard{
+        transform:translateX(0)!important
+      }
+      html.ac-android #acBibliotecaCard>.ac-card-body{
+        height:calc(100% - 72px)!important;
+        overflow-y:auto!important;
+        overflow-x:hidden!important;
+        overscroll-behavior:contain!important;
+        -webkit-overflow-scrolling:touch!important;
+        touch-action:pan-y!important
+      }
+
+      /* Vista rápida: scroll interno explícito y sin bloqueo fantasma. */
+      html.ac-android #acQuickSheet[hidden]{
+        display:none!important;
+        pointer-events:none!important
+      }
+      html.ac-android #acQuickSheet:not([hidden]){
+        pointer-events:auto!important;
+        touch-action:pan-y!important
+      }
+      html.ac-android #acQuickSheet:not([hidden]) .ac-quick-response{
+        overflow-y:auto!important;
+        -webkit-overflow-scrolling:touch!important;
+        touch-action:pan-y!important
+      }
+    }
+
+
+    /* =========================================================
+       RESTAURACIÓN MÓVIL · NUEVA PLANTILLA
+       ANTIRREGRESIVO · 2026-08-28
+       ÚNICO objetivo: mantener visible y usable el botón ORIGINAL
+       #acNuevaPlantilla en iPhone y Android.
+       No modifica motor, eventos, plantillas, CRM ni persistencia.
+       ========================================================= */
+    @media(max-width:760px){
+      #acBibliotecaCard>.ac-card-head{
+        display:grid!important;
+        grid-template-columns:minmax(0,1fr) 40px!important;
+        grid-template-areas:"title close" "new new"!important;
+        align-items:start!important;
+        gap:8px 10px!important;
+        padding:14px!important
+      }
+      #acBibliotecaCard>.ac-card-head>div{
+        grid-area:title!important;
+        min-width:0!important;
+        width:100%!important;
+        max-width:100%!important;
+        padding-right:0!important
+      }
+      #acBibliotecaCard>.ac-card-head>div p{
+        max-width:100%!important;
+        overflow-wrap:anywhere!important
+      }
+      #acBibliotecaCard #acMobileLibraryClose{
+        grid-area:close!important;
+        position:relative!important;
+        top:auto!important;
+        right:auto!important;
+        bottom:auto!important;
+        left:auto!important;
+        align-self:start!important;
+        justify-self:end!important;
+        margin:0!important;
+        transform:none!important
+      }
+      #acBibliotecaCard #acNuevaPlantilla{
+        grid-area:new!important;
+        display:inline-flex!important;
+        visibility:visible!important;
+        opacity:1!important;
+        pointer-events:auto!important;
+        position:relative!important;
+        width:100%!important;
+        max-width:100%!important;
+        min-height:40px!important;
+        align-items:center!important;
+        justify-content:center!important;
+        margin:0!important;
+        transform:none!important
+      }
+    }
+
+  
+
+    /* =========================================================
+       PULIDO FINAL · CONTACTO + ACCIONES RESPONSIVE
+       ANTIRREGRESIVO · 2026-08-28
+       Solo presentación y una etiqueta visual de contexto.
+       No altera motor semántico, plantillas, CRM, JSON ni backend.
+       ========================================================= */
+    #acBrandChip{display:none!important}
+
+    .ac-work-mode-title{
+      font-size:clamp(12px,1.45vw,14px)!important;
+      line-height:1.25!important;
+    }
+    .ac-active-contact-name{
+      font-size:clamp(15px,2vw,19px)!important;
+      line-height:1.16!important;
+      overflow-wrap:break-word!important;
+      word-break:normal!important;
+    }
+
+    .ac-response-action-context{
+      width:100%;
+      margin:12px 0 8px;
+      padding:9px 11px;
+      display:grid;
+      grid-template-columns:auto minmax(0,1fr) auto;
+      align-items:center;
+      gap:8px;
+      border:1px solid #d9eee0;
+      border-radius:14px;
+      background:linear-gradient(180deg,#fbfffc,#f4fbf6);
+      color:#166534;
+    }
+    .ac-response-action-context[hidden]{display:none!important}
+    .ac-response-action-context>i{font-size:16px;flex:0 0 auto}
+    .ac-response-action-context>span{
+      min-width:0;
+      color:var(--ac-title);
+      font-size:13px;
+      font-weight:900;
+      line-height:1.2;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .ac-response-action-context>small{
+      color:#166534;
+      font-size:10px;
+      font-weight:850;
+      white-space:nowrap;
+    }
+
+    .ac-response-actions{
+      display:grid!important;
+      grid-template-columns:repeat(6,minmax(0,1fr))!important;
+      gap:8px!important;
+      align-items:stretch!important;
+      width:100%!important;
+    }
+    .ac-response-actions>.ac-btn{
+      min-width:0!important;
+      min-height:54px!important;
+      padding:9px 7px!important;
+      gap:6px!important;
+      font-size:12px!important;
+      line-height:1.15!important;
+      white-space:normal!important;
+      overflow-wrap:anywhere!important;
+    }
+    .ac-response-actions>.ac-btn i{font-size:17px!important}
+    .ac-response-actions>#acWhatsApp{
+      color:#166534!important;
+      border:1px solid #bbf7d0!important;
+      background:#f0fdf4!important;
+      box-shadow:none!important;
+    }
+    .ac-response-actions>#acInstagram{
+      color:#9d174d!important;
+      border:1px solid #f5c2d7!important;
+      background:#fff7fb!important;
+    }
+    .ac-response-actions>#acTikTok{
+      color:#111827!important;
+      border:1px solid #e5e7eb!important;
+      background:#fff!important;
+    }
+
+    @media(max-width:980px){
+      .ac-response-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+    }
+    @media(max-width:760px){
+      .ac-work-mode-title{font-size:13px!important}
+      .ac-active-contact-name{font-size:16px!important}
+      .ac-response-action-context{margin-top:10px;padding:8px 10px;grid-template-columns:auto minmax(0,1fr)}
+      .ac-response-action-context>small{grid-column:2;white-space:normal;margin-top:-4px}
+      .ac-response-actions{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:7px!important}
+      .ac-response-actions>.ac-btn{min-height:58px!important;padding:8px 5px!important;font-size:11px!important}
+      .ac-response-actions>.ac-btn i{font-size:18px!important}
+    }
+    @media(max-width:380px){
+      .ac-active-contact-name{font-size:15px!important}
+      .ac-response-action-context>span{font-size:12px}
+      .ac-response-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+      .ac-response-actions>.ac-btn{min-height:54px!important;font-size:11px!important}
+    }
+
+  
+/* === MICROFASE VISUAL QUIRÚRGICA 2026-08-28 ===
+   Solo presentación. No modifica motores, IDs, eventos, guardados ni datos. */
+.ac-visual-intro-hidden{display:none!important}
+
+@media (max-width:760px){
+  /* Fondo de overlays más limpio y menos pesado. */
+  .ac-template-modal,
+  .ac-modal,
+  .ac-overlay{
+    --ac-modal-backdrop:rgba(20,24,38,.28);
+  }
+
+  /* Nueva plantilla: aire superior seguro sin alterar estructura ni controles. */
+  #acTemplateModal{
+    padding-top:max(18px,env(safe-area-inset-top))!important;
+  }
+  #acTemplateModal .ac-modal-card,
+  #acTemplateModal .ac-template-modal-card,
+  #acTemplateModal [role="dialog"]{
+    margin-top:0!important;
+  }
+}
+
+/* iPhone / pantallas estrechas: evita sensación de cabecera pegada al borde. */
+@media (max-width:430px){
+  #acTemplateModal{
+    padding-top:max(24px,env(safe-area-inset-top))!important;
+  }
+}
+
+
+
+/* ============================================================
+   CIERRE RESPONSIVE UNIVERSAL · 2026-08-28
+   SOLO PRESENTACIÓN — ANTIRREGRESIVO
+   No modifica JS, IDs, listeners, motores, CRM, JSON ni guardados.
+   ============================================================ */
+
+/* Ninguna palabra de las acciones puede romperse internamente. */
+.ac-response-actions>.ac-btn{
+  overflow-wrap:normal!important;
+  word-break:normal!important;
+  hyphens:none!important;
+  white-space:normal!important;
+}
+
+/* PC/Laptop estándar: tres columnas seguras.
+   Evita comprimir seis botones dentro de una columna estrecha del workspace. */
+@media (min-width:981px) and (max-width:1679px){
+  .ac-response-actions{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  }
+  .ac-response-actions>.ac-btn{
+    min-height:54px!important;
+    padding:9px 10px!important;
+    font-size:12px!important;
+  }
+}
+
+/* Solo escritorios realmente anchos usan seis columnas. */
+@media (min-width:1680px){
+  .ac-response-actions{
+    grid-template-columns:repeat(6,minmax(0,1fr))!important;
+  }
+}
+
+/* Teléfono/tablet estrecho: 2 x 3 estable.
+   Misma lógica visual que ya funciona correctamente en Android. */
+@media (max-width:760px){
+  .ac-response-actions{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:9px!important;
+  }
+  .ac-response-actions>.ac-btn{
+    min-height:58px!important;
+    padding:9px 9px!important;
+    font-size:11px!important;
+  }
+
+  /* Nombre activo: máximo dos líneas, jamás rompe nombres/apellidos internamente. */
+  .ac-response-action-context>span{
+    white-space:normal!important;
+    overflow-wrap:normal!important;
+    word-break:normal!important;
+    display:-webkit-box!important;
+    -webkit-box-orient:vertical!important;
+    -webkit-line-clamp:2!important;
+    overflow:hidden!important;
+  }
+}
+
+/* Operación segura queda como información compacta.
+   El contenido histórico permanece intacto en el HTML. */
+article[aria-labelledby="acOperacionTitulo"] .ac-card-body{
+  display:none!important;
+}
+article[aria-labelledby="acOperacionTitulo"] .ac-card-head{
+  padding-bottom:16px!important;
+}
+article[aria-labelledby="acOperacionTitulo"] .ac-card-help{
+  margin-bottom:0!important;
+}
+
+/* iOS / navegadores no Android:
+   Plantillas ocupa casi toda la altura útil en pantallas pequeñas.
+   Android queda expresamente sin alterar. */
+@media (max-width:760px){
+  html:not(.ac-android) body.ac-library-open .ac-mobile-library-backdrop{
+    background:rgba(15,23,42,.18)!important;
+    backdrop-filter:blur(2px)!important;
+    -webkit-backdrop-filter:blur(2px)!important;
+  }
+
+  html:not(.ac-android) #acBibliotecaCard{
+    height:min(96dvh,900px)!important;
+    max-height:96dvh!important;
+    border-radius:22px 22px 0 0!important;
+    box-shadow:0 -12px 38px rgba(15,23,42,.16)!important;
+  }
+
+  /* Editor Nueva plantilla: casi pantalla completa, fondo posterior discreto. */
+  html:not(.ac-android) #acTemplateModal{
+    padding:
+      max(8px,env(safe-area-inset-top))
+      4px
+      max(4px,env(safe-area-inset-bottom))!important;
+    background:rgba(15,23,42,.16)!important;
+    backdrop-filter:blur(2px)!important;
+    -webkit-backdrop-filter:blur(2px)!important;
+    align-items:flex-start!important;
+    justify-content:center!important;
+  }
+  html:not(.ac-android) #acTemplateModal>.ac-modal{
+    width:calc(100vw - 8px)!important;
+    max-width:none!important;
+    max-height:calc(100dvh - max(12px,env(safe-area-inset-top)))!important;
+    margin:0!important;
+    border-radius:22px 22px 0 0!important;
+  }
+}
+
+
+/* ============================================================
+    /* =========================================================
+       CRM FUNCIONAL · PRIORIDAD / ACCIÓN / PENDIENTES
+       BLOQUE 3 ANTIRREGRESIVO · 2026-08-31
+       Presentación exclusivamente dentro del CRM existente.
+       ========================================================= */
+    .ac-crm-commercial-control{margin-top:10px}
+    .ac-crm-loss-field{display:block;margin-top:10px}
+    .ac-crm-loss-field[hidden]{display:none!important}
+    .ac-active-contact-insights{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:9px}
+    .ac-active-contact-insight{display:flex;flex-direction:column;gap:2px;padding:7px 8px;border:1px solid #ead1df;border-radius:11px;background:rgba(255,255,255,.82);min-width:0}
+    .ac-active-contact-insight small{font-size:9px;font-weight:900;letter-spacing:.04em;text-transform:uppercase;color:#64748b}
+    .ac-active-contact-insight strong{font-size:11px;line-height:1.25;color:#1e293b;white-space:normal;overflow-wrap:anywhere}
+    .ac-active-contact-insight.is-overdue{border-color:#fecaca;background:#fff7f7}.ac-active-contact-insight.is-overdue strong{color:#b91c1c}
+    .ac-active-contact-insight.is-today{border-color:#fde68a;background:#fffdf2}.ac-active-contact-insight.is-today strong{color:#92400e}
+    .ac-active-contact-insight.is-next{border-color:#bfdbfe;background:#f8fbff}.ac-active-contact-insight.is-next strong{color:#1d4ed8}
+    .ac-pending-summary{display:flex;flex-wrap:wrap;gap:7px;margin:8px 0 10px}
+    .ac-pending-summary>span{display:inline-flex;align-items:center;gap:5px;padding:5px 8px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;font-size:11px;font-weight:800;color:#475569}
+    .ac-pending-summary>span.is-empty{opacity:.55}
+    .ac-pending-group-title{margin:10px 0 6px;padding:6px 8px;border-radius:8px;background:#f8fafc;font-size:11px;font-weight:950;letter-spacing:.03em;text-transform:uppercase;color:#475569}
+    .ac-pending-group-title.is-overdue{background:#fff1f2;color:#9f1239}
+    .ac-pending-group-title.is-today{background:#fff7ed;color:#9a3412}
+    /* BLOQUE 5A · CORRECCIÓN QUIRÚRGICA PENDIENTES PC
+       Solo escritorio. El encabezado temporal ocupa la fila completa del grid.
+       No altera móvil, datos, clasificación, orden, persistencia ni backend. */
+    @media(min-width:761px){#acPendientes .ac-pending-group-title{grid-column:1/-1}}
+    .ac-pending-action{display:inline-flex;align-items:center;margin-top:4px;font-size:10px;font-weight:800;color:#475569}
+    .ac-pending-priority.is-alta{color:#9f1239}
+    .ac-pending-priority.is-media{color:#92400e}
+    .ac-pending-priority.is-baja{color:#166534}
+    @media(max-width:760px){.ac-crm-commercial-control{grid-template-columns:1fr!important}.ac-active-contact-insights{grid-template-columns:1fr}.ac-pending-summary{gap:5px}.ac-pending-summary>span{font-size:10px}}
+
+   IPHONE STANDALONE · SAFE AREA INFERIOR
+   ANTIRREGRESIVO · 2026-08-31
+   Solo presentación. Android y Safari normal quedan sin cambios.
+   ============================================================ */
+@media (display-mode: standalone) and (max-width:430px){
+  html:not(.ac-android) #acApp .ac-shell{
+    padding-bottom:calc(26px + env(safe-area-inset-bottom))!important;
+  }
+}
+
+</style>
+</head>
+
+<body>
+  <main id="acApp" aria-label="Asistente Comercial">
+    <div class="ac-shell">
+      <header class="ac-topbar">
+        <div class="ac-heading-group"><h1 class="ac-title" id="acTitulo">Asistente Comercial</h1><p class="ac-subtitle" id="acSubtitulo">Respuestas rápidas, claras y listas para copiar.</p></div>
+        <div class="ac-brand-chip" id="acBrandChip" aria-label="Identidad del negocio" hidden><span id="acBrandLogoFallback" aria-hidden="true" style="width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:#fdf2f8;color:#8b1e5a;font-weight:950;flex:0 0 auto;">AC</span><img id="acBrandLogo" src="" alt="" hidden><span id="acBrandName">Modo independiente</span></div>
+      </header>
+
+      <section class="ac-hero" aria-labelledby="acHeroTitulo"><div class="ac-hero-row"><div class="ac-hero-main ac-visual-intro-hidden"><h2 class="ac-hero-title" id="acHeroTitulo">Responder más rápido sin perder el control</h2><p class="ac-hero-text">Pega el mensaje recibido, revisa la plantilla sugerida, edítala si hace falta y copia la respuesta.</p></div><div class="ac-hero-badges" aria-label="Características del módulo"><span class="ac-badge"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i>Búsqueda local</span><span class="ac-badge"><i class="bi bi-stars" aria-hidden="true"></i>Sin IA en esta fase</span><span class="ac-badge is-safe"><i class="bi bi-shield-check" aria-hidden="true"></i>Mensaje temporal</span></div></div></section>
+
+      <div class="ac-mobile-library-backdrop" id="acMobileLibraryBackdrop" aria-hidden="true"></div><nav class="ac-mobile-modebar" aria-label="Accesos rápidos"><button type="button" class="ac-mode-btn active" id="acModoResponder"><i class="bi bi-chat-square-text"></i> Responder</button><button type="button" class="ac-mode-btn" id="acModoPlantillas"><i class="bi bi-lightning-charge"></i> Plantillas</button></nav>
+      <div class="ac-view-tools ac-work-mode" id="acModoTrabajo" aria-label="Modo de trabajo"><div class="ac-work-mode-copy"><span class="ac-work-mode-kicker">Modo de trabajo</span><strong class="ac-work-mode-title" id="acModoTrabajoTitulo">Sin contacto · Respuesta general</strong><small id="acModoTrabajoDetalle">Puedes analizar, usar plantillas, copiar y abrir WhatsApp sin asociar la respuesta al CRM.</small></div><button type="button" class="ac-btn ac-btn-line ac-work-mode-action" id="acModoTrabajoAccion"><i class="bi bi-people"></i><span id="acModoTrabajoAccionTexto">Elegir contacto</span></button></div><div class="ac-legacy-seller-control" aria-hidden="true"><button type="button" id="acModoVendedor" aria-pressed="false" tabindex="-1"><span id="acModoVendedorTexto">Modo vendedor</span></button></div>
+
+      <!-- FASE 2 · CONTACTO / PROSPECTO COMPACTO -->
+      <section class="ac-card ac-crm-card" id="acContactoCard" aria-labelledby="acContactoTitulo">
+        <div class="ac-card-head"><div><span class="ac-crm-kicker"><i class="bi bi-person-lines-fill"></i> Fase 2 · seguimiento comercial</span><h2 class="ac-card-title" id="acContactoTitulo">Contacto / prospecto</h2><p class="ac-card-help">Identifica a la persona, su estado y cuándo volver a contactarla. No crea pacientes ni guarda el mensaje recibido.</p></div><button type="button" class="ac-btn ac-btn-line" id="acNuevoContacto"><i class="bi bi-person-plus"></i> Nuevo contacto</button></div>
+        <div class="ac-crm-launchbar" aria-label="Acciones rápidas de seguimiento comercial"><button type="button" class="ac-crm-mobile-action is-primary" id="acCrmNuevoMovil"><i class="bi bi-person-plus"></i> Nuevo contacto</button><button type="button" class="ac-crm-mobile-action" id="acCrmContactosMovil"><i class="bi bi-people"></i> Contactos</button><button type="button" class="ac-crm-mobile-action" id="acCrmPendientesMovil"><i class="bi bi-bell"></i> Pendientes</button></div>
+        <div class="ac-active-contact" id="acContactoActivo" aria-live="polite"><div class="ac-active-contact-main"><div><span class="ac-active-contact-kicker">Contacto activo</span><strong class="ac-active-contact-name" id="acContactoActivoNombre">Sin contacto seleccionado</strong><span class="ac-active-contact-meta" id="acContactoActivoMeta"></span></div><span class="ac-active-contact-badge" id="acContactoActivoEstado"><i class="bi bi-person-check"></i> Activo</span></div><div class="ac-active-contact-insights" id="acContactoActivoInsights"><span class="ac-active-contact-insight"><small>Prioridad</small><strong id="acContactoActivoPrioridad">Media</strong></span><span class="ac-active-contact-insight"><small>Próxima acción</small><strong id="acContactoActivoAccion">Sin definir</strong></span><span class="ac-active-contact-insight" id="acContactoActivoSeguimientoBox"><small>Próximo seguimiento</small><strong id="acContactoActivoSeguimiento">Sin fecha</strong></span></div><div class="ac-active-contact-actions"><button type="button" class="ac-btn ac-btn-primary" id="acContactoActivoResponder"><i class="bi bi-chat-square-text"></i> Responder</button><button type="button" class="ac-btn ac-btn-soft" id="acContactoActivoRegistrar" data-ac-register-button="1"><i class="bi bi-journal-check"></i> Registrar interacción</button><button type="button" class="ac-btn ac-btn-line" id="acContactoActivoFicha"><i class="bi bi-person-vcard"></i> Ver ficha</button></div></div>
+        <div class="ac-card-body">
+          <div class="ac-crm-sheet-head"><div class="ac-crm-sheet-title"><strong id="acCrmSheetTitle">Contacto comercial</strong><small>Guarda solo información comercial necesaria.</small></div><button type="button" class="ac-crm-sheet-close" id="acCerrarContactoPanel" aria-label="Cerrar contacto"><i class="bi bi-x-lg"></i></button></div>
+          <div class="ac-crm-editbar" id="acCrmEditbar"><button type="button" class="ac-btn ac-btn-line" id="acEditarContacto"><i class="bi bi-pencil-square"></i> Editar</button><button type="button" class="ac-btn ac-btn-soft" id="acCancelarEdicion" hidden><i class="bi bi-x-circle"></i> Cancelar</button></div>
+          <div class="ac-crm-grid">
+            <label><span class="ac-label">Nombre</span><input id="acContactoNombre" class="ac-field" type="text" autocomplete="name" maxlength="120" placeholder="Nombre del prospecto"></label>
+            <label><span class="ac-label">WhatsApp / teléfono</span><input id="acContactoTelefono" class="ac-field" type="tel" autocomplete="tel" maxlength="30" placeholder="09... / +593..."></label>
+            <label><span class="ac-label">Canal</span><select id="acContactoCanal" class="ac-select" aria-label="Canal de contacto"></select></label>
+            <label><span class="ac-label">Estado comercial</span><select id="acContactoEstado" class="ac-select" aria-label="Estado comercial"></select></label>
+          </div>
+          <div class="ac-crm-grid-secondary"><label><span class="ac-label">Servicio / interés</span><input id="acContactoServicio" class="ac-field" type="text" maxlength="120" placeholder="Ej. Gardasil, HIFU facial, consulta..."></label><label><span class="ac-label">Próximo seguimiento</span><input id="acContactoProximo" class="ac-field" type="datetime-local"></label></div>
+          <div class="ac-crm-grid ac-crm-commercial-control"><label><span class="ac-label">Prioridad comercial</span><select id="acContactoPrioridad" class="ac-select" aria-label="Prioridad comercial"><option value="MEDIA">Media</option><option value="ALTA">Alta</option><option value="BAJA">Baja</option></select></label><label><span class="ac-label">Próxima acción</span><select id="acContactoProximaAccion" class="ac-select" aria-label="Próxima acción"><option value="">Sin definir</option><option value="ESCRIBIR_WHATSAPP">Escribir por WhatsApp</option><option value="LLAMAR">Llamar</option><option value="ENVIAR_INFORMACION">Enviar información</option><option value="CONFIRMAR_CITA">Confirmar cita</option><option value="ESPERAR_RESPUESTA">Esperar respuesta</option><option value="RECONTACTAR">Recontactar</option></select></label></div>
+          <label class="ac-crm-loss-field" id="acContactoMotivoPerdidaField" hidden><span class="ac-label">Motivo de pérdida <small>— solo si no está interesado</small></span><select id="acContactoMotivoPerdida" class="ac-select" aria-label="Motivo de pérdida"><option value="">No aplica</option><option value="PRECIO">Precio</option><option value="NO_RESPONDIO">No respondió</option><option value="POSTERGO">Postergó decisión</option><option value="ELIGIO_OTRA_OPCION">Eligió otra opción</option><option value="NO_INTERESADO">No interesado</option><option value="OTRO">Otro</option></select></label>
+          <div class="ac-crm-grid-secondary"><label><span class="ac-label">Último mensaje del cliente</span><input id="acContactoUltimoMensajeCliente" class="ac-field" type="datetime-local"></label><div class="ac-wa-window" id="acWhatsappWindow" aria-live="polite"><div class="ac-wa-window-head"><span class="ac-wa-window-title"><i class="bi bi-whatsapp"></i> Ventana WhatsApp 24 h</span><span class="ac-wa-window-badge is-empty" id="acWhatsappWindowBadge">Sin dato</span></div><div class="ac-wa-window-detail" id="acWhatsappWindowDetail">Registra cuándo escribió el cliente para calcular la ventana.</div></div></div>
+          <label class="ac-crm-form-note" style="display:block;margin-top:12px"><span class="ac-label">Observación breve <small>— solo comercial</small></span><textarea id="acContactoObservacion" class="ac-textarea ac-crm-note" rows="3" maxlength="500" placeholder="Ej. Consultó precio; prefiere escribir en la tarde. No guardar información clínica sensible."></textarea></label>
+          <div class="ac-crm-actions"><button type="button" class="ac-btn ac-btn-primary" id="acGuardarContacto" data-ac-write-button="contacto"><i class="bi bi-save2"></i> Guardar contacto</button><button type="button" class="ac-btn ac-btn-soft" id="acRegistrarInteraccion"><i class="bi bi-journal-check"></i> Registrar interacción</button><button type="button" class="ac-btn ac-btn-line" id="acSeguimientoManana"><i class="bi bi-calendar2-plus"></i> Mañana</button><button type="button" class="ac-btn ac-btn-line" id="acSeguimiento48h"><i class="bi bi-clock-history"></i> 48 h</button><span class="ac-crm-sync" id="acCrmSync"><i class="bi bi-device-ssd"></i> Preparando seguimiento</span></div>
+          <div class="ac-crm-statusline" id="acContactoResumen" data-type="neutral" role="status" aria-live="polite"><i class="bi bi-info-circle"></i><span>Completa al menos nombre o teléfono. El guardado es siempre explícito.</span></div>
+          <section class="ac-crm-history" id="acHistorialComercial" hidden aria-labelledby="acHistorialTitulo"><div class="ac-crm-history-head"><strong id="acHistorialTitulo"><i class="bi bi-clock-history"></i> Historial comercial</strong><small>Últimas 5 interacciones registradas</small></div><div class="ac-crm-history-list" id="acHistorialLista" aria-live="polite"></div></section>
+          <details class="ac-crm-pending" id="acContactosDetalle"><summary><span><i class="bi bi-people"></i> Contactos guardados</span><span class="ac-crm-count" id="acContactosCantidad">0</span></summary><div class="ac-crm-list-tools"><input class="ac-crm-list-search" id="acContactosBuscar" type="search" placeholder="Buscar por nombre, teléfono o servicio..." autocomplete="off" aria-label="Buscar contactos guardados"></div><div class="ac-crm-list" id="acContactosGuardados" aria-live="polite"></div></details>
+          <details class="ac-crm-pending" id="acPendientesDetalle"><summary><span><i class="bi bi-bell"></i> Seguimientos pendientes</span><span class="ac-crm-count" id="acPendientesCantidad">0</span></summary><div class="ac-crm-list-tools"><input class="ac-crm-list-search" id="acPendientesBuscar" type="search" placeholder="Buscar pendientes por nombre o servicio..." autocomplete="off" aria-label="Buscar seguimientos pendientes"></div><div class="ac-pending-summary" id="acPendientesResumen" aria-live="polite"><span data-pending-group="overdue">Vencidos <strong>0</strong></span><span data-pending-group="today">Hoy <strong>0</strong></span><span data-pending-group="next">Próximos <strong>0</strong></span></div><div class="ac-crm-list" id="acPendientes" aria-live="polite"></div></details>
+        </div>
+      </section>
+
+      <section class="ac-card ac-scope-card" id="acAmbitoCard" aria-labelledby="acAmbitoTitulo"><div class="ac-card-head"><div><h2 class="ac-card-title" id="acAmbitoTitulo">Ámbito de trabajo</h2><p class="ac-card-help">La primera versión trabaja con prospectos. La estructura queda preparada para pacientes, marketing e interno.</p></div></div><div class="ac-card-body"><div id="acAmbitos" class="ac-scope-row" aria-label="Ámbitos disponibles"></div><label class="ac-label" for="acAmbito" style="margin-top:12px">Ámbito</label><select id="acAmbito" class="ac-select" aria-label="Seleccionar ámbito"></select></div></section>
+
+      <div class="ac-workspace" style="margin-top:18px">
+        <section class="ac-column">
+          <article class="ac-card" id="acMensajeCard" aria-labelledby="acMensajeTitulo"><div class="ac-card-head"><div><h2 class="ac-card-title" id="acMensajeTitulo">1. Mensaje recibido</h2><p class="ac-card-help">El contenido pegado se utiliza de forma temporal y no se guarda.</p></div><div class="ac-head-actions"><button type="button" class="ac-btn ac-btn-soft" id="acAnalizar" title="Forzar análisis del mensaje"><i class="bi bi-search-heart" aria-hidden="true"></i> Analizar</button><button type="button" class="ac-btn ac-btn-line" id="acLimpiar" title="Limpiar mensaje, selección y respuesta"><i class="bi bi-eraser" aria-hidden="true"></i> Limpiar</button></div></div><div class="ac-card-body"><label class="ac-label" for="acMensaje">Mensaje <small>— pega el texto del cliente</small></label><textarea id="acMensaje" class="ac-textarea ac-message" rows="8" autocomplete="off" autocapitalize="sentences" spellcheck="true" placeholder="Pega aquí el mensaje recibido..."></textarea><div id="acEstado" data-type="neutral">Pega un mensaje o selecciona una categoría para comenzar.</div><div class="ac-safety-note"><i class="bi bi-shield-lock" aria-hidden="true"></i><span>Por defecto, el asistente no almacena el mensaje pegado ni escribe información clínica.</span></div></div></article>
+          <article class="ac-card ac-category-card" id="acCategoriaCard" aria-labelledby="acCategoriaTitulo"><div class="ac-card-head"><div><h2 class="ac-card-title" id="acCategoriaTitulo">2. Categoría</h2><p class="ac-card-help">El sistema puede sugerirla automáticamente y siempre puedes cambiarla manualmente.</p></div></div><div class="ac-card-body"><div id="acCategorias" class="ac-category-row" aria-label="Categorías rápidas"></div><label class="ac-label" for="acCategoria" style="margin-top:14px">Categoría seleccionada</label><select id="acCategoria" class="ac-select" aria-label="Seleccionar categoría"></select><section class="ac-suggestions-section" aria-labelledby="acSugerenciasTitulo"><h3 class="ac-section-label" id="acSugerenciasTitulo"><i class="bi bi-magic" aria-hidden="true"></i> Sugerencias para este mensaje</h3><div id="acSugerencias" hidden></div></section></div></article>
+          <article class="ac-card" id="acBibliotecaCard" aria-labelledby="acBibliotecaTitulo"><div class="ac-card-head"><button type="button" class="ac-library-mobile-close" id="acMobileLibraryClose" aria-label="Cerrar plantillas"><i class="bi bi-x-lg"></i></button><div><h2 class="ac-card-title" id="acBibliotecaTitulo">3. Biblioteca de plantillas</h2><p class="ac-card-help">Busca, filtra o selecciona una respuesta manualmente.</p></div><button type="button" class="ac-btn ac-btn-soft" id="acNuevaPlantilla"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nueva plantilla</button></div><div class="ac-card-body"><section class="ac-mobile-template-picker" aria-label="Categorías de plantillas"><div class="ac-picker-heading"><div><span class="ac-picker-eyebrow">Acceso rápido</span><strong>Elige una categoría</strong></div><span class="ac-picker-hint">1 toque</span></div><div id="acCategoriasBiblioteca" class="ac-category-grid-mobile"></div></section><section class="ac-template-type-panel" id="acTipoPlantillaPanel" hidden aria-label="Filtrar plantillas"><div class="ac-type-chip-row" id="acTiposPlantilla" aria-label="Filtros de plantilla"></div></section><div class="ac-filter-bar"><div class="ac-search-wrap"><i class="bi bi-search" aria-hidden="true"></i><input id="acBuscarPlantilla" class="ac-field" type="search" autocomplete="off" placeholder="Buscar plantilla..." aria-label="Buscar plantilla"></div><button type="button" class="ac-btn ac-btn-soft" id="acFavoritos"><i class="bi bi-star" aria-hidden="true"></i> Favoritos</button><button type="button" class="ac-btn ac-btn-line" id="acMasUsadas"><i class="bi bi-bar-chart" aria-hidden="true"></i> Más usadas</button><button type="button" class="ac-btn ac-btn-line" id="acRecientes" title="Muestra las últimas plantillas utilizadas en este dispositivo"><i class="bi bi-clock-history" aria-hidden="true"></i> Recientes</button></div><div id="acPlantillas" aria-live="polite"></div></div></article>
+        </section>
+
+        <section class="ac-column">
+          <article class="ac-card" aria-labelledby="acRespuestaTitulo"><div class="ac-card-head"><div><h2 class="ac-card-title" id="acRespuestaTitulo">4. Respuesta</h2><p class="ac-card-help">Revísala y modifícala antes de copiar si lo necesitas.</p></div></div><div class="ac-card-body"><div id="acPlantillaSeleccionada" hidden aria-live="polite"></div><div class="ac-response-contact" id="acRespuestaContactoActivo" aria-live="polite"><div class="ac-response-contact-main"><span class="ac-response-contact-icon"><i class="bi bi-person-check"></i></span><div class="ac-response-contact-copy"><span class="ac-response-contact-kicker">Trabajando con contacto</span><strong class="ac-response-contact-name" id="acRespuestaContactoNombre"></strong><span class="ac-response-contact-meta" id="acRespuestaContactoMeta"></span></div></div><div class="ac-response-contact-actions"><button type="button" class="ac-btn ac-btn-soft ac-register-direct" id="acRespuestaContactoRegistrarDirecto" data-ac-register-button="1"><i class="bi bi-journal-check"></i> Registrar interacción</button><button type="button" class="ac-btn ac-btn-line" id="acRespuestaContactoFicha"><i class="bi bi-person-vcard"></i> Ficha</button><button type="button" class="ac-btn ac-btn-line" id="acRespuestaContactoEditarDirecto"><i class="bi bi-pencil-square"></i> Editar</button><button type="button" class="ac-btn ac-btn-line" id="acRespuestaContactoQuitar"><i class="bi bi-x-circle"></i> Quitar</button></div></div><div class="ac-register-feedback" id="acRegistroFeedback" aria-live="polite"></div><label class="ac-label" for="acRespuesta">Respuesta sugerida <small>— editable</small></label><textarea id="acRespuesta" class="ac-textarea ac-response" rows="10" spellcheck="true" placeholder="La respuesta sugerida aparecerá aquí..."></textarea><section class="ac-commercial-stage" aria-label="Etapa comercial"><div class="ac-commercial-stage-head"><span><i class="bi bi-signpost-split"></i> Etapa de mensaje</span><small>Cada etapa reemplaza la variante visible; nunca se acumula ni modifica la plantilla guardada.</small></div><div class="ac-commercial-stage-actions" id="acEtapasComerciales"><button type="button" class="ac-stage-btn active" data-commercial-stage="ORIGINAL"><i class="bi bi-arrow-counterclockwise"></i> Primera respuesta</button><button type="button" class="ac-stage-btn" data-commercial-stage="SEGUIMIENTO"><i class="bi bi-chat-dots"></i> Seguimiento</button><button type="button" class="ac-stage-btn" data-commercial-stage="CIERRE"><i class="bi bi-calendar-check"></i> Cierre</button><button type="button" class="ac-stage-btn" data-commercial-stage="RECONTACTO"><i class="bi bi-arrow-repeat"></i> Recontacto</button></div></section><div class="ac-response-action-context" id="acAccionesContactoContexto" hidden><i class="bi bi-person-check" aria-hidden="true"></i><span id="acAccionesContactoNombre"></span><small>Contacto activo</small></div><div class="ac-response-actions"><button type="button" class="ac-btn ac-btn-primary ac-copy-main" id="acCopiar"><i class="bi bi-copy" aria-hidden="true"></i> Copiar respuesta</button><button type="button" class="ac-btn ac-btn-soft" id="acRegistrarInteraccionRespuesta" data-ac-register-button="1" hidden><i class="bi bi-journal-check"></i> Registrar interacción</button><button type="button" class="ac-btn ac-btn-whatsapp" id="acWhatsApp" title="Abrir WhatsApp con la respuesta preparada"><i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp</button><button type="button" class="ac-btn ac-btn-social" id="acInstagram" title="Copiar respuesta y abrir los mensajes de Instagram"><i class="bi bi-instagram" aria-hidden="true"></i> Instagram</button><button type="button" class="ac-btn ac-btn-social" id="acTikTok" title="Copiar respuesta y abrir TikTok"><i class="bi bi-tiktok" aria-hidden="true"></i> TikTok</button><button type="button" class="ac-btn ac-btn-line" id="acLimpiarRespuesta" title="Borrar solo la respuesta"><i class="bi bi-x-circle" aria-hidden="true"></i> Borrar respuesta</button></div></div></article>
+          <article class="ac-card" aria-labelledby="acOperacionTitulo"><div class="ac-card-head"><div><h2 class="ac-card-title" id="acOperacionTitulo">Operación segura</h2><p class="ac-card-help">El seguimiento comercial permanece separado de los módulos clínicos.</p></div></div><div class="ac-card-body"><div class="ac-safety-note" style="margin-top:0"><i class="bi bi-database-lock" aria-hidden="true"></i><span>No escribe en pacientes, historia clínica, atenciones, diagnóstico, plan, recetas, agenda, caja ni seguridad.</span></div><div class="ac-safety-note"><i class="bi bi-cloud-slash" aria-hidden="true"></i><span>Las plantillas se cargan una vez desde la base disponible y luego se buscan localmente para mantener respuesta rápida.</span></div><div class="ac-safety-note"><i class="bi bi-diagram-3" aria-hidden="true"></i><span>Los datos de seguimiento usan únicamente el ámbito comercial y requieren una acción explícita para guardarse.</span></div></div></article>
+        </section>
+      </div>
+
+      <!-- EDITOR DE PLANTILLAS VIGENTE · CONSERVADO -->
+      <div class="ac-modal-backdrop" id="acTemplateModal" hidden><section class="ac-modal ac-template-editor" role="dialog" aria-modal="true" aria-labelledby="acTplModalTitle"><div class="ac-modal-head ac-template-editor-head"><div class="ac-template-editor-heading"><span class="ac-editor-icon" aria-hidden="true"><i class="bi bi-lightning-charge-fill"></i></span><div><span class="ac-editor-kicker">Biblioteca de respuestas</span><h2 id="acTplModalTitle">Nueva plantilla</h2><p id="acTplModalSubtitle">Crea una respuesta reutilizable en menos de un minuto.</p></div></div><button type="button" class="ac-icon-btn" id="acTemplateModalClose" aria-label="Cerrar"><i class="bi bi-x-lg"></i></button></div><form id="acTemplateForm" class="ac-modal-body ac-template-editor-body"><div class="ac-editor-tip"><i class="bi bi-info-circle-fill" aria-hidden="true"></i><span><strong>Consejo:</strong> usa un título fácil de reconocer y agrega palabras que tus pacientes suelen escribir.</span></div>
+        <section class="ac-editor-field" id="acTextCreator"><button type="button" class="ac-btn ac-btn-line" id="acTextCreatorToggle" aria-expanded="false" aria-controls="acTextCreatorBody"><i class="bi bi-stars" aria-hidden="true"></i><span>Crear desde texto</span><i class="bi bi-chevron-down" aria-hidden="true"></i></button><div id="acTextCreatorBody" hidden><label class="ac-form-full ac-editor-field"><span class="ac-editor-label">Texto bruto</span><small>Pega una promoción, servicio, mensaje o información. El análisis es local y no guarda nada hasta que pulses “Guardar plantilla”.</small><textarea class="ac-textarea" id="acTextCreatorInput" rows="5" placeholder="Ej. Promoción Gardasil 3 dosis por $345 pago de contado..."></textarea></label><div class="ac-modal-actions"><button type="button" class="ac-btn ac-btn-line" id="acTextCreatorClear"><i class="bi bi-eraser"></i> Limpiar</button><button type="button" class="ac-btn ac-btn-primary" id="acTextCreatorAnalyze"><i class="bi bi-stars"></i> Analizar y completar</button></div><div class="ac-editor-message" id="acTextCreatorMessage" hidden role="status" aria-live="polite"></div></div></section>
+        <div class="ac-form-grid ac-editor-grid"><label class="ac-editor-field"><span class="ac-editor-label">Nombre de la plantilla</span><small>Solo para identificarla dentro de la biblioteca.</small><input class="ac-field" id="acTplTitulo" maxlength="120" required placeholder="Ej. Precio consulta ginecológica"></label><label class="ac-editor-field"><span class="ac-editor-label">Categoría</span><small>Selecciona una existente o escribe una nueva. La categoría aparecerá automáticamente en la app.</small><input class="ac-field" id="acTplCategoria" list="acTplCategoriasList" maxlength="80" required placeholder="Ej. Estética facial"><datalist id="acTplCategoriasList"></datalist></label><label class="ac-editor-field"><span class="ac-editor-label">Extensión de la respuesta</span><small>Corta es la opción recomendada para redes y WhatsApp.</small><select class="ac-select" id="acTplTipo"><option value="CORTA" selected>Corta · rápida</option><option value="MEDIA">Media · explicativa</option><option value="LARGA">Larga · instrucciones</option></select></label><label class="ac-editor-field"><span class="ac-editor-label">Tipo / subcategoría</span><small>Clasifica la plantilla dentro de su categoría.</small><input class="ac-field" id="acTplTipoPlantilla" list="acTplTiposList" maxlength="60" placeholder="Ej. Precio"><datalist id="acTplTiposList"></datalist></label><label class="ac-editor-field"><span class="ac-editor-label">Servicio / tema</span><small>Opcional. Identifica el servicio o tema concreto de la respuesta.</small><input class="ac-field" id="acTplServicio" maxlength="100" placeholder="Ej. HIFU facial"></label><label class="ac-editor-field"><span class="ac-editor-label">Palabras que activan esta respuesta</span><small>Sepáralas con coma.</small><input class="ac-field" id="acTplKeywords" placeholder="precio, costo, valor, consulta"></label></div>
+        <label class="ac-form-full ac-editor-field ac-editor-response-field"><span class="ac-editor-label">Respuesta lista para copiar</span><small>Este es el texto que aparecerá cuando selecciones la plantilla.</small><textarea class="ac-textarea" id="acTplRespuesta" rows="7" required placeholder="Escribe la respuesta que quieres reutilizar..."></textarea></label><section class="ac-template-quality" id="acTplCalidad" aria-live="polite"><div class="ac-template-quality-head"><span><i class="bi bi-shield-check"></i> Control de calidad local</span><strong id="acTplCalidadPuntaje">0%</strong></div><div class="ac-template-quality-items" id="acTplCalidadItems"><span>Completa la respuesta para revisar su calidad.</span></div></section><div class="ac-editor-preview" id="acTplPreview" aria-live="polite"><div class="ac-editor-preview-head"><span><i class="bi bi-eye"></i> Vista previa</span><small id="acTplPreviewMeta">Corta · Sin categoría</small></div><p id="acTplPreviewText">Tu respuesta aparecerá aquí mientras la escribes.</p></div><div class="ac-editor-message" id="acTplMensaje" hidden role="status" aria-live="polite"></div><div class="ac-modal-actions ac-editor-actions"><button type="button" class="ac-btn ac-btn-line" id="acTplCancelar">Cancelar</button><button type="submit" class="ac-btn ac-btn-primary" id="acTplGuardar" data-ac-write-button="plantilla"><i class="bi bi-check2-circle"></i><span id="acTplGuardarTexto">Guardar plantilla</span></button></div></form></section></div>
+
+      <div class="ac-modal-backdrop ac-action-backdrop" id="acTemplateActionModal" hidden><section class="ac-modal ac-action-modal" role="dialog" aria-modal="true" aria-labelledby="acActionModalTitle"><div class="ac-modal-head"><div><span class="ac-editor-kicker">Opciones de plantilla</span><h2 id="acActionModalTitle">Administrar plantilla</h2><p id="acActionModalSubtitle">Elige una acción.</p></div><button type="button" class="ac-icon-btn" id="acActionModalClose" aria-label="Cerrar opciones"><i class="bi bi-x-lg"></i></button></div><div class="ac-action-list"><button type="button" class="ac-action-item" id="acActionEdit"><span class="ac-action-icon"><i class="bi bi-pencil-square"></i></span><span><strong>Editar plantilla</strong><small>Actualiza el contenido sin cambiar su identificador.</small></span><i class="bi bi-chevron-right"></i></button><button type="button" class="ac-action-item" id="acActionDuplicate"><span class="ac-action-icon"><i class="bi bi-copy"></i></span><span><strong>Duplicar plantilla</strong><small>Crea una copia para modificarla por separado.</small></span><i class="bi bi-chevron-right"></i></button><button type="button" class="ac-action-item ac-action-danger" id="acActionDeactivate"><span class="ac-action-icon"><i class="bi bi-eye-slash"></i></span><span><strong>Desactivar plantilla</strong><small>La conserva en la base, pero deja de mostrarla en la biblioteca.</small></span><i class="bi bi-chevron-right"></i></button></div><div class="ac-modal-actions ac-action-footer"><button type="button" class="ac-btn ac-btn-line" id="acActionCancel">Cancelar</button></div></section></div>
+      <div class="ac-modal-backdrop ac-confirm-backdrop" id="acConfirmModal" hidden><section class="ac-modal ac-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="acConfirmTitle" aria-describedby="acConfirmText"><div class="ac-confirm-icon" aria-hidden="true"><i class="bi bi-exclamation-triangle"></i></div><h2 id="acConfirmTitle">Desactivar plantilla</h2><p id="acConfirmText">La plantilla dejará de mostrarse, pero no se eliminará de la base.</p><div class="ac-modal-actions ac-confirm-actions"><button type="button" class="ac-btn ac-btn-line" id="acConfirmCancel">Cancelar</button><button type="button" class="ac-btn ac-btn-danger" id="acConfirmAccept"><i class="bi bi-eye-slash"></i> Desactivar</button></div></section></div>
+
+      <aside class="ac-quick-sheet" id="acQuickSheet" hidden aria-live="polite"><div class="ac-quick-sheet-backdrop" aria-hidden="true"></div><div class="ac-quick-sheet-grabber" aria-hidden="true"></div><div class="ac-quick-sheet-head"><div><span class="ac-quick-category" id="acQuickCategory">Plantilla</span><strong id="acQuickTitle">Respuesta seleccionada</strong></div><button type="button" class="ac-icon-btn ac-quick-close" id="acQuickClose" aria-label="Cerrar vista rápida"><i class="bi bi-x-lg"></i></button></div><div class="ac-quick-stage-wrap" aria-label="Etapa de respuesta"><div class="ac-quick-stage-label"><strong>Etapa de mensaje</strong><small>Cambia la respuesta, no la plantilla</small></div><div class="ac-quick-stage-actions" id="acQuickEtapas"><button type="button" class="ac-quick-stage-btn active" data-quick-commercial-stage="ORIGINAL"><i class="bi bi-arrow-counterclockwise"></i><span>Primera</span></button><button type="button" class="ac-quick-stage-btn" data-quick-commercial-stage="SEGUIMIENTO"><i class="bi bi-chat-dots"></i><span>Seguimiento</span></button><button type="button" class="ac-quick-stage-btn" data-quick-commercial-stage="CIERRE"><i class="bi bi-calendar-check"></i><span>Cierre</span></button><button type="button" class="ac-quick-stage-btn" data-quick-commercial-stage="RECONTACTO"><i class="bi bi-arrow-repeat"></i><span>Recontacto</span></button></div></div><div class="ac-quick-response" id="acQuickResponse"></div><div class="ac-quick-actions"><button type="button" class="ac-btn ac-btn-primary" id="acQuickCopy"><i class="bi bi-copy"></i> Copiar</button><button type="button" class="ac-btn ac-btn-whatsapp" id="acQuickWhatsApp"><i class="bi bi-whatsapp"></i> WhatsApp</button><button type="button" class="ac-btn ac-btn-social" id="acQuickInstagram" title="Copiar y abrir Instagram"><i class="bi bi-instagram"></i> Instagram</button><button type="button" class="ac-btn ac-btn-social" id="acQuickTikTok" title="Copiar y abrir TikTok"><i class="bi bi-tiktok"></i> TikTok</button></div></aside>
+      <footer class="ac-footer-meta"><span id="acVersion">Asistente Comercial · Versión 1.0</span><details id="acDiagnosticoTecnico" hidden aria-hidden="true" style="margin-left:auto;font-size:11px"><summary style="cursor:pointer;font-weight:800">Estado técnico</summary><div style="margin-top:6px;line-height:1.45;text-align:left"><div id="acDiagBuild">Build: comprobando…</div><div id="acDiagRecursos">Recursos: comprobando…</div><div id="acDiagModo">Modo: comprobando…</div></div></details></footer>
+    </div>
+    <div id="acToast" role="status" aria-live="polite" aria-atomic="true"></div>
+  </main>
+
+  <script src="iasyn-config.js?v=1.1.0"></script>
+  <script>window.AC_API_URL=window.AC_API_URL||String((window.IASYN_CONFIG&&(window.IASYN_CONFIG.publicApiUrl||window.IASYN_CONFIG.apiUrl))||"").trim();</script>
+  <script src="asistente_comercial_config.js?v=1.0.0"></script>
+  <script src="asistente_comercial.js?v=1.7.6"></script>
+  <script>
+    (function(){
+      "use strict";
+      function fileVersion(selector,attr){var n=document.querySelector(selector);return n?(n.getAttribute(attr)||"").split("?").pop():"no detectado";}
+      function write(id,value){var n=document.getElementById(id);if(n)n.textContent=value;}
+      function render(){
+        var standalone=!!((window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches)||window.navigator.standalone===true);
+        var info=Object.freeze({build:"BLOQUE 2 · 2026-08-31",css:fileVersion('link[href*="asistente_comercial.css"]',"href"),config:fileVersion('script[src*="asistente_comercial_config.js"]',"src"),js:fileVersion('script[src*="asistente_comercial.js"]',"src"),modo:standalone?"standalone":"web"});
+        window.AC_DIAGNOSTICO=info;
+        write("acDiagBuild","Build: "+info.build);
+        write("acDiagRecursos","CSS "+info.css+" · Config "+info.config+" · JS "+info.js);
+        write("acDiagModo","Modo: "+info.modo);
+      }
+      if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",render,{once:true});else render();
+    })();
+  </script>
+
+  <!-- Adaptador visual vigente, conservado -->
+  <script>
+    (function(){"use strict";function text(value){return value==null?"":String(value).trim();}function setText(id,value){var el=document.getElementById(id);if(el&&text(value))el.textContent=text(value);}function applyBusinessPresentation(){var cfg=window.ASISTENTE_COMERCIAL_CONFIG;if(!cfg)return;setText("acTitulo",cfg.ui&&cfg.ui.title);setText("acSubtitulo",cfg.ui&&cfg.ui.subtitle);var business=cfg.business||{};var brand=text(business.publicBrandName)||text(business.displayName)||"Modo independiente";setText("acBrandName",brand);setText("acVersion","Asistente Comercial · Versión 1.0");var message=document.getElementById("acMensaje");if(message&&cfg.ui&&cfg.ui.pastePlaceholder)message.placeholder=cfg.ui.pastePlaceholder;var response=document.getElementById("acRespuesta");if(response&&cfg.ui&&cfg.ui.responsePlaceholder)response.placeholder=cfg.ui.responsePlaceholder;var search=document.getElementById("acBuscarPlantilla");if(search&&cfg.ui&&cfg.ui.searchPlaceholder)search.placeholder=cfg.ui.searchPlaceholder;var copy=document.getElementById("acCopiar");if(copy&&cfg.ui&&cfg.ui.copyLabel)copy.innerHTML='<i class="bi bi-copy" aria-hidden="true"></i> '+cfg.ui.copyLabel;}function bindLocalExtras(){var clearResponse=document.getElementById("acLimpiarRespuesta");var response=document.getElementById("acRespuesta");if(clearResponse&&response&&clearResponse.dataset.bound!=="1"){clearResponse.dataset.bound="1";clearResponse.addEventListener("click",function(){response.value="";response.focus();});}}function boot(){applyBusinessPresentation();bindLocalExtras();}if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();})();
+  </script>
+
+  <!-- =========================================================
+       FASE 2 · MINI CRM LIGERO
+       CORRECCIÓN QUIRÚRGICA 2026-08-27:
+       - JSON serializado para contrato backend V1.3.x.
+       - ID_CONTACTO/ID_CANAL_CONTACTO estables y reutilizados.
+       - CONTACT_KEY permanece como compatibilidad secundaria.
+       - Sin cambios en motor semántico, plantillas, etapas ni ERP clínico.
+       ========================================================= -->
+  <script>
+    (function(global,document){
+      "use strict";
+      var CFG=global.ASISTENTE_COMERCIAL_CONFIG||{};
+      var API=function(){return String(global.AC_API_URL||global.API_URL||global.APP_SCRIPT_URL||"").trim();};
+      var LOCAL_KEY="AC_CRM_FASE2_V1";
+      var state={stage:"ORIGINAL",contacts:{},remoteRecords:[],backendAvailable:false,initialized:false,activeContactKey:"",crmMode:"FORM",interactionLock:false,lastInteractionSignature:"",lastInteractionAt:0,editingContact:false,editBackup:null};
+      var COMMERCIAL_STATES=[["NUEVO","Nuevo"],["RESPONDIDO","Respondido"],["INTERESADO","Interesado"],["EN_VALORACION","En valoración"],["CITA_PROPUESTA","Cita propuesta"],["CITA_AGENDADA","Cita agendada"],["CONFIRMADO","Confirmado"],["SEGUIMIENTO","Seguimiento"],["NO_RESPONDIO","No respondió"],["NO_INTERESADO","No interesado"],["CERRADO","Cerrado"]];
+      var CLOSED_STATES={NO_INTERESADO:true,CERRADO:true};
+      function el(id){return document.getElementById(id);}function txt(v){return v==null?"":String(v).trim();}function norm(v){return txt(v).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ");}function safeJson(v,f){if(v&&typeof v==="object"&&!Array.isArray(v))return v;try{return JSON.parse(v);}catch(_){return f;}}
+      function isoLocal(date){var d=date instanceof Date?date:new Date(date||Date.now());if(isNaN(d.getTime()))d=new Date();function p(n){return String(n).padStart(2,"0");}var off=-d.getTimezoneOffset(),sign=off>=0?"+":"-",a=Math.abs(off);return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"T"+p(d.getHours())+":"+p(d.getMinutes())+":"+p(d.getSeconds())+sign+p(Math.floor(a/60))+":"+p(a%60);}function localInputValue(date){var d=date instanceof Date?date:new Date(date);if(isNaN(d.getTime()))return"";function p(n){return String(n).padStart(2,"0");}return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate())+"T"+p(d.getHours())+":"+p(d.getMinutes());}
+      function contactKey(phone,name){var digits=txt(phone).replace(/\D/g,"");if(digits)return"TEL:"+digits;var n=norm(name).replace(/[^a-z0-9]+/g,"_").replace(/^_+|_+$/g,"");return n?"NOM:"+n:"";}
+      function loadLocal(){try{var o=safeJson(global.localStorage.getItem(LOCAL_KEY)||"{}",{});state.contacts=o&&typeof o==="object"?o:{};}catch(_){state.contacts={};}}function saveLocal(){try{global.localStorage.setItem(LOCAL_KEY,JSON.stringify(state.contacts));}catch(_){}}
+      function selectedTemplate(){try{var api=global.AsistenteComercial;if(!api)return null;var st=typeof api.getState==="function"?api.getState():null;var id=st&&st.selectedTemplateId;return id&&typeof api.getTemplate==="function"?api.getTemplate(id):null;}catch(_){return null;}}
+      function currentCategory(){var t=selectedTemplate();return txt((t&&t.category)||(el("acCategoria")&&el("acCategoria").value)||"GENERAL").toUpperCase();}function currentService(){var own=txt(el("acContactoServicio")&&el("acContactoServicio").value);if(own)return own;var t=selectedTemplate();return txt(t&&t.meta&&t.meta.servicio)||txt(t&&t.title);}
+      function activeStoredContact(){return state.activeContactKey&&state.contacts[state.activeContactKey]?state.contacts[state.activeContactKey]:null;}
+      function contactSnapshotBase(sourceMode){
+        var active=activeStoredContact()||{};
+        var hasActive=!!(state.activeContactKey&&active&&active.contact_key);
+        var useForm=sourceMode==="SAVE";
+        var formName=txt(el("acContactoNombre")&&el("acContactoNombre").value);
+        var formPhone=txt(el("acContactoTelefono")&&el("acContactoTelefono").value);
+        var formCanal=txt(el("acContactoCanal")&&el("acContactoCanal").value)||"GENERAL";
+        var formEstado=txt(el("acContactoEstado")&&el("acContactoEstado").value)||"NUEVO";
+        var formServicio=currentService();
+        var formProximo=txt(el("acContactoProximo")&&el("acContactoProximo").value);
+        var formUltimo=txt(el("acContactoUltimoMensajeCliente")&&el("acContactoUltimoMensajeCliente").value);
+        var formObs=txt(el("acContactoObservacion")&&el("acContactoObservacion").value);
+        var formPrioridad=txt(el("acContactoPrioridad")&&el("acContactoPrioridad").value)||"MEDIA";
+        var formProximaAccion=txt(el("acContactoProximaAccion")&&el("acContactoProximaAccion").value);
+        var formMotivoPerdida=txt(el("acContactoMotivoPerdida")&&el("acContactoMotivoPerdida").value);
+        var name=useForm?formName:(hasActive?txt(active.nombre||active.NOMBRE_CONTACTO)||formName:formName);
+        var phone=useForm?formPhone:(hasActive?txt(active.telefono||active.TELEFONO)||formPhone:formPhone);
+        var canal=useForm?formCanal:(hasActive?txt(active.canal||active.CANAL)||formCanal:formCanal);
+        var estado=useForm?formEstado:(hasActive?txt(active.estado_comercial||active.ESTADO_COMERCIAL)||formEstado:formEstado);
+        var servicio=useForm?formServicio:(hasActive?txt(active.servicio||active.SERVICIO)||formServicio:formServicio);
+        var proximo=useForm?formProximo:(hasActive?txt(active.proximo_seguimiento||active.PROXIMO_SEGUIMIENTO)||formProximo:formProximo);
+        var ultimo=useForm?formUltimo:(hasActive?txt(active.ultimo_mensaje_cliente||active.ULTIMO_MENSAJE_CLIENTE)||formUltimo:formUltimo);
+        var obs=useForm?formObs:(hasActive?txt(active.observacion||active.OBSERVACION)||formObs:formObs);
+        var prioridad=useForm?formPrioridad:(hasActive?txt(active.prioridad_comercial)||formPrioridad:formPrioridad);
+        var proximaAccion=useForm?formProximaAccion:(hasActive?txt(active.proxima_accion)||formProximaAccion:formProximaAccion);
+        var motivoPerdida=useForm?formMotivoPerdida:(hasActive?txt(active.motivo_perdida)||formMotivoPerdida:formMotivoPerdida);
+        var stableId=txt(active.id_contacto||active.ID_CONTACTO);
+        var stableChannelId=txt(active.id_canal_contacto||active.ID_CANAL_CONTACTO);
+        var stableExternalId=txt(active.id_externo||active.ID_EXTERNO);
+        var nextKey=contactKey(phone,name);
+        return{
+          contact_key:useForm?(nextKey||txt(active.contact_key||active.CONTACT_KEY)):(hasActive?txt(active.contact_key||active.CONTACT_KEY):nextKey),
+          id_contacto:stableId,id_canal_contacto:stableChannelId,id_externo:stableExternalId,
+          origen_sistema:txt(active.origen_sistema||active.ORIGEN_SISTEMA)||"ASISTENTE_COMERCIAL",
+          identificador_canal:useForm?phone:(hasActive?txt(active.identificador_canal||active.IDENTIFICADOR_CANAL||active.identificador_principal||active.IDENTIFICADOR_PRINCIPAL)||phone:phone),
+          nombre:name,telefono:phone,canal:canal,estado_comercial:estado,
+          etapa_mensaje:state.stage||"ORIGINAL",
+          servicio:servicio,categoria:currentCategory(),
+          proximo_seguimiento:proximo,ultimo_mensaje_cliente:ultimo,observacion:obs,
+          prioridad_comercial:prioridad,proxima_accion:proximaAccion,motivo_perdida:motivoPerdida,
+          ultima_plantilla_id:(selectedTemplate()&&selectedTemplate().id)||"",
+          ultima_interaccion:isoLocal(new Date()),fase2_version:"1.0.7"
+        };
+      }
+      function contactSnapshotForSave(){return contactSnapshotBase("SAVE");}
+      function contactSnapshotForInteraction(){return contactSnapshotBase("INTERACTION");}
+      function normalizedPhone(value){return txt(value).replace(/\D/g,"");}
+      function findPhoneConflict(snap){
+        var phone=normalizedPhone(snap&&snap.telefono);
+        var channel=String(snap&&snap.canal||"").toUpperCase();
+        if(!phone||channel!=="WHATSAPP")return null;
+        var ownId=txt(snap&&snap.id_contacto);
+        var ownKey=txt(state.activeContactKey);
+        var values=Object.values(state.contacts||{});
+        for(var i=0;i<values.length;i++){
+          var c=values[i];if(!c)continue;
+          if(String(c.canal||c.CANAL||"").toUpperCase()!=="WHATSAPP")continue;
+          if(normalizedPhone(c.telefono||c.TELEFONO||c.identificador_canal||c.IDENTIFICADOR_CANAL)!==phone)continue;
+          var otherId=txt(c.id_contacto||c.ID_CONTACTO),otherKey=txt(c.contact_key||c.CONTACT_KEY);
+          if(ownId&&otherId&&ownId===otherId)continue;
+          if(!ownId&&ownKey&&otherKey&&ownKey===otherKey)continue;
+          return c;
+        }
+        return null;
+      }
+      function status(message,type){var box=el("acContactoResumen");if(!box)return;box.dataset.type=type||"neutral";var icon=type==="success"?"check-circle":type==="warning"?"exclamation-triangle":type==="danger"?"x-circle":"info-circle";box.innerHTML='<i class="bi bi-'+icon+'"></i><span>'+String(message||"")+"</span>";}function setSync(remote){var n=el("acCrmSync");if(!n)return;n.classList.toggle("is-remote",!!remote);n.classList.toggle("is-local",!remote);n.innerHTML=remote?'<i class="bi bi-cloud-check"></i> Base central conectada':'<i class="bi bi-cloud-slash"></i> Base central sin conexión';}
+      async function apiGet(action,params){var base=API();if(!base)throw new Error("API no configurada");var q=new URLSearchParams(Object.assign({accion:action,t:Date.now()},params||{}));var r=await fetch(base+"?"+q.toString(),{cache:"no-store"});if(!r.ok)throw new Error("HTTP "+r.status);return r.json();}async function apiPost(action,data){var base=API();if(!base)throw new Error("API no configurada");var r=await fetch(base,{method:"POST",body:JSON.stringify({accion:action,data:data||{}})});if(!r.ok)throw new Error("HTTP "+r.status);return r.json();}
+      function mergeRecord(row){if(!row||String(row.TIPO_REGISTRO||"").toUpperCase()==="PLANTILLA")return;var ctx=row.CONTEXTO&&typeof row.CONTEXTO==="object"?row.CONTEXTO:safeJson(row.CONTEXTO_JSON||"{}",{});if(!ctx||!ctx.contact_key)return;ctx.id_contacto=txt(ctx.id_contacto||row.ID_CONTACTO||(String(row.TIPO_REGISTRO||"").toUpperCase()==="NOTA"?row.ID:""));ctx.id_canal_contacto=txt(ctx.id_canal_contacto||row.ID_CANAL_CONTACTO);ctx.id_externo=txt(ctx.id_externo||row.ID_EXTERNO);ctx.origen_sistema=txt(ctx.origen_sistema||row.ORIGEN_SISTEMA)||"ASISTENTE_COMERCIAL";ctx.identificador_canal=txt(ctx.identificador_canal||row.IDENTIFICADOR_CANAL||ctx.telefono);var stamp=String(row.FECHA_ACTUALIZACION||row.FECHA_CREACION||ctx.ultima_interaccion||"");var old=state.contacts[ctx.contact_key];if(!old||String(old.__stamp||"")<=stamp)state.contacts[ctx.contact_key]=Object.assign({},old||{},ctx,{__stamp:stamp,__source:"REMOTE"});}
+      async function loadCommercialRecords(){try{var rows=await apiGet("AC_listarRegistros");if(rows&&rows.success===false)throw new Error(rows.message||"Lectura no disponible");if(!Array.isArray(rows))rows=rows&&Array.isArray(rows.registros)?rows.registros:[];state.remoteRecords=rows;state.contacts={};rows.forEach(mergeRecord);state.backendAvailable=true;saveLocal();setSync(true);}catch(err){state.backendAvailable=false;setSync(false);}renderContacts();renderPending();renderActiveContact();}
+      function persistLocalSnapshot(snap){if(!snap.contact_key)return;state.contacts[snap.contact_key]=Object.assign({},state.contacts[snap.contact_key]||{},snap,{__stamp:isoLocal(new Date()),__source:state.backendAvailable?"REMOTE_PENDING":"LOCAL"});saveLocal();renderContacts();renderPending();}
+      function buildPayload(kind,snap,response){var stage=state.stage||"ORIGINAL";var titlePrefix=kind==="NOTA"?"Contacto":kind==="SEGUIMIENTO"?"Seguimiento":"Interacción";var summary=response||snap.observacion||("Estado comercial: "+snap.estado_comercial);var meta={fase2:true,tipo_evento:kind==="NOTA"?"CONTACTO_SNAPSHOT":"INTERACCION",etapa_mensaje:stage,plantilla_id:snap.ultima_plantilla_id||"",canal:snap.canal||"GENERAL"};return{TIPO_REGISTRO:kind,AMBITO:"PROSPECTO",NOMBRE_CONTACTO:snap.nombre,TIPO_CONTACTO:"PROSPECTO",CATEGORIA:snap.categoria||"GENERAL",TITULO:titlePrefix+" · "+(snap.nombre||snap.telefono||"Prospecto"),RESPUESTA:summary,META_JSON:JSON.stringify(meta),CONTEXTO_JSON:JSON.stringify(snap),ESTADO:"ACTIVO",ID_CONTACTO:snap.id_contacto||"",ORIGEN_SISTEMA:snap.origen_sistema||"ASISTENTE_COMERCIAL",ID_EXTERNO:snap.id_externo||"",ID_CANAL_CONTACTO:snap.id_canal_contacto||"",IDENTIFICADOR_CANAL:snap.identificador_canal||snap.telefono||""};}
+      function hydrateSnapshotFromResponse(snap,r){var contacto=r&&r.contacto&&typeof r.contacto==="object"?r.contacto:{};var canal=r&&r.canal&&typeof r.canal==="object"?r.canal:{};snap.id_contacto=txt(r&&r.id||contacto.ID_CONTACTO||snap.id_contacto);snap.id_canal_contacto=txt(canal.ID_CANAL_CONTACTO||snap.id_canal_contacto);snap.id_externo=txt(contacto.ID_EXTERNO||snap.id_externo);snap.origen_sistema=txt(contacto.ORIGEN_SISTEMA||snap.origen_sistema)||"ASISTENTE_COMERCIAL";snap.contact_key=txt(contacto.CONTACT_KEY||snap.contact_key);snap.identificador_canal=txt(canal.IDENTIFICADOR_CANAL||contacto.IDENTIFICADOR_PRINCIPAL||snap.identificador_canal||snap.telefono);return snap;}
+      async function saveContactCore(){var previousKey=state.activeContactKey;var snap=contactSnapshotForSave();if(!snap.contact_key){status("Ingresa al menos un nombre o un teléfono antes de guardar.","warning");return false;}var conflict=findPhoneConflict(snap);if(conflict){status("Este número de WhatsApp ya está registrado a nombre de "+(conflict.nombre||conflict.telefono||"otro contacto")+". Abre ese contacto o utiliza un número diferente.","danger");return false;}try{var r=await apiPost("AC_crearRegistro",buildPayload("NOTA",snap,"Estado comercial: "+snap.estado_comercial+(snap.observacion?" · "+snap.observacion:"")));if(!r||r.success===false)throw new Error(r&&r.message||"No se pudo guardar");hydrateSnapshotFromResponse(snap,r);if(previousKey&&previousKey!==snap.contact_key&&state.contacts[previousKey])delete state.contacts[previousKey];state.backendAvailable=true;setSync(true);persistLocalSnapshot(snap);setActiveContact(snap);state.editBackup=null;setEditingMode(false);status("Contacto guardado y activo: "+(snap.nombre||snap.telefono||"Prospecto")+(snap.proximo_seguimiento?" · seguimiento guardado.":".")+"","success");await loadCommercialRecords();renderActiveContact();renderHistory(state.contacts[snap.contact_key]||snap);var follow=el("acContactoProximo");if(follow)follow.classList.remove("ac-followup-unsaved");return true;}catch(err){state.backendAvailable=false;setSync(false);status("No se guardó el contacto porque la base central no respondió. Los datos siguen en el formulario para volver a intentar.","danger");return false;}}
+      async function saveContact(){
+        var btn=el("acGuardarContacto");
+        if(btn&&btn.disabled)return false;
+        var original=btn?btn.innerHTML:"";
+        if(btn){
+          btn.disabled=true;btn.classList.add("ac-write-busy");
+          btn.innerHTML='<i class="bi bi-hourglass-split"></i> Guardando…';
+        }
+        try{
+          var ok=await saveContactCore();
+          if(btn&&ok){
+            btn.classList.remove("ac-write-busy");btn.classList.add("ac-write-success");
+            btn.innerHTML='<i class="bi bi-check2-circle"></i> Guardado';
+            setTimeout(function(){if(btn){btn.classList.remove("ac-write-success");btn.innerHTML=original;btn.disabled=false;}},1600);
+          }else if(btn){
+            btn.classList.remove("ac-write-busy");btn.innerHTML=original;btn.disabled=false;
+          }
+          return ok;
+        }catch(err){
+          if(btn){btn.classList.remove("ac-write-busy");btn.innerHTML=original;btn.disabled=false;}
+          throw err;
+        }
+      }
+      function interactionSignature(snap,response){return[snap&&snap.id_contacto||snap&&snap.contact_key||"",state.stage||"ORIGINAL",snap&&snap.canal||"GENERAL",txt(response)].join("|");}function setInteractionButtonBusy(busy){var buttons=Array.prototype.slice.call(document.querySelectorAll("[data-ac-register-button],#acRegistrarInteraccion"));buttons.forEach(function(b){if(!b.dataset.acOriginalHtml)b.dataset.acOriginalHtml=b.innerHTML;b.disabled=!!busy;b.setAttribute("aria-busy",busy?"true":"false");b.innerHTML=busy?'<i class="bi bi-hourglass-split"></i> Guardando…':b.dataset.acOriginalHtml;});var box=el("acRegistroFeedback");if(box&&busy){box.textContent="Guardando interacción…";box.className="ac-register-feedback is-visible is-saving";}}
+      async function registerInteraction(){var snap=contactSnapshotForInteraction();var response=txt(el("acRespuesta")&&el("acRespuesta").value);if(!snap.contact_key){status("Identifica primero el contacto con nombre o teléfono.","warning");return false;}if(!response){status("No hay una respuesta visible para registrar como interacción.","warning");return false;}var signature=interactionSignature(snap,response);var now=Date.now();if(state.interactionLock){status("La interacción se está registrando. Espera un momento.","neutral");return false;}if(state.lastInteractionSignature===signature&&(now-state.lastInteractionAt)<120000){status("Esta misma interacción ya fue registrada recientemente. No se creó un duplicado.","warning");var fb=el("acRegistroFeedback");if(fb){fb.textContent="✓ Esta misma interacción ya estaba registrada. No se creó un duplicado.";fb.className="ac-register-feedback is-visible";}return false;}state.interactionLock=true;setInteractionButtonBusy(true);var type=(state.stage==="SEGUIMIENTO"||state.stage==="RECONTACTO")?"SEGUIMIENTO":"MENSAJE";try{var r=await apiPost("AC_crearRegistro",buildPayload(type,snap,response));if(!r||r.success===false)throw new Error(r&&r.message||"No se pudo registrar");state.backendAvailable=true;setSync(true);setActiveContact(snap);state.lastInteractionSignature=signature;state.lastInteractionAt=Date.now();status("Interacción registrada · "+(snap.nombre||snap.telefono||"Prospecto")+" · "+(state.stage||"ORIGINAL")+" · "+(snap.canal||"GENERAL")+". El mensaje recibido no fue guardado.","success");var fb=el("acRegistroFeedback");if(fb){fb.textContent="✓ Interacción registrada correctamente.";fb.className="ac-register-feedback is-visible";setTimeout(function(){if(fb.textContent.indexOf("registrada correctamente")>=0){fb.textContent="";fb.className="ac-register-feedback";}},4500);}await loadCommercialRecords();renderActiveContact();return true;}catch(err){status("No se pudo confirmar el registro de la interacción en la base. El contacto local se conserva, pero esta interacción no debe considerarse sincronizada.","warning");var fb=el("acRegistroFeedback");if(fb){fb.textContent="No se pudo confirmar la sincronización con la base.";fb.className="ac-register-feedback is-visible is-error";}return false;}finally{state.interactionLock=false;setInteractionButtonBusy(false);}}
+      function commercialStateLabel(value){var raw=String(value||"").toUpperCase().trim();for(var i=0;i<COMMERCIAL_STATES.length;i++){if(COMMERCIAL_STATES[i][0]===raw)return COMMERCIAL_STATES[i][1];}return raw?raw.toLowerCase().replace(/_/g," ").replace(/^./,function(m){return m.toUpperCase();}):"Activo";}
+      function commercialActionLabel(value){var raw=String(value||"").toUpperCase().trim(),labels={ESCRIBIR_WHATSAPP:"Escribir por WhatsApp",LLAMAR:"Llamar",ENVIAR_INFORMACION:"Enviar información",CONFIRMAR_CITA:"Confirmar cita",ESPERAR_RESPUESTA:"Esperar respuesta",RECONTACTAR:"Recontactar"};return labels[raw]||raw.toLowerCase().replace(/_/g," ").replace(/^./,function(m){return m.toUpperCase();});}
+      function commercialPriorityRank(value){var raw=String(value||"MEDIA").toUpperCase();return raw==="ALTA"?0:raw==="MEDIA"?1:2;}
+      function normalizeCrmSearch(v){try{return txt(v).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();}catch(_){return txt(v).toLowerCase().replace(/\s+/g," ").trim();}}function historyStageLabel(v){var stage=String(v||"").toUpperCase();if(stage==="ORIGINAL")return"Primera respuesta";if(stage==="SEGUIMIENTO")return"Seguimiento";if(stage==="CIERRE")return"Cierre";if(stage==="RECONTACTO")return"Recontacto";if(stage==="MENSAJE")return"Interacción";return v||"Interacción";}
+      function renderHistory(c){var box=el("acHistorialComercial"),list=el("acHistorialLista");if(!box||!list)return;list.innerHTML="";if(!c||!c.contact_key){box.hidden=true;return;}var rows=(state.remoteRecords||[]).filter(function(row){if(!row)return false;var type=String(row.TIPO_REGISTRO||"").toUpperCase();if(type!=="MENSAJE"&&type!=="SEGUIMIENTO")return false;var ctx=row.CONTEXTO&&typeof row.CONTEXTO==="object"?row.CONTEXTO:safeJson(row.CONTEXTO_JSON||"{}",{});var rowId=txt(ctx&&ctx.id_contacto||row.ID_CONTACTO),contactId=txt(c&&c.id_contacto);if(contactId)return!!rowId&&rowId===contactId;return!!(ctx&&ctx.contact_key===c.contact_key);}).sort(function(a,b){var ad=String(a.FECHA_ACTUALIZACION||a.FECHA_CREACION||"");var bd=String(b.FECHA_ACTUALIZACION||b.FECHA_CREACION||"");return bd.localeCompare(ad);}).slice(0,5);box.hidden=false;if(!rows.length){list.innerHTML='<div class="ac-crm-empty">Todavía no hay interacciones registradas para este contacto.</div>';return;}rows.forEach(function(row){var meta=row.META&&typeof row.META==="object"?row.META:safeJson(row.META_JSON||"{}",{});var stamp=String(row.FECHA_ACTUALIZACION||row.FECHA_CREACION||"");var dateText="";if(stamp){var d=new Date(stamp);if(!isNaN(d.getTime()))dateText=formatDate(d);}var stage=historyStageLabel(txt(meta.etapa_mensaje)||String(row.TIPO_REGISTRO||""));var channel=txt(meta.canal);var item=document.createElement("article");item.className="ac-crm-history-item";item.innerHTML='<div class="ac-crm-history-meta"><span>'+escapeHtml(dateText||"Sin fecha")+'</span><span>·</span><span class="ac-history-stage">'+escapeHtml(stage||"Interacción")+'</span>'+(channel?'<span>·</span><span>'+escapeHtml(channel)+'</span>':"")+'</div><div class="ac-crm-history-response">'+escapeHtml(row.RESPUESTA||"")+'</div>';list.appendChild(item);});}
+      function normalizeWhatsappDirectPhone(value){var raw=txt(value).trim();if(!raw)return"";var digits=raw.replace(/\D+/g,"");if(!digits)return"";if(raw.charAt(0)==="+")return digits;if(/^0\d{9}$/.test(digits))return"593"+digits.slice(1);return digits;}
+      function renderWorkMode(c){var wrap=el("acModoTrabajo"),title=el("acModoTrabajoTitulo"),detail=el("acModoTrabajoDetalle"),action=el("acModoTrabajoAccion"),actionText=el("acModoTrabajoAccionTexto"),active=!!(c&&c.contact_key);if(wrap)wrap.classList.toggle("is-contact",active);if(title)title.textContent=active?((c.nombre||c.telefono||"Prospecto")+" · Contacto activo"):"Sin contacto · Respuesta general";if(detail)detail.textContent=active?"Las respuestas, seguimientos e interacciones pueden quedar vinculados a este contacto.":"Puedes analizar, usar plantillas, copiar y abrir WhatsApp sin asociar la respuesta al CRM.";if(action){action.setAttribute("aria-label",active?"Trabajar sin contacto":"Elegir contacto");var icon=action.querySelector("i");if(icon)icon.className=active?"bi bi-person-x":"bi bi-people";}if(actionText)actionText.textContent=active?"Trabajar sin contacto":"Elegir contacto";}
+      function renderResponseContactContext(c){var box=el("acRespuestaContactoActivo"),name=el("acRespuestaContactoNombre"),meta=el("acRespuestaContactoMeta"),reg=el("acRegistrarInteraccionRespuesta"),wa=el("acWhatsApp"),actionCtx=el("acAccionesContactoContexto"),actionName=el("acAccionesContactoNombre");var active=!!(c&&c.contact_key);if(box)box.classList.toggle("is-active",active);if(reg)reg.hidden=!active;if(name)name.textContent=active?(c.nombre||c.telefono||"Prospecto"):"";if(meta)meta.textContent=active?[c.canal,c.telefono,commercialStateLabel(c.estado_comercial)].filter(Boolean).join(" · "):"";if(actionCtx)actionCtx.hidden=!active;if(actionName)actionName.textContent=active?(c.nombre||c.telefono||"Prospecto"):"";if(wa){wa.innerHTML='<i class="bi bi-whatsapp" aria-hidden="true"></i> WhatsApp';wa.title=active&&String(c.canal||"").toUpperCase()==="WHATSAPP"?"Abrir WhatsApp directamente con el contacto activo":"Abrir WhatsApp con la respuesta preparada";}}
+      function clearActiveContactContext(){state.activeContactKey="";state.editBackup=null;setEditingMode(false);["acContactoNombre","acContactoTelefono","acContactoServicio","acContactoProximo","acContactoUltimoMensajeCliente","acContactoObservacion"].forEach(function(id){var n=el(id);if(n)n.value="";});if(el("acContactoEstado"))el("acContactoEstado").value="NUEVO";if(el("acContactoCanal"))el("acContactoCanal").value="WHATSAPP";if(el("acContactoPrioridad"))el("acContactoPrioridad").value="MEDIA";if(el("acContactoProximaAccion"))el("acContactoProximaAccion").value="";if(el("acContactoMotivoPerdida"))el("acContactoMotivoPerdida").value="";syncLossReasonVisibility();var follow=el("acContactoProximo");if(follow)follow.classList.remove("ac-followup-unsaved");renderActiveContact();renderWhatsappWindow();status("Modo general activado. No hay contacto asociado a esta respuesta.","neutral");}
+      function openActiveContactWhatsapp(event){var c=state.activeContactKey&&state.contacts[state.activeContactKey];if(!c||String(c.canal||"").toUpperCase()!=="WHATSAPP")return;var phone=normalizeWhatsappDirectPhone(c.telefono||c.identificador_canal);if(!phone)return;var response=txt(el("acRespuesta")&&el("acRespuesta").value);if(!response){status("No hay una respuesta visible para abrir en WhatsApp.","warning");event.preventDefault();event.stopImmediatePropagation();return;}event.preventDefault();event.stopPropagation();event.stopImmediatePropagation();global.open("https://wa.me/"+phone+"?text="+encodeURIComponent(response),"_blank","noopener,noreferrer");}
+      function syncLossReasonVisibility(){var field=el("acContactoMotivoPerdidaField"),stateField=el("acContactoEstado");if(!field)return;var show=String(stateField&&stateField.value||"").toUpperCase()==="NO_INTERESADO";field.hidden=!show;field.setAttribute("aria-hidden",show?"false":"true");}
+      function activeFollowupInfo(value){var raw=txt(value);if(!raw)return{label:"Sin fecha",className:""};var d=new Date(raw);if(isNaN(d.getTime()))return{label:"Sin fecha",className:""};var t=pendingTemporalInfo(d,Date.now());var prefix=t.key==="overdue"?"Vencido":t.key==="today"?"Hoy":"Próximo";return{label:prefix+" · "+formatDate(d),className:t.className};}
+      function renderActiveContact(){var box=el("acContactoActivo");if(!box)return;var c=state.activeContactKey&&state.contacts[state.activeContactKey];renderResponseContactContext(c||null);renderWorkMode(c||null);if(!c){box.classList.remove("is-active");renderHistory(null);return;}var name=el("acContactoActivoNombre"),meta=el("acContactoActivoMeta"),badge=el("acContactoActivoEstado"),priority=el("acContactoActivoPrioridad"),action=el("acContactoActivoAccion"),follow=el("acContactoActivoSeguimiento"),followBox=el("acContactoActivoSeguimientoBox");if(name)name.textContent=c.nombre||c.telefono||"Prospecto";if(meta)meta.textContent=[c.servicio,c.canal,c.telefono].filter(Boolean).join(" · ");if(priority)priority.textContent=String(c.prioridad_comercial||"MEDIA").toLowerCase().replace(/^./,function(m){return m.toUpperCase();});if(action)action.textContent=c.proxima_accion?commercialActionLabel(c.proxima_accion):"Sin definir";var followInfo=activeFollowupInfo(c.proximo_seguimiento);if(follow)follow.textContent=followInfo.label;if(followBox){followBox.classList.remove("is-overdue","is-today","is-next");if(followInfo.className)followBox.classList.add(followInfo.className);}if(badge)badge.innerHTML='<i class="bi bi-person-check"></i> '+escapeHtml(commercialStateLabel(c.estado_comercial));box.classList.add("is-active");if(state.crmMode==="FORM")renderHistory(c);else renderHistory(null);}function setActiveContact(c){if(!c||!c.contact_key){state.activeContactKey="";renderActiveContact();return;}state.activeContactKey=c.contact_key;renderActiveContact();}
+      function clearContact(){var follow=el("acContactoProximo");if(follow)follow.classList.remove("ac-followup-unsaved");["acContactoNombre","acContactoTelefono","acContactoServicio","acContactoProximo","acContactoUltimoMensajeCliente","acContactoObservacion"].forEach(function(id){var n=el(id);if(n)n.value="";});if(el("acContactoEstado"))el("acContactoEstado").value="NUEVO";if(el("acContactoCanal"))el("acContactoCanal").value="WHATSAPP";if(el("acContactoPrioridad"))el("acContactoPrioridad").value="MEDIA";if(el("acContactoProximaAccion"))el("acContactoProximaAccion").value="";if(el("acContactoMotivoPerdida"))el("acContactoMotivoPerdida").value="";syncLossReasonVisibility();state.activeContactKey="";renderActiveContact();renderWhatsappWindow();status("Nuevo contacto listo. No se ha guardado nada.","neutral");}
+      function isCompactCrm(){return!!(global.matchMedia&&global.matchMedia("(max-width:760px)").matches);}function setCrmSheetTitle(mode){var title=el("acCrmSheetTitle");if(!title)return;title.textContent=mode==="CONTACTS"?"Contactos guardados":mode==="PENDING"?"Seguimientos pendientes":mode==="FORM"?"Ficha del contacto":"Nuevo contacto";}function setEditingMode(editing){var card=el("acContactoCard");state.editingContact=!!editing;if(card)card.dataset.editing=editing?"true":"false";var editBtn=el("acEditarContacto"),cancelBtn=el("acCancelarEdicion");if(editBtn)editBtn.hidden=!!editing;if(cancelBtn)cancelBtn.hidden=!editing;["acContactoNombre","acContactoTelefono","acContactoCanal","acContactoEstado","acContactoServicio","acContactoProximo","acContactoPrioridad","acContactoProximaAccion","acContactoMotivoPerdida","acContactoUltimoMensajeCliente","acContactoObservacion"].forEach(function(id){var n=el(id);if(n)n.tabIndex=editing?0:-1;});}
+      function captureEditBackup(){return{nombre:el("acContactoNombre")?el("acContactoNombre").value:"",telefono:el("acContactoTelefono")?el("acContactoTelefono").value:"",canal:el("acContactoCanal")?el("acContactoCanal").value:"",estado:el("acContactoEstado")?el("acContactoEstado").value:"",servicio:el("acContactoServicio")?el("acContactoServicio").value:"",proximo:el("acContactoProximo")?el("acContactoProximo").value:"",prioridad:el("acContactoPrioridad")?el("acContactoPrioridad").value:"MEDIA",proxima_accion:el("acContactoProximaAccion")?el("acContactoProximaAccion").value:"",motivo_perdida:el("acContactoMotivoPerdida")?el("acContactoMotivoPerdida").value:"",ultimo_mensaje_cliente:el("acContactoUltimoMensajeCliente")?el("acContactoUltimoMensajeCliente").value:"",observacion:el("acContactoObservacion")?el("acContactoObservacion").value:""};}function restoreEditBackup(){var b=state.editBackup;if(!b)return;if(el("acContactoNombre"))el("acContactoNombre").value=b.nombre||"";if(el("acContactoTelefono"))el("acContactoTelefono").value=b.telefono||"";if(el("acContactoCanal"))el("acContactoCanal").value=b.canal||"WHATSAPP";if(el("acContactoEstado"))el("acContactoEstado").value=b.estado||"NUEVO";if(el("acContactoServicio"))el("acContactoServicio").value=b.servicio||"";if(el("acContactoProximo"))el("acContactoProximo").value=b.proximo||"";if(el("acContactoPrioridad"))el("acContactoPrioridad").value=b.prioridad||"MEDIA";if(el("acContactoProximaAccion"))el("acContactoProximaAccion").value=b.proxima_accion||"";if(el("acContactoMotivoPerdida"))el("acContactoMotivoPerdida").value=b.motivo_perdida||"";if(el("acContactoUltimoMensajeCliente"))el("acContactoUltimoMensajeCliente").value=b.ultimo_mensaje_cliente||"";if(el("acContactoObservacion"))el("acContactoObservacion").value=b.observacion||"";syncLossReasonVisibility();renderWhatsappWindow();}
+      function openCrmPanel(mode){var card=el("acContactoCard");if(!card)return;mode=String(mode||"FORM").toUpperCase();if(["NEW","CONTACTS","PENDING","FORM"].indexOf(mode)<0)mode="FORM";state.crmMode=mode;card.dataset.crmMode=mode;if(mode==="NEW"){clearContact();state.editBackup=null;setEditingMode(true);}else if(mode==="FORM"){state.editBackup=null;setEditingMode(false);}else{state.editBackup=null;setEditingMode(false);}if(el("acContactosDetalle"))el("acContactosDetalle").open=(mode==="CONTACTS");if(el("acPendientesDetalle"))el("acPendientesDetalle").open=(mode==="PENDING");setCrmSheetTitle(mode);if(mode==="FORM"&&state.activeContactKey)renderHistory(state.contacts[state.activeContactKey]);else renderHistory(null);if(mode==="CONTACTS")renderContacts();if(mode==="PENDING")renderPending();card.classList.add("is-open");document.body.classList.add("ac-crm-panel-open");}function closeCrmPanel(){var card=el("acContactoCard");if(card)card.classList.remove("is-open");document.body.classList.remove("ac-crm-panel-open");}function scheduleHours(hours){var d=new Date(Date.now()+hours*3600000),field=el("acContactoProximo");if(field){field.value=localInputValue(d);field.classList.add("ac-followup-unsaved");}status("Seguimiento preparado: "+(hours===24?"mañana":"48 h")+" · sin guardar. Pulsa Guardar contacto para conservarlo.","warning");}
+      function fillContact(c){if(!c)return;if(el("acContactoNombre"))el("acContactoNombre").value=c.nombre||"";if(el("acContactoTelefono"))el("acContactoTelefono").value=c.telefono||"";if(el("acContactoCanal"))el("acContactoCanal").value=c.canal||"WHATSAPP";if(el("acContactoEstado"))el("acContactoEstado").value=c.estado_comercial||"NUEVO";if(el("acContactoServicio"))el("acContactoServicio").value=c.servicio||"";if(el("acContactoPrioridad"))el("acContactoPrioridad").value=c.prioridad_comercial||"MEDIA";if(el("acContactoProximaAccion"))el("acContactoProximaAccion").value=c.proxima_accion||"";if(el("acContactoMotivoPerdida"))el("acContactoMotivoPerdida").value=c.motivo_perdida||"";if(el("acContactoProximo")){el("acContactoProximo").value=(c.proximo_seguimiento||"").slice(0,16);el("acContactoProximo").classList.remove("ac-followup-unsaved");}if(el("acContactoUltimoMensajeCliente"))el("acContactoUltimoMensajeCliente").value=(c.ultimo_mensaje_cliente||"").slice(0,16);if(el("acContactoObservacion"))el("acContactoObservacion").value=c.observacion||"";syncLossReasonVisibility();renderWhatsappWindow();setActiveContact(c);state.crmMode="FORM";if(el("acContactoCard"))el("acContactoCard").dataset.crmMode="FORM";setCrmSheetTitle("FORM");state.editBackup=null;setEditingMode(false);renderHistory(c);status("Contacto activo: "+(c.nombre||c.telefono||"Prospecto")+". Consulta su ficha o pulsa Editar para modificarla.","success");}
+      function renderContacts(){var list=el("acContactosGuardados"),count=el("acContactosCantidad");if(!list||!count)return;var all=Object.values(state.contacts||{}).filter(function(c){return!!(c&&c.contact_key);}).sort(function(a,b){var ad=String(a.ultima_interaccion||a.__stamp||""),bd=String(b.ultima_interaccion||b.__stamp||"");return bd.localeCompare(ad);});var q=normalizeCrmSearch(el("acContactosBuscar")&&el("acContactosBuscar").value);var arr=!q?all:all.filter(function(c){return normalizeCrmSearch([c.nombre,c.telefono,c.servicio,c.estado_comercial,c.prioridad_comercial,c.proxima_accion,c.motivo_perdida,c.canal].filter(Boolean).join(" ")).includes(q);});count.textContent=q?(String(arr.length)+"/"+String(all.length)):String(all.length);list.innerHTML="";if(!all.length){list.innerHTML='<div class="ac-crm-empty">Todavía no hay contactos guardados.</div>';return;}if(!arr.length){list.innerHTML='<div class="ac-crm-empty">No encontré contactos con esa búsqueda.</div>';return;}arr.slice(0,100).forEach(function(c){var item=document.createElement("button");item.type="button";item.className="ac-crm-item";item.dataset.contactKey=c.contact_key;var meta=[c.servicio,commercialStateLabel(c.estado_comercial),c.prioridad_comercial?("Prioridad "+String(c.prioridad_comercial).toLowerCase()):"",c.proxima_accion?commercialActionLabel(c.proxima_accion):"",c.canal].filter(Boolean).join(" · ");var last=c.ultima_interaccion||c.__stamp||"",lastText="";if(last){var d=new Date(last);if(!isNaN(d.getTime()))lastText=formatDate(d);}item.innerHTML='<span><strong>'+escapeHtml(c.nombre||c.telefono||"Prospecto")+'</strong><small>'+escapeHtml(meta||"Contacto comercial")+'</small></span><span class="ac-crm-item-time">'+escapeHtml(lastText)+'</span>';item.addEventListener("click",function(){var c=state.contacts[this.dataset.contactKey];fillContact(c);if(el("acContactosDetalle"))el("acContactosDetalle").open=false;closeCrmPanel();var active=el("acRespuestaContactoActivo");if(active)active.scrollIntoView({behavior:"smooth",block:"center"});status("Contacto activo: "+(c.nombre||c.telefono||"Prospecto")+".","success");});list.appendChild(item);});}
+      function whatsappWindowInfo(value,nowMs){var d=value instanceof Date?value:new Date(value),now=new Date(typeof nowMs==="number"?nowMs:Date.now());if(isNaN(d.getTime()))return{label:"Sin dato",detail:"Registra cuándo escribió el cliente para calcular la ventana.",className:"is-empty"};var end=new Date(d.getTime()+24*60*60*1000),remaining=end.getTime()-now.getTime();if(remaining<=0)return{label:"Vencida",detail:"La ventana de 24 h terminó el "+formatDate(end)+".",className:"is-closed"};var totalMinutes=Math.max(0,Math.floor(remaining/60000)),h=Math.floor(totalMinutes/60),m=totalMinutes%60,detail="Quedan "+h+" h "+m+" min · vence "+formatDate(end)+".";if(remaining<=3*60*60*1000)return{label:"Por vencer",detail:detail,className:"is-warning"};return{label:"Abierta",detail:detail,className:"is-open"};}
+      function renderWhatsappWindow(){var box=el("acWhatsappWindow"),badge=el("acWhatsappWindowBadge"),detail=el("acWhatsappWindowDetail");if(!box||!badge||!detail)return;var channel=String(el("acContactoCanal")&&el("acContactoCanal").value||"GENERAL").toUpperCase(),isWa=channel==="WHATSAPP";box.classList.toggle("is-visible",isWa);if(!isWa)return;var value=el("acContactoUltimoMensajeCliente")?el("acContactoUltimoMensajeCliente").value:"",info=whatsappWindowInfo(value,Date.now());badge.className="ac-wa-window-badge "+info.className;badge.textContent=info.label;detail.textContent=info.detail;}
+      function pendingWhatsappSummary(c,nowMs){var channel=String(c&&c.canal||"GENERAL").toUpperCase();if(channel!=="WHATSAPP")return null;var info=whatsappWindowInfo(c&&c.ultimo_mensaje_cliente,nowMs),label="";if(info.className==="is-open")label="WhatsApp: abierta";else if(info.className==="is-warning")label="WhatsApp: por vencer";else if(info.className==="is-closed")label="WhatsApp: vencida";else label="WhatsApp: sin dato";return{label:label,className:info.className,priority:info.className==="is-warning"?0:1,urgent:info.className==="is-warning"};}
+      function pendingTemporalInfo(date,nowMs){var d=date instanceof Date?date:new Date(date),now=new Date(typeof nowMs==="number"?nowMs:Date.now());if(isNaN(d.getTime()))return{key:"next",label:"Próximo",human:"Fecha pendiente",className:"is-next"};var todayStart=new Date(now.getFullYear(),now.getMonth(),now.getDate()),tomorrowStart=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1),dayAfterTomorrow=new Date(now.getFullYear(),now.getMonth(),now.getDate()+2),targetStart=new Date(d.getFullYear(),d.getMonth(),d.getDate()),timeText="";try{timeText=new Intl.DateTimeFormat("es-EC",{hour:"2-digit",minute:"2-digit"}).format(d);}catch(_){timeText=("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);}if(d.getTime()<now.getTime()){var overdueDays=Math.max(0,Math.floor((todayStart-targetStart)/86400000));return{key:"overdue",label:"Atrasado",human:overdueDays>=1?("Hace "+overdueDays+" "+(overdueDays===1?"día":"días")):("Hoy · "+timeText),className:"is-overdue"};}if(d>=todayStart&&d<tomorrowStart)return{key:"today",label:"Hoy",human:"Hoy · "+timeText,className:"is-today"};return{key:"next",label:"Próximo",human:d>=tomorrowStart&&d<dayAfterTomorrow?("Mañana · "+timeText):formatDate(d),className:"is-next"};}
+      function pendingStateBadge(c){var st=String(c&&c.estado_comercial||"").toUpperCase();if(st==="CITA_AGENDADA")return'<span class="ac-pending-state is-appointment"><i class="bi bi-calendar2-check"></i> Cita agendada</span>';if(st==="CONFIRMADO")return'<span class="ac-pending-state is-confirmed"><i class="bi bi-check2-circle"></i> Confirmado</span>';return"";}
+      function renderPending(){var list=el("acPendientes"),count=el("acPendientesCantidad"),summary=el("acPendientesResumen");if(!list||!count)return;var now=Date.now(),all=Object.values(state.contacts||{}).filter(function(c){if(!c||!c.contact_key||!c.proximo_seguimiento||CLOSED_STATES[c.estado_comercial])return false;return!isNaN(new Date(c.proximo_seguimiento).getTime());}).sort(function(a,b){var ta=pendingTemporalInfo(new Date(a.proximo_seguimiento),now),tb=pendingTemporalInfo(new Date(b.proximo_seguimiento),now),groupRank={overdue:0,today:1,next:2};if(groupRank[ta.key]!==groupRank[tb.key])return groupRank[ta.key]-groupRank[tb.key];var pa=commercialPriorityRank(a.prioridad_comercial),pb=commercialPriorityRank(b.prioridad_comercial);if(pa!==pb)return pa-pb;return new Date(a.proximo_seguimiento)-new Date(b.proximo_seguimiento);});var groupCounts={overdue:0,today:0,next:0};all.forEach(function(c){groupCounts[pendingTemporalInfo(new Date(c.proximo_seguimiento),now).key]++;});if(summary)summary.querySelectorAll("[data-pending-group]").forEach(function(node){var strong=node.querySelector("strong"),key=node.dataset.pendingGroup;if(strong)strong.textContent=String(groupCounts[key]||0);node.classList.toggle("is-empty",!(groupCounts[key]||0));});var launch=el("acCrmPendientesMovil");if(launch){launch.dataset.pendingCount=String(all.length);launch.setAttribute("aria-label","Pendientes"+(all.length?" · "+all.length:""));}var q=normalizeCrmSearch(el("acPendientesBuscar")&&el("acPendientesBuscar").value),arr=!q?all:all.filter(function(c){return normalizeCrmSearch([c.nombre,c.telefono,c.servicio,c.estado_comercial,c.prioridad_comercial,c.proxima_accion,c.motivo_perdida,c.canal].filter(Boolean).join(" ")).includes(q);});count.textContent=q?(String(arr.length)+"/"+String(all.length)):String(all.length);list.innerHTML="";if(!all.length){list.innerHTML='<div class="ac-crm-empty">No hay seguimientos pendientes guardados.</div>';return;}if(!arr.length){list.innerHTML='<div class="ac-crm-empty">No encontré pendientes con esa búsqueda.</div>';return;}var lastGroup="";arr.slice(0,100).forEach(function(c){var d=new Date(c.proximo_seguimiento),temporal=pendingTemporalInfo(d,now),wa=pendingWhatsappSummary(c,now);if(temporal.key!==lastGroup){lastGroup=temporal.key;var heading=document.createElement("div");heading.className="ac-pending-group-title "+temporal.className;heading.textContent=temporal.key==="overdue"?"Vencidos":temporal.key==="today"?"Hoy":"Próximos";list.appendChild(heading);}var item=document.createElement("button");item.type="button";item.className="ac-crm-item"+(wa&&wa.urgent?" is-wa-priority":"");item.dataset.contactKey=c.contact_key;var priority=String(c.prioridad_comercial||"MEDIA").toUpperCase();item.innerHTML='<span><strong>'+escapeHtml(c.nombre||c.telefono||"Prospecto")+'</strong><small>'+escapeHtml(c.servicio||"Seguimiento comercial")+'</small>'+pendingStateBadge(c)+'<span class="ac-pending-priority is-'+escapeHtml(priority.toLowerCase())+'"><i class="bi bi-flag"></i>&nbsp;Prioridad '+escapeHtml(priority.toLowerCase())+'</span>'+(c.proxima_accion?'<span class="ac-pending-action"><i class="bi bi-arrow-right-circle"></i>&nbsp;'+escapeHtml(commercialActionLabel(c.proxima_accion))+'</span>':"")+(wa&&wa.urgent?'<span class="ac-pending-priority"><i class="bi bi-exclamation-triangle"></i>&nbsp;Prioridad WhatsApp</span>':"")+'</span><span class="ac-pending-time"><span class="ac-pending-badge '+escapeHtml(temporal.className)+'">'+escapeHtml(temporal.label)+'</span><span class="ac-pending-human">'+escapeHtml(temporal.human)+'</span><span class="ac-pending-exact">'+escapeHtml(formatDate(d))+'</span>'+(wa?'<span class="ac-pending-wa '+escapeHtml(wa.className)+'"><i class="bi bi-whatsapp"></i>'+escapeHtml(wa.label)+'</span>':"")+'</span>';item.addEventListener("click",function(){var c=state.contacts[this.dataset.contactKey];fillContact(c);if(el("acPendientesDetalle"))el("acPendientesDetalle").open=false;openCrmPanel("FORM");});list.appendChild(item);});}
+      function escapeHtml(v){var d=document.createElement("div");d.textContent=txt(v);return d.innerHTML;}function formatDate(d){try{return new Intl.DateTimeFormat("es-EC",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}).format(d);}catch(_){return d.toLocaleString();}}function contactNamePrefix(){var n=txt(el("acContactoNombre")&&el("acContactoNombre").value).split(/\s+/)[0];return n?n+", ":"";}
+      function stageText(stage){var service=currentService(),topic=service?" sobre "+service:"",name=contactNamePrefix();if(stage==="SEGUIMIENTO")return"Hola "+name+"quería saber si pudiste revisar la información que te compartimos"+topic+".\n\nSi deseas, puedo ayudarte a continuar con la información o coordinar una cita.";if(stage==="CIERRE"){var link=CFG.business&&CFG.business.appointmentUrl;return"Perfecto "+name+"si deseas avanzar"+(service?" con "+service:"")+", podemos ayudarte a coordinar tu cita."+(link?"\n\nPuedes agendar aquí:\n"+link:"");}if(stage==="RECONTACTO")return"Hola "+name+"hace unos días conversamos"+topic+". Quería saber si todavía deseas información o si prefieres dejarlo pendiente por ahora.\n\nCon gusto te ayudamos cuando lo necesites.";return"";}
+      function markStage(stage){state.stage=stage;document.querySelectorAll("#acEtapasComerciales [data-commercial-stage]").forEach(function(b){b.classList.toggle("active",b.dataset.commercialStage===stage);});document.querySelectorAll("#acQuickEtapas [data-quick-commercial-stage]").forEach(function(b){b.classList.toggle("active",b.dataset.quickCommercialStage===stage);});}function syncQuickResponse(){var source=el("acRespuesta"),target=el("acQuickResponse");if(!source||!target)return;target.textContent=source.value||"";}function applyQuickStage(stage){stage=String(stage||"ORIGINAL").toUpperCase();var original=document.querySelector('#acEtapasComerciales [data-commercial-stage="'+stage+'"]');if(original){original.click();syncQuickResponse();}}
+      function applyStage(stage){stage=String(stage||"").toUpperCase();var response=el("acRespuesta");if(!response)return;if(stage==="ORIGINAL"){var t=selectedTemplate();if(t){try{response.value=global.AsistenteComercial&&typeof global.AsistenteComercial.buildResponse==="function"?global.AsistenteComercial.buildResponse(t.id):t.response||"";}catch(_){response.value=t.response||"";}}markStage("ORIGINAL");response.dispatchEvent(new Event("input",{bubbles:true}));return;}var next=stageText(stage);if(!next)return;response.value=next;markStage(stage);response.dispatchEvent(new Event("input",{bubbles:true}));}
+      function populateSelects(){var s=el("acContactoEstado");if(s){s.innerHTML=COMMERCIAL_STATES.map(function(x){return'<option value="'+x[0]+'">'+x[1]+'</option>';}).join("");s.value="NUEVO";syncLossReasonVisibility();}var c=el("acContactoCanal");if(c){var channels=(CFG.channels&&CFG.channels.length?CFG.channels:["WHATSAPP","INSTAGRAM","TIKTOK","FACEBOOK","EMAIL","GENERAL"]);c.innerHTML=channels.map(function(x){return'<option value="'+escapeHtml(x)+'">'+escapeHtml(x.charAt(0)+x.slice(1).toLowerCase())+'</option>';}).join("");c.value=channels.indexOf("WHATSAPP")>=0?"WHATSAPP":channels[0];}}
+      function isMobileLibrary(){return global.matchMedia&&global.matchMedia("(max-width:760px)").matches;}
+      function openMobileLibrary(){if(!isMobileLibrary())return;document.body.classList.remove("ac-library-focus");document.body.classList.add("ac-library-open");var b=el("acModoPlantillas"),r=el("acModoResponder");if(b)b.classList.add("active");if(r)r.classList.remove("active");}
+      function closeMobileLibrary(){document.body.classList.remove("ac-library-open","ac-library-focus");var b=el("acModoPlantillas");if(b)b.classList.remove("active");var r=el("acModoResponder");if(r)r.classList.add("active");}
+      function bindMobileLibraryUX(){
+        var open=el("acModoPlantillas"),close=el("acMobileLibraryClose"),back=el("acMobileLibraryBackdrop"),respond=el("acModoResponder");
+        if(open)open.addEventListener("click",function(e){if(!isMobileLibrary())return;e.preventDefault();e.stopImmediatePropagation();openMobileLibrary();},true);
+        if(close)close.addEventListener("click",closeMobileLibrary);
+        if(back)back.addEventListener("click",closeMobileLibrary);
+        if(respond)respond.addEventListener("click",function(){if(isMobileLibrary())closeMobileLibrary();});
+        var selected=el("acPlantillaSeleccionada");
+        if(selected&&global.MutationObserver){
+          new MutationObserver(function(){if(isMobileLibrary()&&document.body.classList.contains("ac-library-open")&&!selected.hidden&&txt(selected.textContent)){setTimeout(function(){closeMobileLibrary();var quick=el("acQuickSheet");if(quick)quick.hidden=true;var r=el("acRespuesta");if(r){r.scrollIntoView({behavior:"smooth",block:"center"});try{r.focus({preventScroll:true});}catch(_){}}},120);}}).observe(selected,{childList:true,subtree:true,attributes:true,attributeFilter:["hidden"]});
+        }
+        global.addEventListener("resize",function(){if(!isMobileLibrary())closeMobileLibrary();});
+      }
+      function bindTemplateSaveFeedback(){
+        var form=el("acTemplateForm"),btn=el("acTplGuardar"),msg=el("acTplMensaje");
+        if(!form||!btn)return;
+        form.addEventListener("submit",function(){
+          if(btn.disabled)return;
+          if(!btn.dataset.acOriginalHtml)btn.dataset.acOriginalHtml=btn.innerHTML;
+          btn.disabled=true;btn.classList.add("ac-write-busy");
+          btn.innerHTML='<i class="bi bi-hourglass-split"></i> Guardando…';
+          var reset=function(success){
+            btn.classList.remove("ac-write-busy");
+            if(success){btn.classList.add("ac-write-success");btn.innerHTML='<i class="bi bi-check2-circle"></i> Guardado';}
+            setTimeout(function(){btn.classList.remove("ac-write-success");btn.innerHTML=btn.dataset.acOriginalHtml||"Guardar plantilla";btn.disabled=false;},success?1500:500);
+          };
+          if(msg&&global.MutationObserver){
+            var obs=new MutationObserver(function(){
+              if(!msg.hidden&&txt(msg.textContent)){var success=!/error|no se pudo|revisa|falta/i.test(txt(msg.textContent));obs.disconnect();reset(success);}
+            });
+            obs.observe(msg,{childList:true,subtree:true,attributes:true,attributeFilter:["hidden"]});
+            setTimeout(function(){try{obs.disconnect();}catch(_){}if(btn.disabled)reset(false);},12000);
+          }else setTimeout(function(){reset(false);},4000);
+        },true);
+      }
+      function bind(){bindMobileLibraryUX();var b;b=el("acModoTrabajoAccion");if(b)b.addEventListener("click",function(){if(state.activeContactKey){clearActiveContactContext();}else{openCrmPanel("CONTACTS");}});b=el("acRespuestaContactoRegistrarDirecto");if(b)b.addEventListener("click",registerInteraction);b=el("acRegistrarInteraccionRespuesta");if(b)b.addEventListener("click",registerInteraction);b=el("acContactoActivoRegistrar");if(b)b.addEventListener("click",registerInteraction);b=el("acRespuestaContactoFicha");if(b)b.addEventListener("click",function(){if(state.activeContactKey)openCrmPanel("FORM");});b=el("acRespuestaContactoEditarDirecto");if(b)b.addEventListener("click",function(){if(!state.activeContactKey)return;openCrmPanel("FORM");state.editBackup=captureEditBackup();setEditingMode(true);status("Edición habilitada. Guarda los cambios o pulsa Cancelar.","neutral");});b=el("acRespuestaContactoQuitar");if(b)b.addEventListener("click",clearActiveContactContext);b=el("acWhatsApp");if(b)b.addEventListener("click",openActiveContactWhatsapp,true);b=el("acGuardarContacto");if(b)b.addEventListener("click",saveContact);b=el("acRegistrarInteraccion");if(b)b.addEventListener("click",registerInteraction);b=el("acNuevoContacto");if(b)b.addEventListener("click",function(){openCrmPanel("NEW");});b=el("acCrmNuevoMovil");if(b)b.addEventListener("click",function(){openCrmPanel("NEW");});b=el("acCrmContactosMovil");if(b)b.addEventListener("click",function(){openCrmPanel("CONTACTS");});b=el("acCrmPendientesMovil");if(b)b.addEventListener("click",function(){openCrmPanel("PENDING");});b=el("acCerrarContactoPanel");if(b)b.addEventListener("click",closeCrmPanel);b=el("acSeguimientoManana");if(b)b.addEventListener("click",function(){scheduleHours(24);});b=el("acSeguimiento48h");if(b)b.addEventListener("click",function(){scheduleHours(48);});b=el("acContactoActivoFicha");if(b)b.addEventListener("click",function(){openCrmPanel("FORM");});b=el("acContactosBuscar");if(b)b.addEventListener("input",renderContacts);b=el("acPendientesBuscar");if(b)b.addEventListener("input",renderPending);b=el("acContactoCanal");if(b)b.addEventListener("change",renderWhatsappWindow);b=el("acContactoEstado");if(b)b.addEventListener("change",syncLossReasonVisibility);b=el("acContactoProximo");if(b)b.addEventListener("input",function(){this.classList.add("ac-followup-unsaved");});b=el("acContactoUltimoMensajeCliente");if(b)b.addEventListener("input",renderWhatsappWindow);b=el("acEditarContacto");if(b)b.addEventListener("click",function(){if(!state.activeContactKey)return;state.editBackup=captureEditBackup();setEditingMode(true);status("Edición habilitada. Guarda los cambios o pulsa Cancelar.","neutral");if(el("acContactoNombre"))el("acContactoNombre").focus();});b=el("acCancelarEdicion");if(b)b.addEventListener("click",function(){restoreEditBackup();var follow=el("acContactoProximo");if(follow)follow.classList.remove("ac-followup-unsaved");state.editBackup=null;setEditingMode(false);var c=state.activeContactKey&&state.contacts[state.activeContactKey];if(c)renderHistory(c);status("Edición cancelada. No se guardaron cambios.","neutral");});b=el("acContactoActivoResponder");if(b)b.addEventListener("click",function(){closeCrmPanel();var target=el("acRespuesta")||el("acMensajeCard");if(target)target.scrollIntoView({behavior:"smooth",block:"center"});if(el("acRespuesta"))el("acRespuesta").focus({preventScroll:true});});var quickStages=el("acQuickEtapas");if(quickStages)quickStages.addEventListener("click",function(event){var btn=event.target.closest&&event.target.closest("[data-quick-commercial-stage]");if(!btn)return;applyQuickStage(btn.dataset.quickCommercialStage||"ORIGINAL");});var responseSource=el("acRespuesta");if(responseSource)responseSource.addEventListener("input",syncQuickResponse);document.addEventListener("keydown",function(event){if(event.key==="Escape"&&el("acContactoCard")&&el("acContactoCard").classList.contains("is-open"))closeCrmPanel();});document.addEventListener("click",function(event){var btn=event.target.closest&&event.target.closest("#acEtapasComerciales [data-commercial-stage]");if(!btn)return;event.preventDefault();event.stopPropagation();event.stopImmediatePropagation();applyStage(btn.dataset.commercialStage||"ORIGINAL");},true);document.addEventListener("click",function(event){if(event.target.closest&&event.target.closest("#acPlantillas [data-template-id], #acSugerencias [data-template-id], .ac-use-template-btn")){markStage("ORIGINAL");if(global.queueMicrotask)global.queueMicrotask(syncQuickResponse);}},false);}
+      function markAndroidRuntime(){try{var ua=String(navigator.userAgent||"");document.documentElement.classList.toggle("ac-android",/Android/i.test(ua));}catch(_){}}
+      function resetTransientUiLocks(){document.body.classList.remove("ac-crm-panel-open","ac-library-open","ac-library-focus");var card=el("acContactoCard");if(card)card.classList.remove("is-open");var quick=el("acQuickSheet");if(quick)quick.hidden=true;}global.addEventListener("pageshow",function(event){markAndroidRuntime();if(event.persisted)resetTransientUiLocks();if(document.documentElement.classList.contains("ac-android")){var crm=el("acContactoCard"),quick=el("acQuickSheet");if(!(crm&&crm.classList.contains("is-open")))document.body.classList.remove("ac-crm-panel-open");if(!document.body.classList.contains("ac-library-open"))document.body.classList.remove("ac-library-focus");if(quick&&quick.hidden)quick.style.pointerEvents="none";}});function boot(){if(state.initialized)return;state.initialized=true;markAndroidRuntime();resetTransientUiLocks();loadLocal();populateSelects();if(el("acContactoCard")){el("acContactoCard").dataset.crmMode="FORM";el("acContactoCard").dataset.editing="false";}bind();setEditingMode(false);markStage("ORIGINAL");syncQuickResponse();renderActiveContact();renderContacts();renderPending();loadCommercialRecords();}
+      if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot,{once:true});else boot();
+      global.AsistenteComercialFase2={version:"1.0.7",saveContact:saveContact,registerInteraction:registerInteraction,loadCommercialRecords:loadCommercialRecords,renderContacts:renderContacts,renderPending:renderPending,applyStage:applyStage,getState:function(){return JSON.parse(JSON.stringify(state));}};
+    })(window,document);
+  </script>
+</body>
+</html>

@@ -1,0 +1,2875 @@
+/**
+ * ============================================================
+ * ASISTENTE COMERCIAL
+ * Archivo: asistente_comercial.css
+ * Versión: 1.1.0
+ * Tipo: Diseño premium / responsive / reutilizable
+ * ============================================================
+ *
+ * OBJETIVO
+ * - Mantener el módulo visualmente independiente del ERP.
+ * - Permitir personalización futura cambiando variables CSS.
+ * - Mantener compatibilidad con PC, tablet, iPhone y Android.
+ * - Evitar scroll horizontal y componentes pesados.
+ *
+ * NOTA
+ * Los colores iniciales siguen una línea cercana al ERP actual,
+ * pero NO están acoplados a AUROSANAX. Pueden sustituirse luego
+ * por variables de marca del cliente.
+ * ============================================================
+ */
+
+:root {
+  --ac-primary: #8b1e5a;
+  --ac-primary-2: #c23b83;
+  --ac-primary-3: #d94695;
+  --ac-primary-dark: #6f1748;
+
+  --ac-bg: #f8fafc;
+  --ac-bg-soft: #fff7fb;
+  --ac-surface: #ffffff;
+  --ac-surface-2: #fffafd;
+  --ac-soft: #fdf2f8;
+
+  --ac-text: #1f2937;
+  --ac-title: #111827;
+  --ac-muted: #64748b;
+  --ac-line: #e5e7eb;
+  --ac-line-soft: #f1f5f9;
+
+  --ac-success: #16a34a;
+  --ac-warning: #d97706;
+  --ac-danger: #dc2626;
+  --ac-info: #2563eb;
+
+  --ac-radius-xs: 10px;
+  --ac-radius-sm: 14px;
+  --ac-radius-md: 18px;
+  --ac-radius-lg: 24px;
+  --ac-radius-xl: 30px;
+
+  --ac-shadow-sm: 0 8px 22px rgba(15, 23, 42, .05);
+  --ac-shadow-md: 0 16px 40px rgba(15, 23, 42, .075);
+  --ac-shadow-lg: 0 24px 70px rgba(139, 30, 90, .13);
+
+  --ac-transition: .18s ease;
+
+  --ac-content-max: 1480px;
+}
+
+/* ============================================================
+   RESET LOCAL
+   ============================================================ */
+
+#acApp,
+#acApp * {
+  box-sizing: border-box;
+}
+
+#acApp {
+  width: 100%;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    radial-gradient(circle at 94% 2%, rgba(194, 59, 131, .12), transparent 26%),
+    radial-gradient(circle at 4% 98%, rgba(139, 30, 90, .07), transparent 24%),
+    linear-gradient(180deg, #fffafd 0%, var(--ac-bg) 46%, #ffffff 100%);
+  color: var(--ac-text);
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+  overflow-x: hidden;
+}
+
+#acApp button,
+#acApp input,
+#acApp textarea,
+#acApp select {
+  font: inherit;
+}
+
+#acApp button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+#acApp textarea {
+  resize: vertical;
+}
+
+#acApp a {
+  color: inherit;
+}
+
+/* ============================================================
+   CONTENEDOR GENERAL
+   ============================================================ */
+
+.ac-shell {
+  width: min(100%, var(--ac-content-max));
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.ac-topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.ac-heading-group {
+  min-width: 0;
+}
+
+.ac-title {
+  margin: 0;
+  color: var(--ac-title);
+  font-size: clamp(26px, 3vw, 38px);
+  line-height: 1.05;
+  font-weight: 950;
+  letter-spacing: -.035em;
+}
+
+.ac-subtitle {
+  margin: 7px 0 0;
+  color: var(--ac-muted);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.ac-brand-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  max-width: 340px;
+  padding: 9px 13px;
+  border: 1px solid #f1d4e5;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .92);
+  color: var(--ac-primary-dark);
+  font-size: 13px;
+  font-weight: 850;
+  box-shadow: var(--ac-shadow-sm);
+}
+
+.ac-brand-chip img {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #fff;
+}
+
+/* ============================================================
+   HERO / CABECERA FUNCIONAL
+   ============================================================ */
+
+.ac-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #f3cadd;
+  border-radius: var(--ac-radius-xl);
+  background:
+    radial-gradient(circle at 92% 10%, rgba(194, 59, 131, .16), transparent 25%),
+    linear-gradient(135deg, #ffffff 0%, #fff9fc 60%, #fdf2f8 100%);
+  box-shadow: var(--ac-shadow-md);
+  padding: 22px;
+  margin-bottom: 18px;
+}
+
+.ac-hero::after {
+  content: "";
+  position: absolute;
+  width: 190px;
+  height: 190px;
+  right: -70px;
+  bottom: -90px;
+  border-radius: 50%;
+  background: rgba(139, 30, 90, .045);
+  pointer-events: none;
+}
+
+.ac-hero-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-wrap: wrap;
+}
+
+.ac-hero-main {
+  min-width: 0;
+}
+
+.ac-hero-title {
+  margin: 0;
+  color: var(--ac-title);
+  font-size: 22px;
+  font-weight: 950;
+  letter-spacing: -.02em;
+}
+
+.ac-hero-text {
+  margin: 5px 0 0;
+  color: var(--ac-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.ac-hero-badges {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ac-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border: 1px solid #f0d3e1;
+  background: #fff;
+  color: var(--ac-primary-dark);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ac-badge.is-safe {
+  color: #166534;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+/* ============================================================
+   GRID PRINCIPAL
+   ============================================================ */
+
+.ac-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.ac-column {
+  min-width: 0;
+}
+
+.ac-card {
+  width: 100%;
+  border: 1px solid #efd4e2;
+  border-radius: var(--ac-radius-lg);
+  background: linear-gradient(180deg, #ffffff 0%, #fffefe 100%);
+  box-shadow: var(--ac-shadow-md);
+  overflow: hidden;
+}
+
+.ac-card + .ac-card {
+  margin-top: 18px;
+}
+
+.ac-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 18px 0;
+}
+
+.ac-card-title {
+  margin: 0;
+  color: var(--ac-title);
+  font-size: 18px;
+  font-weight: 920;
+  letter-spacing: -.015em;
+}
+
+.ac-card-help {
+  margin: 4px 0 0;
+  color: var(--ac-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ac-card-body {
+  padding: 18px;
+}
+
+/* ============================================================
+   CAMPOS
+   ============================================================ */
+
+.ac-label {
+  display: block;
+  margin-bottom: 7px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.ac-label small {
+  color: var(--ac-muted);
+  font-weight: 700;
+}
+
+.ac-field,
+.ac-select,
+.ac-textarea {
+  width: 100%;
+  border: 1px solid #dbe2ea;
+  border-radius: var(--ac-radius-sm);
+  background: #fff;
+  color: var(--ac-text);
+  outline: none;
+  transition:
+    border-color var(--ac-transition),
+    box-shadow var(--ac-transition),
+    background var(--ac-transition);
+}
+
+.ac-field,
+.ac-select {
+  min-height: 46px;
+  padding: 10px 13px;
+}
+
+.ac-textarea {
+  min-height: 160px;
+  padding: 14px 15px;
+  line-height: 1.55;
+}
+
+.ac-textarea.ac-message {
+  min-height: 210px;
+}
+
+.ac-textarea.ac-response {
+  min-height: 240px;
+  font-size: 15px;
+}
+
+.ac-field:focus,
+.ac-select:focus,
+.ac-textarea:focus {
+  border-color: #e89ac2;
+  box-shadow: 0 0 0 4px rgba(194, 59, 131, .09);
+  background: #fff;
+}
+
+.ac-field::placeholder,
+.ac-textarea::placeholder {
+  color: #94a3b8;
+}
+
+.ac-search-wrap {
+  position: relative;
+}
+
+.ac-search-wrap i {
+  position: absolute;
+  left: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.ac-search-wrap .ac-field {
+  padding-left: 40px;
+}
+
+/* ============================================================
+   BARRAS / FILTROS
+   ============================================================ */
+
+.ac-toolbar {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ac-toolbar > * {
+  min-width: 0;
+}
+
+.ac-toolbar .ac-select {
+  width: auto;
+  min-width: 180px;
+}
+
+.ac-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.ac-inline-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* ============================================================
+   ÁMBITOS Y CATEGORÍAS
+   ============================================================ */
+
+.ac-chip-row,
+.ac-scope-row,
+.ac-category-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ac-scope-chip,
+.ac-category-chip {
+  border: 1px solid #efd4e2;
+  background: linear-gradient(180deg, #fff, #fff9fc);
+  color: var(--ac-primary-dark);
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+  transition:
+    transform var(--ac-transition),
+    box-shadow var(--ac-transition),
+    border-color var(--ac-transition),
+    background var(--ac-transition),
+    color var(--ac-transition);
+}
+
+.ac-category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.ac-scope-chip:hover,
+.ac-category-chip:hover {
+  transform: translateY(-1px);
+  border-color: #eab1cd;
+  box-shadow: 0 8px 20px rgba(139, 30, 90, .08);
+}
+
+.ac-scope-chip.active,
+.ac-category-chip.active {
+  color: #fff;
+  border-color: transparent;
+  background: linear-gradient(
+    135deg,
+    var(--ac-primary-dark),
+    var(--ac-primary-2) 72%,
+    var(--ac-primary-3)
+  );
+  box-shadow: 0 10px 24px rgba(139, 30, 90, .21);
+}
+
+/* ============================================================
+   BOTONES
+   ============================================================ */
+
+.ac-btn {
+  appearance: none;
+  border: 0;
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: var(--ac-radius-sm);
+  font-size: 13px;
+  font-weight: 880;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  transition:
+    transform var(--ac-transition),
+    box-shadow var(--ac-transition),
+    filter var(--ac-transition),
+    background var(--ac-transition);
+}
+
+.ac-btn:active {
+  transform: translateY(1px);
+}
+
+.ac-btn-primary {
+  color: #fff;
+  background: linear-gradient(
+    135deg,
+    var(--ac-primary-dark),
+    var(--ac-primary-2) 70%,
+    var(--ac-primary-3)
+  );
+  box-shadow: 0 13px 28px rgba(139, 30, 90, .23);
+}
+
+.ac-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 34px rgba(139, 30, 90, .28);
+}
+
+.ac-btn-soft {
+  color: var(--ac-primary-dark);
+  background: var(--ac-soft);
+  border: 1px solid #f1c9dd;
+}
+
+.ac-btn-soft:hover {
+  background: #fff0f7;
+}
+
+.ac-btn-line {
+  color: #334155;
+  background: #fff;
+  border: 1px solid var(--ac-line);
+}
+
+.ac-btn-line:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.ac-btn-danger {
+  color: #b91c1c;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+}
+
+.ac-btn-block {
+  width: 100%;
+}
+
+.ac-copy-main {
+  min-height: 52px;
+  font-size: 15px;
+  border-radius: 16px;
+}
+
+/* ============================================================
+   ESTADO / AVISOS
+   ============================================================ */
+
+#acEstado {
+  margin-top: 12px;
+  border-radius: var(--ac-radius-sm);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 780;
+  line-height: 1.45;
+}
+
+#acEstado[hidden] {
+  display: none !important;
+}
+
+#acEstado[data-type="neutral"] {
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+#acEstado[data-type="success"] {
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+#acEstado[data-type="warning"] {
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+}
+
+#acEstado[data-type="danger"] {
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+}
+
+.ac-safety-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 12px;
+  padding: 11px 12px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1e40af;
+  border-radius: var(--ac-radius-sm);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ac-safety-note i {
+  margin-top: 2px;
+}
+
+/* ============================================================
+   PLANTILLA SELECCIONADA
+   ============================================================ */
+
+#acPlantillaSeleccionada {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  min-height: 30px;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: #fff7fb;
+  border: 1px solid #f0d3e1;
+  color: var(--ac-primary-dark);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+#acPlantillaSeleccionada[hidden] {
+  display: none !important;
+}
+
+/* ============================================================
+   LISTAS DE PLANTILLAS
+   ============================================================ */
+
+#acPlantillas,
+#acSugerencias {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+#acSugerencias[hidden] {
+  display: none !important;
+}
+
+.ac-template-card {
+  position: relative;
+  min-width: 0;
+  height: 100%;
+  padding: 14px;
+  border-radius: var(--ac-radius-md);
+  border: 1px solid #e8d8e1;
+  background:
+    radial-gradient(circle at 96% 6%, rgba(194, 59, 131, .05), transparent 28%),
+    #fff;
+  box-shadow: var(--ac-shadow-sm);
+  cursor: pointer;
+  transition:
+    transform var(--ac-transition),
+    box-shadow var(--ac-transition),
+    border-color var(--ac-transition),
+    background var(--ac-transition);
+}
+
+.ac-template-card:hover {
+  transform: translateY(-2px);
+  border-color: #e9accb;
+  box-shadow: 0 14px 30px rgba(139, 30, 90, .10);
+}
+
+.ac-template-card.active {
+  border-color: #d977aa;
+  background:
+    radial-gradient(circle at 96% 6%, rgba(194, 59, 131, .12), transparent 30%),
+    #fff7fb;
+  box-shadow:
+    0 14px 34px rgba(139, 30, 90, .13),
+    0 0 0 3px rgba(194, 59, 131, .06);
+}
+
+.ac-template-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.ac-template-title-wrap {
+  min-width: 0;
+}
+
+.ac-template-title-wrap strong {
+  display: block;
+  color: var(--ac-title);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.35;
+}
+
+.ac-template-title-wrap small {
+  display: block;
+  margin-top: 3px;
+  color: var(--ac-muted);
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.ac-template-preview {
+  margin: 10px 0 12px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ac-template-bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ac-template-usage,
+.ac-template-score {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 820;
+}
+
+.ac-template-usage {
+  color: #475569;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.ac-template-score {
+  color: #1d4ed8;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
+
+.ac-use-template-btn {
+  margin-left: auto;
+  border: 0;
+  min-height: 30px;
+  padding: 6px 9px;
+  border-radius: 10px;
+  color: var(--ac-primary-dark);
+  background: var(--ac-soft);
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.ac-template-card.active .ac-use-template-btn {
+  color: #fff;
+  background: linear-gradient(135deg, var(--ac-primary), var(--ac-primary-2));
+}
+
+.ac-favorite-btn {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  border: 1px solid #e8e8ef;
+  background: #fff;
+  color: #94a3b8;
+  cursor: pointer;
+}
+
+.ac-favorite-btn.active {
+  color: #ca8a04;
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.ac-empty {
+  grid-column: 1 / -1;
+  min-height: 100px;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  border: 1px dashed #d8dee8;
+  border-radius: var(--ac-radius-md);
+  background: #fbfcfe;
+  color: var(--ac-muted);
+  text-align: center;
+  font-size: 13px;
+  font-weight: 740;
+}
+
+/* ============================================================
+   SECCIÓN SUGERENCIAS
+   ============================================================ */
+
+.ac-suggestions-section {
+  margin-top: 14px;
+}
+
+.ac-section-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 9px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.ac-section-label i {
+  color: var(--ac-primary);
+}
+
+/* ============================================================
+   PIE / META
+   ============================================================ */
+
+.ac-footer-meta {
+  margin-top: 18px;
+  padding: 10px 4px 0;
+  color: #94a3b8;
+  font-size: 11px;
+  text-align: center;
+}
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+
+#acToast {
+  position: fixed;
+  z-index: 9999;
+  left: 50%;
+  bottom: 24px;
+  transform: translate(-50%, 16px);
+  min-width: 220px;
+  max-width: min(92vw, 460px);
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: #111827;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 820;
+  text-align: center;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: 0 18px 44px rgba(15, 23, 42, .24);
+  transition:
+    opacity var(--ac-transition),
+    transform var(--ac-transition);
+}
+
+#acToast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+#acToast[data-type="success"] {
+  background: #166534;
+}
+
+#acToast[data-type="warning"] {
+  background: #92400e;
+}
+
+#acToast[data-type="danger"] {
+  background: #991b1b;
+}
+
+/* ============================================================
+   STICKY ACTIONS
+   ============================================================ */
+
+.ac-response-actions {
+  display: flex;
+  gap: 9px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.ac-response-actions .ac-btn-primary {
+  flex: 1 1 220px;
+}
+
+.ac-response-actions .ac-btn-line {
+  flex: 0 0 auto;
+}
+
+/* ============================================================
+   SCROLLBARS DISCRETAS
+   ============================================================ */
+
+#acApp * {
+  scrollbar-width: thin;
+  scrollbar-color: #d7b0c5 transparent;
+}
+
+#acApp *::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+#acApp *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#acApp *::-webkit-scrollbar-thumb {
+  background: #dbc0cf;
+  border-radius: 999px;
+}
+
+/* ============================================================
+   ACCESIBILIDAD
+   ============================================================ */
+
+#acApp button:focus-visible,
+#acApp input:focus-visible,
+#acApp textarea:focus-visible,
+#acApp select:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, .28);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #acApp *,
+  #acApp *::before,
+  #acApp *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   TABLET / LAPTOP PEQUEÑO
+   ============================================================ */
+
+@media (max-width: 1180px) {
+  .ac-shell {
+    padding: 18px;
+  }
+
+  .ac-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .ac-column {
+    width: 100%;
+  }
+
+  #acPlantillas,
+  #acSugerencias {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ac-textarea.ac-message {
+    min-height: 170px;
+  }
+
+  .ac-textarea.ac-response {
+    min-height: 190px;
+  }
+}
+
+/* ============================================================
+   TABLET VERTICAL
+   ============================================================ */
+
+@media (max-width: 900px) {
+  .ac-topbar {
+    flex-direction: column;
+  }
+
+  .ac-brand-chip {
+    max-width: 100%;
+  }
+
+  .ac-hero {
+    border-radius: 22px;
+    padding: 18px;
+  }
+
+  .ac-filter-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .ac-toolbar .ac-select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  #acPlantillas,
+  #acSugerencias {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* ============================================================
+   MÓVIL GENERAL
+   ============================================================ */
+
+@media (max-width: 680px) {
+  .ac-shell {
+    padding:
+      max(12px, env(safe-area-inset-top))
+      12px
+      max(18px, env(safe-area-inset-bottom));
+  }
+
+  .ac-topbar {
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .ac-title {
+    font-size: 26px;
+  }
+
+  .ac-subtitle {
+    font-size: 13px;
+  }
+
+  .ac-brand-chip {
+    min-height: 38px;
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+
+  .ac-hero {
+    margin-bottom: 14px;
+    padding: 15px;
+    border-radius: 20px;
+  }
+
+  .ac-hero-title {
+    font-size: 18px;
+  }
+
+  .ac-hero-text {
+    font-size: 12px;
+  }
+
+  .ac-hero-badges {
+    width: 100%;
+  }
+
+  .ac-badge {
+    min-height: 31px;
+    font-size: 11px;
+  }
+
+  .ac-workspace {
+    gap: 14px;
+  }
+
+  .ac-card {
+    border-radius: 18px;
+  }
+
+  .ac-card + .ac-card {
+    margin-top: 14px;
+  }
+
+  .ac-card-head {
+    padding: 15px 15px 0;
+  }
+
+  .ac-card-title {
+    font-size: 16px;
+  }
+
+  .ac-card-help {
+    font-size: 12px;
+  }
+
+  .ac-card-body {
+    padding: 15px;
+  }
+
+  .ac-field,
+  .ac-select {
+    min-height: 46px;
+    font-size: 16px; /* evita zoom automático en iPhone */
+  }
+
+  .ac-textarea {
+    font-size: 16px; /* evita zoom automático en iPhone */
+  }
+
+  .ac-textarea.ac-message {
+    min-height: 150px;
+  }
+
+  .ac-textarea.ac-response {
+    min-height: 185px;
+  }
+
+  .ac-chip-row,
+  .ac-scope-row,
+  .ac-category-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 3px;
+    scroll-snap-type: x proximity;
+  }
+
+  .ac-scope-chip,
+  .ac-category-chip {
+    flex: 0 0 auto;
+    scroll-snap-align: start;
+    white-space: nowrap;
+    min-height: 42px;
+  }
+
+  #acPlantillas,
+  #acSugerencias {
+    grid-template-columns: 1fr;
+  }
+
+  .ac-template-card {
+    padding: 13px;
+  }
+
+  .ac-template-preview {
+    -webkit-line-clamp: 3;
+  }
+
+  .ac-toolbar {
+    width: 100%;
+  }
+
+  .ac-toolbar .ac-btn,
+  .ac-toolbar .ac-select {
+    flex: 1 1 100%;
+    width: 100%;
+  }
+
+  .ac-response-actions {
+    position: sticky;
+    bottom: max(8px, env(safe-area-inset-bottom));
+    z-index: 12;
+    margin-top: 12px;
+    padding: 8px;
+    border: 1px solid rgba(232, 216, 225, .9);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, .94);
+    box-shadow: 0 14px 34px rgba(15, 23, 42, .13);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .ac-response-actions .ac-btn {
+    min-height: 50px;
+  }
+
+  .ac-response-actions .ac-btn-primary {
+    flex-basis: 100%;
+  }
+
+  .ac-response-actions .ac-btn-line {
+    flex: 1 1 calc(50% - 5px);
+  }
+
+  #acToast {
+    bottom: max(14px, env(safe-area-inset-bottom));
+  }
+}
+
+/* ============================================================
+   MÓVILES MUY PEQUEÑOS
+   ============================================================ */
+
+@media (max-width: 390px) {
+  .ac-shell {
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+
+  .ac-title {
+    font-size: 23px;
+  }
+
+  .ac-card-head,
+  .ac-card-body {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .ac-template-bottom {
+    align-items: stretch;
+  }
+
+  .ac-use-template-btn {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .ac-response-actions .ac-btn-line {
+    flex-basis: 100%;
+  }
+}
+
+/* ============================================================
+   DESKTOP GRANDE
+   ============================================================ */
+
+@media (min-width: 1440px) {
+  .ac-shell {
+    padding: 30px 34px;
+  }
+
+  .ac-workspace {
+    gap: 22px;
+  }
+
+  .ac-card-body {
+    padding: 20px;
+  }
+
+  .ac-textarea.ac-message {
+    min-height: 250px;
+  }
+
+  .ac-textarea.ac-response {
+    min-height: 285px;
+  }
+}
+
+/* ============================================================
+   IMPRESIÓN
+   ============================================================ */
+
+@media print {
+  #acApp {
+    background: #fff !important;
+  }
+
+  .ac-btn,
+  .ac-chip-row,
+  .ac-category-row,
+  .ac-scope-row,
+  #acToast {
+    display: none !important;
+  }
+
+  .ac-card {
+    box-shadow: none !important;
+    break-inside: avoid;
+  }
+}
+
+
+/* ============================================================
+   V1.1.0 — MOBILE FIRST / RESPUESTA RÁPIDA
+   ============================================================ */
+.ac-mobile-modebar {
+  display: none;
+  position: sticky;
+  top: 8px;
+  z-index: 30;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 7px;
+  margin: 0 0 14px;
+  border: 1px solid #efd4e2;
+  border-radius: 16px;
+  background: rgba(255,255,255,.94);
+  box-shadow: var(--ac-shadow-sm);
+  backdrop-filter: blur(12px);
+}
+.ac-mode-btn {
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ac-muted);
+  font-weight: 850;
+}
+.ac-mode-btn.active { background: var(--ac-soft); color: var(--ac-primary-dark); }
+.ac-head-actions { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+.ac-btn-whatsapp {
+  border: 1px solid #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+.ac-btn-whatsapp:hover { background:#dcfce7; }
+body.ac-modal-open { overflow:hidden; }
+.ac-modal-backdrop {
+  position: fixed; inset:0; z-index:9999; padding:18px;
+  background:rgba(15,23,42,.48);
+  display:grid; place-items:center;
+}
+.ac-modal-backdrop[hidden] { display:none !important; }
+.ac-modal {
+  width:min(720px,100%); max-height:92vh; overflow:auto;
+  border:1px solid #efd4e2; border-radius:24px; background:#fff;
+  box-shadow:0 30px 90px rgba(15,23,42,.22);
+}
+.ac-modal-head {
+  display:flex; justify-content:space-between; gap:16px; align-items:flex-start;
+  padding:20px 20px 14px; border-bottom:1px solid var(--ac-line-soft);
+}
+.ac-modal-head h2 { margin:0; font-size:20px; color:var(--ac-title); }
+.ac-modal-head p { margin:5px 0 0; color:var(--ac-muted); font-size:13px; }
+.ac-icon-btn {
+  width:42px; height:42px; border:1px solid var(--ac-line); border-radius:12px;
+  background:#fff; cursor:pointer; color:var(--ac-muted);
+}
+.ac-modal-body { padding:20px; }
+.ac-form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.ac-form-grid label, .ac-form-full { display:block; }
+.ac-form-grid label > span, .ac-form-full > span {
+  display:block; margin-bottom:7px; font-size:13px; font-weight:850; color:#334155;
+}
+.ac-form-full { margin-top:14px; }
+.ac-modal-actions { display:flex; justify-content:flex-end; gap:10px; margin-top:18px; }
+#acEstado[data-type="success"] { color:#166534; background:#f0fdf4; border-color:#bbf7d0; }
+
+@media (max-width: 760px) {
+  .ac-mobile-modebar { display:grid; }
+  .ac-shell { padding:12px; }
+  .ac-hero { padding:16px; border-radius:20px; }
+  .ac-hero-badges { display:none; }
+  .ac-card-head { align-items:center; padding:14px 14px 0; }
+  .ac-card-body { padding:14px; }
+  .ac-card-help { font-size:12px; }
+  .ac-textarea.ac-message { min-height:150px; }
+  .ac-textarea.ac-response { min-height:190px; }
+  .ac-category-row {
+    flex-wrap:nowrap; overflow-x:auto; padding-bottom:4px;
+    scrollbar-width:none; -webkit-overflow-scrolling:touch;
+  }
+  .ac-category-row::-webkit-scrollbar { display:none; }
+  .ac-category-chip { flex:0 0 auto; min-height:42px; }
+  .ac-filter-bar { grid-template-columns:1fr 1fr; }
+  .ac-filter-bar .ac-search-wrap { grid-column:1 / -1; }
+  .ac-response-actions {
+    position:sticky; bottom:max(8px, env(safe-area-inset-bottom)); z-index:20;
+    padding:8px; margin:12px -6px -6px; border:1px solid #efd4e2;
+    border-radius:16px; background:rgba(255,255,255,.96);
+    box-shadow:0 12px 35px rgba(15,23,42,.12); backdrop-filter:blur(12px);
+  }
+  .ac-response-actions .ac-btn { flex:1 1 30%; min-height:48px; }
+  .ac-head-actions .ac-btn { min-height:42px; padding:8px 10px; }
+  .ac-form-grid { grid-template-columns:1fr; }
+  .ac-modal-backdrop { padding:10px; align-items:end; }
+  .ac-modal { width:100%; max-height:94vh; border-radius:22px 22px 10px 10px; }
+  .ac-modal-actions { position:sticky; bottom:0; background:#fff; padding-top:10px; }
+  .ac-modal-actions .ac-btn { flex:1; min-height:48px; }
+}
+
+
+/* ============================================================
+   V1.2.0 — MOBILE PREMIUM / BIBLIOTECA TÁCTIL / EDITOR
+   Alcance exclusivo del Asistente Comercial.
+   No modifica estilos globales del ERP.
+   ============================================================ */
+
+.ac-mobile-template-picker {
+  display: none;
+  margin-bottom: 14px;
+  padding: 14px;
+  border: 1px solid var(--ac-line-soft);
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(253,242,248,.92), rgba(255,255,255,.98));
+}
+
+.ac-picker-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ac-picker-heading > div {
+  display: grid;
+  gap: 2px;
+}
+
+.ac-picker-heading strong {
+  color: var(--ac-title);
+  font-size: 15px;
+}
+
+.ac-picker-eyebrow {
+  color: var(--ac-primary);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ac-picker-hint {
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid var(--ac-line-soft);
+  color: var(--ac-muted);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.ac-category-grid-mobile {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ac-category-tile {
+  min-width: 0;
+  min-height: 82px;
+  padding: 10px 8px;
+  border: 1px solid var(--ac-line-soft);
+  border-radius: 15px;
+  background: #fff;
+  color: var(--ac-title);
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 5px 14px rgba(15,23,42,.035);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ac-category-tile i {
+  font-size: 19px;
+  color: var(--ac-primary);
+}
+
+.ac-category-tile span {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.ac-category-tile small {
+  color: var(--ac-muted);
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.ac-category-tile.active {
+  border-color: rgba(139,30,90,.35);
+  background: var(--ac-soft);
+  box-shadow: inset 0 0 0 1px rgba(139,30,90,.08);
+}
+
+.ac-template-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+
+.ac-template-menu-btn {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ac-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ac-template-menu-btn:hover,
+.ac-template-menu-btn:focus-visible {
+  background: var(--ac-soft);
+  color: var(--ac-primary);
+}
+
+.ac-template-editor {
+  overflow: hidden;
+}
+
+.ac-template-editor-head {
+  background:
+    radial-gradient(circle at top left, rgba(194,59,131,.12), transparent 42%),
+    #fff;
+}
+
+.ac-template-editor-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ac-editor-icon {
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--ac-soft);
+  color: var(--ac-primary);
+  font-size: 18px;
+}
+
+.ac-editor-kicker {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--ac-primary);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ac-template-editor-body {
+  overflow: auto;
+  max-height: calc(92vh - 90px);
+}
+
+.ac-editor-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 12px;
+  margin-bottom: 16px;
+  border: 1px solid #f1d7e5;
+  border-radius: 14px;
+  background: #fff8fb;
+  color: #6b3652;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ac-editor-tip i {
+  color: var(--ac-primary);
+  margin-top: 1px;
+}
+
+.ac-editor-field > small {
+  display: block;
+  min-height: 30px;
+  margin: -2px 0 7px;
+  color: var(--ac-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.ac-editor-label {
+  display: block;
+  margin-bottom: 5px !important;
+  color: var(--ac-title) !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+}
+
+.ac-editor-response-field > small {
+  min-height: auto;
+}
+
+.ac-editor-preview {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--ac-line-soft);
+  border-radius: 16px;
+  background: #fbfcfe;
+}
+
+.ac-editor-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.ac-editor-preview-head span {
+  color: var(--ac-title);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.ac-editor-preview-head small {
+  color: var(--ac-primary);
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.ac-editor-preview p {
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.ac-quick-sheet {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .ac-mobile-template-picker {
+    display: block;
+  }
+
+  body.ac-library-focus .ac-hero,
+  body.ac-library-focus #acApp > .ac-shell > .ac-card,
+  body.ac-library-focus #acMensajeCard,
+  body.ac-library-focus #acMensajeCard + .ac-card,
+  body.ac-library-focus .ac-column:nth-child(2) > .ac-card:last-child {
+    display: none !important;
+  }
+
+  body.ac-library-focus .ac-workspace {
+    display: block;
+    margin-top: 8px !important;
+  }
+
+  body.ac-library-focus .ac-column:first-child > .ac-card:not(#acBibliotecaCard) {
+    display: none !important;
+  }
+
+  body.ac-library-focus .ac-column:nth-child(2) {
+    display: none;
+  }
+
+  body.ac-library-focus #acBibliotecaCard {
+    margin: 0;
+    border-radius: 20px;
+  }
+
+  body.ac-library-focus #acBibliotecaCard .ac-card-head {
+    padding-top: 14px;
+  }
+
+  body.ac-library-focus #acBibliotecaCard .ac-card-help {
+    display: none;
+  }
+
+  body.ac-library-focus #acNuevaPlantilla {
+    min-width: 44px;
+    padding: 8px 10px;
+    font-size: 0;
+  }
+
+  body.ac-library-focus #acNuevaPlantilla i {
+    font-size: 18px;
+  }
+
+  body.ac-library-focus .ac-filter-bar {
+    position: sticky;
+    top: 68px;
+    z-index: 12;
+    padding: 8px;
+    margin: 0 -4px 10px;
+    border: 1px solid var(--ac-line-soft);
+    border-radius: 15px;
+    background: rgba(255,255,255,.96);
+    backdrop-filter: blur(12px);
+  }
+
+  body.ac-library-focus #acPlantillas {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+  }
+
+  body.ac-library-focus .ac-template-card {
+    min-width: 0;
+    padding: 12px;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    min-height: 132px;
+  }
+
+  body.ac-library-focus .ac-template-preview {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.35;
+    color: var(--ac-muted);
+  }
+
+  body.ac-library-focus .ac-template-title-wrap strong {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.25;
+  }
+
+  body.ac-library-focus .ac-template-title-wrap small {
+    font-size: 9px;
+  }
+
+  body.ac-library-focus .ac-template-bottom {
+    margin-top: auto;
+    align-items: center;
+  }
+
+  body.ac-library-focus .ac-template-usage {
+    display: none;
+  }
+
+  body.ac-library-focus .ac-use-template-btn {
+    min-height: 36px;
+    padding: 7px 10px;
+    font-size: 10px;
+  }
+
+  .ac-quick-sheet {
+    position: fixed;
+    left: 10px;
+    right: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+    z-index: 10020;
+    display: block;
+    padding: 8px 14px 14px;
+    border: 1px solid rgba(139,30,90,.18);
+    border-radius: 22px;
+    background: rgba(255,255,255,.985);
+    box-shadow: 0 24px 70px rgba(15,23,42,.24);
+    backdrop-filter: blur(16px);
+  }
+
+  .ac-quick-sheet[hidden] {
+    display: none !important;
+  }
+
+  .ac-quick-sheet-grabber {
+    width: 38px;
+    height: 4px;
+    margin: 0 auto 8px;
+    border-radius: 999px;
+    background: #d8dee8;
+  }
+
+  .ac-quick-sheet-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .ac-quick-sheet-head > div {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+  }
+
+  .ac-quick-sheet-head strong {
+    color: var(--ac-title);
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ac-quick-category {
+    color: var(--ac-primary);
+    font-size: 9px;
+    font-weight: 950;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .ac-quick-close {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+  }
+
+  .ac-quick-response {
+    max-height: 112px;
+    overflow: auto;
+    margin: 9px 0 12px;
+    padding: 11px;
+    border-radius: 13px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+  }
+
+  .ac-quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .ac-quick-actions .ac-btn {
+    min-height: 46px;
+  }
+
+  .ac-modal-backdrop {
+    padding: 0;
+    align-items: end;
+  }
+
+  .ac-template-editor {
+    max-height: 96dvh;
+    border-radius: 24px 24px 0 0;
+    border-bottom: 0;
+  }
+
+  .ac-template-editor-head {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding: 15px 14px 12px;
+    background: rgba(255,255,255,.98);
+    backdrop-filter: blur(14px);
+  }
+
+  .ac-template-editor-heading {
+    gap: 10px;
+  }
+
+  .ac-editor-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+
+  .ac-template-editor-head h2 {
+    font-size: 18px;
+  }
+
+  .ac-template-editor-head p {
+    font-size: 11px;
+  }
+
+  .ac-template-editor-body {
+    max-height: calc(96dvh - 72px);
+    padding: 14px 14px max(14px, env(safe-area-inset-bottom));
+  }
+
+  .ac-editor-grid {
+    gap: 12px;
+  }
+
+  .ac-editor-field > small {
+    min-height: auto;
+  }
+
+  .ac-template-editor .ac-field,
+  .ac-template-editor .ac-select,
+  .ac-template-editor .ac-textarea {
+    font-size: 16px !important;
+  }
+
+  .ac-editor-response-field .ac-textarea {
+    min-height: 150px;
+  }
+
+  .ac-editor-actions {
+    margin: 16px -2px -2px;
+    padding: 10px 2px max(2px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--ac-line-soft);
+  }
+}
+
+@media (max-width: 390px) {
+  .ac-category-grid-mobile {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.ac-library-focus #acPlantillas {
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+  }
+
+  body.ac-library-focus .ac-template-card {
+    padding: 10px;
+  }
+}
+
+
+/* ============================================================
+   V1.2.1 — CIERRE VISUAL FASE 1 / ESCRITORIO PRODUCTIVO
+   Alcance: presentación del Asistente Comercial únicamente.
+   NO modifica backend, base de datos ni SCRIB.
+   ============================================================ */
+
+/* El ámbito PROSPECTO sigue existiendo y funcionando en el DOM,
+   pero se oculta porque en esta fase es el único valor operativo. */
+#acAmbitoCard,
+.ac-scope-card {
+  display: none !important;
+}
+
+/* En modo Plantillas la categoría antigua no se duplica.
+   La lógica y los controles permanecen intactos para modo Responder. */
+body.ac-library-focus #acCategoriaCard {
+  display: none !important;
+}
+
+/* ------------------------------------------------------------
+   ESCRITORIO / MONITOR
+   ------------------------------------------------------------ */
+@media (min-width: 1181px) {
+
+  /* La primera columna entrega sus tarjetas al grid principal.
+     Esto permite que Biblioteca ocupe ambas columnas sin mover
+     ni duplicar contenido en el HTML. */
+  .ac-workspace {
+    grid-template-columns: minmax(0, 1.03fr) minmax(340px, .97fr);
+    gap: 18px;
+  }
+
+  .ac-workspace > .ac-column:first-child {
+    display: contents;
+  }
+
+  /* Mensaje y categoría mantienen la zona izquierda. */
+  #acMensajeCard {
+    grid-column: 1;
+    grid-row: 1;
+    margin-top: 0 !important;
+  }
+
+  #acCategoriaCard {
+    grid-column: 1;
+    grid-row: 2;
+    margin-top: 0 !important;
+  }
+
+  /* Respuesta/seguridad permanecen a la derecha. */
+  .ac-workspace > .ac-column:nth-child(2) {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    min-width: 0;
+  }
+
+  /* La biblioteca usa TODO el ancho disponible. */
+  #acBibliotecaCard {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    margin-top: 0 !important;
+  }
+
+  /* El selector premium de categorías deja de ser "solo móvil":
+     en escritorio funciona como panel lateral compacto. */
+  #acBibliotecaCard .ac-mobile-template-picker {
+    display: block;
+    margin: 0;
+    padding: 14px;
+    min-width: 0;
+    align-self: start;
+    position: sticky;
+    top: 16px;
+  }
+
+  #acBibliotecaCard .ac-card-body {
+    display: grid;
+    grid-template-columns: 235px minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+    gap: 14px 16px;
+    align-items: start;
+  }
+
+  #acBibliotecaCard .ac-mobile-template-picker {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+  }
+
+  #acBibliotecaCard .ac-filter-bar {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
+  }
+
+  #acBibliotecaCard #acPlantillas {
+    grid-column: 2;
+    grid-row: 2;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    min-width: 0;
+  }
+
+  /* Categorías laterales: más densas y profesionales en escritorio. */
+  #acBibliotecaCard .ac-picker-heading {
+    margin-bottom: 10px;
+  }
+
+  #acBibliotecaCard .ac-picker-hint {
+    display: none;
+  }
+
+  #acBibliotecaCard .ac-category-grid-mobile {
+    grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  #acBibliotecaCard .ac-category-tile {
+    min-height: 48px;
+    padding: 8px 10px;
+    display: grid;
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+    place-items: initial;
+    align-items: center;
+    text-align: left;
+    gap: 8px;
+    border-radius: 12px;
+  }
+
+  #acBibliotecaCard .ac-category-tile i {
+    font-size: 16px;
+    text-align: center;
+  }
+
+  #acBibliotecaCard .ac-category-tile span {
+    font-size: 11px;
+  }
+
+  #acBibliotecaCard .ac-category-tile small {
+    font-size: 9px;
+    white-space: nowrap;
+  }
+
+  /* Evita tarjetas demasiado altas cuando se muestran muchas. */
+  #acBibliotecaCard .ac-template-card {
+    min-height: 165px;
+  }
+}
+
+/* Monitores grandes: cuatro columnas reales de plantillas. */
+@media (min-width: 1540px) {
+  #acBibliotecaCard .ac-card-body {
+    grid-template-columns: 250px minmax(0, 1fr);
+  }
+
+  #acBibliotecaCard #acPlantillas {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Laptop intermedio: sigue aprovechando el ancho sin apretar tarjetas. */
+@media (min-width: 1181px) and (max-width: 1320px) {
+  #acBibliotecaCard .ac-card-body {
+    grid-template-columns: 215px minmax(0, 1fr);
+  }
+
+  #acBibliotecaCard #acPlantillas {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+/* Móvil: conserva exactamente la experiencia táctil V1.2.0.
+   Se añade únicamente el ocultamiento del ámbito y de la categoría
+   duplicada cuando se entra al modo Plantillas. */
+@media (max-width: 760px) {
+  body.ac-library-focus #acCategoriaCard {
+    display: none !important;
+  }
+}
+
+/* ============================================================
+   V1.3.0 — UX PREMIUM GLOBAL / TIPOS DINÁMICOS / EDICIÓN
+   ============================================================ */
+
+.ac-template-type-panel {
+  margin: 14px 0 16px;
+  padding: 14px;
+  border: 1px solid var(--ac-line-soft);
+  border-radius: 18px;
+  background: linear-gradient(180deg, #fff, #fffafd);
+}
+.ac-template-type-panel[hidden] { display: none !important; }
+.ac-type-panel-head {
+  display:flex;
+  align-items:end;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+.ac-type-panel-head strong {
+  display:block;
+  margin-top:2px;
+  color:var(--ac-title);
+  font-size:14px;
+}
+.ac-type-chip-row {
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.ac-type-chip {
+  min-height:42px;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  padding:8px 12px;
+  border:1px solid var(--ac-line);
+  border-radius:999px;
+  background:#fff;
+  color:var(--ac-muted);
+  font:inherit;
+  font-weight:800;
+  cursor:pointer;
+  transition:border-color .15s ease, background .15s ease, color .15s ease, transform .15s ease;
+}
+.ac-type-chip small {
+  min-width:22px;
+  padding:2px 6px;
+  border-radius:999px;
+  background:var(--ac-soft);
+  color:var(--ac-primary-dark);
+  text-align:center;
+}
+.ac-type-chip.active {
+  border-color:var(--ac-primary);
+  background:var(--ac-primary);
+  color:#fff;
+}
+.ac-type-chip.active small {
+  background:rgba(255,255,255,.22);
+  color:#fff;
+}
+@media (hover:hover) and (pointer:fine) {
+  .ac-type-chip:hover { transform:translateY(-1px); border-color:var(--ac-primary); }
+}
+
+.ac-editor-message {
+  margin-top:14px;
+  padding:11px 12px;
+  border:1px solid var(--ac-line);
+  border-radius:12px;
+  background:#f8fafc;
+  color:#475569;
+  font-size:13px;
+  font-weight:700;
+}
+.ac-editor-message[hidden] { display:none !important; }
+.ac-editor-message[data-type="warning"] {
+  border-color:#fde68a;
+  background:#fffbeb;
+  color:#92400e;
+}
+.ac-editor-message[data-type="danger"] {
+  border-color:#fecaca;
+  background:#fef2f2;
+  color:#991b1b;
+}
+
+.ac-action-modal {
+  width:min(520px, 100%);
+  overflow:hidden;
+}
+.ac-action-list {
+  display:grid;
+  gap:8px;
+  padding:14px 18px 8px;
+}
+.ac-action-item {
+  width:100%;
+  min-height:72px;
+  display:grid;
+  grid-template-columns:44px 1fr auto;
+  align-items:center;
+  gap:12px;
+  padding:11px 12px;
+  border:1px solid var(--ac-line-soft);
+  border-radius:16px;
+  background:#fff;
+  color:var(--ac-title);
+  text-align:left;
+  font:inherit;
+  cursor:pointer;
+}
+.ac-action-item > span:nth-child(2) {
+  min-width:0;
+  display:grid;
+  gap:3px;
+}
+.ac-action-item strong {
+  font-size:14px;
+}
+.ac-action-item small {
+  color:var(--ac-muted);
+  font-size:12px;
+  line-height:1.35;
+}
+.ac-action-icon {
+  width:42px;
+  height:42px;
+  display:grid;
+  place-items:center;
+  border-radius:12px;
+  background:var(--ac-soft);
+  color:var(--ac-primary-dark);
+  font-size:18px;
+}
+.ac-action-danger { color:#991b1b; }
+.ac-action-danger .ac-action-icon {
+  background:#fef2f2;
+  color:#b91c1c;
+}
+@media (hover:hover) and (pointer:fine) {
+  .ac-action-item:hover {
+    border-color:#e9bfd5;
+    background:#fffafd;
+  }
+}
+.ac-action-footer {
+  margin:0;
+  padding:10px 18px 18px;
+  border-top:0;
+}
+
+.ac-confirm-modal {
+  width:min(430px,100%);
+  padding:26px 24px 22px;
+  text-align:center;
+  overflow:hidden;
+}
+.ac-confirm-icon {
+  width:56px;
+  height:56px;
+  display:grid;
+  place-items:center;
+  margin:0 auto 14px;
+  border-radius:18px;
+  background:#fff7ed;
+  color:#c2410c;
+  font-size:24px;
+}
+.ac-confirm-modal h2 {
+  margin:0;
+  color:var(--ac-title);
+  font-size:20px;
+}
+.ac-confirm-modal p {
+  margin:8px auto 0;
+  max-width:340px;
+  color:var(--ac-muted);
+  font-size:13px;
+  line-height:1.5;
+}
+.ac-confirm-actions {
+  justify-content:center;
+  margin-top:20px;
+}
+.ac-btn-danger {
+  border:1px solid #dc2626;
+  background:#dc2626;
+  color:#fff;
+}
+.ac-btn-danger:hover { background:#b91c1c; }
+
+.ac-template-editor {
+  overflow:hidden;
+}
+.ac-template-editor-head {
+  position:sticky;
+  top:0;
+  z-index:3;
+  background:rgba(255,255,255,.98);
+  backdrop-filter:blur(10px);
+}
+.ac-template-editor-body {
+  max-height:calc(92vh - 110px);
+  overflow:auto;
+  overscroll-behavior:contain;
+  padding-bottom:0;
+}
+.ac-editor-actions {
+  position:sticky;
+  bottom:0;
+  z-index:4;
+  margin:20px -20px 0;
+  padding:12px 20px max(14px, env(safe-area-inset-bottom));
+  border-top:1px solid var(--ac-line-soft);
+  background:rgba(255,255,255,.98);
+  backdrop-filter:blur(10px);
+  box-shadow:0 -10px 24px rgba(15,23,42,.06);
+}
+.ac-editor-actions .ac-btn {
+  min-height:48px;
+}
+
+@media (max-width:760px) {
+  .ac-template-type-panel {
+    margin:10px 0 14px;
+    padding:12px;
+  }
+  .ac-type-chip-row {
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    padding-bottom:2px;
+    scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
+  }
+  .ac-type-chip-row::-webkit-scrollbar { display:none; }
+  .ac-type-chip { flex:0 0 auto; min-height:44px; }
+
+  /* En móvil el editor sigue siendo modal premium, no una hoja pegada al fondo. */
+  .ac-modal-backdrop {
+    padding:12px;
+    place-items:center;
+    align-items:center;
+  }
+  .ac-template-editor {
+    width:100%;
+    max-height:calc(100vh - 24px);
+    border-radius:22px;
+  }
+  .ac-template-editor-body {
+    max-height:calc(100vh - 132px);
+    padding:16px 16px 0;
+  }
+  .ac-template-editor-head {
+    padding:16px;
+  }
+  .ac-editor-actions {
+    margin:18px -16px 0;
+    padding:10px 16px max(12px, env(safe-area-inset-bottom));
+  }
+  .ac-editor-actions .ac-btn {
+    flex:1 1 0;
+  }
+
+  .ac-action-modal,
+  .ac-confirm-modal {
+    width:100%;
+    border-radius:22px;
+  }
+  .ac-action-list { padding:12px; }
+  .ac-action-footer { padding:8px 12px 14px; }
+  .ac-action-footer .ac-btn { width:100%; min-height:48px; }
+  .ac-confirm-actions .ac-btn { flex:1; min-height:48px; }
+}
+/* ============================================================
+   V1.3.2 — REFINAMIENTO PREMIUM DEL SEGUNDO NIVEL + RESPONSIVE
+   ============================================================ */
+
+/* El segundo nivel deja de parecer una sección técnica independiente.
+   Ahora funciona como una barra compacta de filtros vinculada a la categoría. */
+.ac-template-type-panel {
+  margin: 8px 0 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.ac-template-type-panel[hidden] {
+  display: none !important;
+}
+
+.ac-type-panel-head {
+  display: none !important;
+}
+
+.ac-type-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.ac-type-chip {
+  min-height: 40px;
+  padding: 7px 12px;
+  gap: 7px;
+  border-radius: 999px;
+  font-size: 14px;
+  line-height: 1;
+  box-shadow: none;
+}
+
+.ac-type-chip small {
+  min-width: 20px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.ac-type-chip.active {
+  box-shadow: 0 6px 16px rgba(153, 27, 90, .14);
+}
+
+/* Mejor relación visual entre categoría seleccionada, filtros y buscador. */
+.ac-library-main,
+.ac-library-content,
+.ac-template-library {
+  min-width: 0;
+}
+
+/* Tarjetas: un poco más compactas sin perder legibilidad. */
+.ac-template-card {
+  min-width: 0;
+}
+
+.ac-template-card .ac-card-title,
+.ac-template-card h3 {
+  overflow-wrap: anywhere;
+}
+
+.ac-template-card .ac-template-preview,
+.ac-template-card .ac-card-preview {
+  line-height: 1.48;
+}
+
+/* ============================================================
+   TELÉFONO
+   ============================================================ */
+@media (max-width: 760px) {
+  .ac-template-type-panel {
+    margin: 6px 0 10px;
+  }
+
+  .ac-type-chip-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 7px;
+    padding: 1px 1px 3px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+
+  .ac-type-chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ac-type-chip {
+    flex: 0 0 auto;
+    min-height: 42px;
+    padding: 8px 12px;
+    scroll-snap-align: start;
+  }
+
+  /* Reduce espacios verticales en biblioteca móvil. */
+  .ac-library-toolbar,
+  .ac-library-controls {
+    gap: 10px;
+  }
+
+  .ac-template-card {
+    border-radius: 18px;
+  }
+
+  .ac-template-card .ac-card-title,
+  .ac-template-card h3 {
+    font-size: 17px;
+    line-height: 1.18;
+  }
+
+  .ac-template-card small {
+    line-height: 1.3;
+  }
+
+  .ac-template-card .ac-template-preview,
+  .ac-template-card .ac-card-preview {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  /* Acciones cómodas con una mano. */
+  .ac-template-card button,
+  .ac-template-card .ac-btn {
+    min-height: 44px;
+  }
+
+  /* Editor: mantiene márgenes y botones siempre accesibles. */
+  .ac-template-editor {
+    width: calc(100% - 16px);
+    max-width: 100%;
+  }
+
+  .ac-template-editor-body {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .ac-editor-actions {
+    margin-left: -14px;
+    margin-right: -14px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+}
+
+/* ============================================================
+   TELÉFONOS MUY ESTRECHOS
+   ============================================================ */
+@media (max-width: 390px) {
+  .ac-type-chip {
+    min-height: 40px;
+    padding: 7px 10px;
+    font-size: 13px;
+  }
+
+  .ac-type-chip i {
+    font-size: 14px;
+  }
+
+  .ac-template-card .ac-card-title,
+  .ac-template-card h3 {
+    font-size: 16px;
+  }
+}
+
+/* ============================================================
+   DESKTOP
+   ============================================================ */
+@media (min-width: 761px) {
+  .ac-template-type-panel {
+    margin: 8px 0 14px;
+  }
+
+  .ac-type-chip-row {
+    gap: 8px;
+  }
+
+  .ac-type-chip {
+    min-height: 38px;
+  }
+}
+/* ============================================================
+   V1.3.4 — ACCESO RÁPIDO ACTIVO + FEEDBACK TÁCTIL
+   ============================================================ */
+
+.ac-category-grid-mobile .ac-category-tile {
+  transition:
+    background .16s ease,
+    border-color .16s ease,
+    color .16s ease,
+    box-shadow .16s ease,
+    transform .12s ease;
+}
+
+.ac-category-grid-mobile .ac-category-tile.active {
+  border-color: var(--ac-primary);
+  background: linear-gradient(180deg, var(--ac-primary), var(--ac-primary-dark));
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(139, 30, 90, .20);
+}
+
+.ac-category-grid-mobile .ac-category-tile.active i,
+.ac-category-grid-mobile .ac-category-tile.active span,
+.ac-category-grid-mobile .ac-category-tile.active small {
+  color: #fff;
+}
+
+.ac-category-grid-mobile .ac-category-tile.active small {
+  opacity: .88;
+}
+
+.ac-category-grid-mobile .ac-category-tile:active {
+  transform: scale(.985);
+}
+
+@media (max-width: 760px) {
+  #acTipoPlantillaPanel,
+  #acBuscarPlantilla {
+    scroll-margin-top: 12px;
+  }
+}
+
+/* ============================================================
+   V1.4.0 ESTABLE — CONSOLIDACIÓN UX ASISTENTE COMERCIAL
+   Categorías dinámicas · filtros por tipo · edición premium
+   acceso rápido activo · navegación móvil rápida.
+   ============================================================ */
+/* ============================================================
+   V1.4.1 — CIERRE UX ESCRITORIO + FEEDBACK DE GUARDADO
+   ============================================================ */
+
+@media (min-width: 1181px) {
+  #acBibliotecaCard .ac-card-body {
+    grid-template-columns: 235px minmax(0, 1fr);
+    grid-template-rows: auto auto 1fr;
+    gap: 10px 16px;
+  }
+
+  #acBibliotecaCard .ac-mobile-template-picker {
+    grid-column: 1;
+    grid-row: 1 / span 3;
+  }
+
+  #acBibliotecaCard #acTipoPlantillaPanel {
+    grid-column: 2;
+    grid-row: 1;
+    margin: 0;
+    align-self: start;
+  }
+
+  #acBibliotecaCard .ac-filter-bar {
+    grid-column: 2;
+    grid-row: 2;
+    margin: 0;
+  }
+
+  #acBibliotecaCard #acPlantillas {
+    grid-column: 2;
+    grid-row: 3;
+  }
+}
+
+@media (min-width: 1540px) {
+  #acBibliotecaCard .ac-card-body {
+    grid-template-columns: 250px minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 1181px) and (max-width: 1320px) {
+  #acBibliotecaCard .ac-card-body {
+    grid-template-columns: 215px minmax(0, 1fr);
+  }
+}
+
+/* Guardar: estado visible mientras se procesa y confirmación final. */
+#acTplGuardar.ac-is-saving {
+  opacity: .86;
+  cursor: wait;
+}
+
+#acTplGuardar.ac-is-saved {
+  background: #166534;
+  border-color: #166534;
+  color: #fff;
+}
+
+#acTplGuardar .ac-spin {
+  animation: ac-spin .8s linear infinite;
+}
+
+@keyframes ac-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ac-editor-message[data-type="success"] {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+/* Estado seleccionado más claro */
+.ac-use-template-btn:has(.bi-check2) {
+  font-weight: 850;
+}
+
+
+/* ============================================================
+   V1.7.0 · PRODUCTIVIDAD COMERCIAL (ADITIVO / ANTIRREGRESIVO)
+   No altera reglas previas: solo estilos de los nuevos controles.
+   ============================================================ */
+
+.ac-view-tools {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin: -2px 0 18px;
+}
+
+.ac-view-tools small {
+  color: var(--ac-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ac-seller-mode-btn.active {
+  border-color: rgba(139, 30, 90, .28);
+  background: var(--ac-soft);
+  color: var(--ac-primary-dark);
+}
+
+.ac-commercial-stage {
+  margin-top: 14px;
+  padding: 13px;
+  border: 1px solid var(--ac-line-soft);
+  border-radius: var(--ac-radius-sm);
+  background: #fff;
+}
+
+.ac-commercial-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.ac-commercial-stage-head > span {
+  color: var(--ac-title);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ac-commercial-stage-head small {
+  color: var(--ac-muted);
+  font-size: 11px;
+  text-align: right;
+}
+
+.ac-commercial-stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ac-stage-btn {
+  min-height: 36px;
+  padding: 8px 11px;
+  border: 1px solid var(--ac-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--ac-text);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: var(--ac-transition);
+}
+
+.ac-stage-btn:hover {
+  border-color: #efb7d4;
+  background: var(--ac-soft);
+  color: var(--ac-primary-dark);
+}
+
+.ac-btn-social {
+  border: 1px solid var(--ac-line);
+  background: #fff;
+  color: var(--ac-title);
+}
+
+.ac-btn-social:hover {
+  border-color: #d1d5db;
+  background: #f8fafc;
+}
+
+.ac-template-quality {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid var(--ac-line-soft);
+  border-radius: var(--ac-radius-sm);
+  background: linear-gradient(180deg, #ffffff, #fbfcfe);
+}
+
+.ac-template-quality-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 9px;
+  color: var(--ac-title);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.ac-template-quality-head strong {
+  min-width: 48px;
+  text-align: right;
+  color: var(--ac-primary-dark);
+}
+
+.ac-template-quality-items {
+  display: grid;
+  gap: 6px;
+}
+
+.ac-quality-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--ac-muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ac-quality-item.is-ok {
+  color: #166534;
+}
+
+.ac-quality-item.is-pending {
+  color: #92400e;
+}
+
+body.ac-seller-mode #acAmbitoCard,
+body.ac-seller-mode #acNuevaPlantilla,
+body.ac-seller-mode [aria-labelledby="acOperacionTitulo"] {
+  display: none !important;
+}
+
+body.ac-seller-mode .ac-view-tools small {
+  display: none;
+}
+
+body.ac-seller-mode .ac-layout {
+  align-items: start;
+}
+
+@media (max-width: 760px) {
+  .ac-view-tools {
+    align-items: stretch;
+    justify-content: stretch;
+    flex-direction: column;
+    margin-top: 8px;
+  }
+
+  .ac-view-tools .ac-btn {
+    width: 100%;
+  }
+
+  .ac-view-tools small {
+    text-align: center;
+  }
+
+  .ac-commercial-stage-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ac-commercial-stage-head small {
+    text-align: left;
+  }
+
+  .ac-commercial-stage-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ac-stage-btn {
+    width: 100%;
+  }
+
+  .ac-response-actions .ac-btn-social,
+  .ac-quick-actions .ac-btn-social {
+    flex: 1 1 calc(50% - 6px);
+  }
+}
+
+@media (max-width: 420px) {
+  .ac-commercial-stage-actions {
+    grid-template-columns: 1fr;
+  }
+}

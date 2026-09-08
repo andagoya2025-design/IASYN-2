@@ -1,0 +1,2712 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IASYN - Configuración v5.1 Clon funcional</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+
+  <style>
+    :root{
+      --primary:#8b1e5a;--primary2:#c23b83;--soft:#fdf2f8;--bg:#f8fafc;--text:#1f2937;--muted:#6b7280;--line:#e5e7eb;--card:#fff;--ok:#16a34a;--warn:#f59e0b;--danger:#dc2626;--blue:#2563eb;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--text)}
+    .app{display:flex;min-height:100vh}
+    .sidebar{width:260px;background:linear-gradient(180deg,#7a174f,#a3256c);color:#fff;position:fixed;inset:0 auto 0 0;padding:22px 16px;overflow:auto;z-index:20}
+    .brand{display:flex;gap:12px;align-items:center;margin-bottom:22px}.brand-logo{width:46px;height:46px;border-radius:16px;background:#fff;color:var(--primary);display:grid;place-items:center;font-weight:900}.brand h1{font-size:18px;margin:0;font-weight:900;line-height:1.1}.brand small{opacity:.85}
+    .menu-title{font-size:11px;text-transform:uppercase;letter-spacing:.08em;opacity:.7;font-weight:800;margin:18px 10px 8px}
+    .menu a,.menu button{width:100%;border:0;background:transparent;color:#fff;display:flex;gap:10px;align-items:center;padding:11px 12px;border-radius:14px;font-weight:750;text-align:left;margin-bottom:5px;text-decoration:none}
+    .menu a:hover,.menu button:hover,.menu a.active{background:rgba(255,255,255,.16);color:#fff}
+    .main{margin-left:260px;width:calc(100% - 260px);min-height:100vh;padding:22px;overflow-x:hidden}.mobile-menu{display:none}
+    .demo-banner{background:#111827;color:#fff;border-radius:18px;padding:12px 16px;margin-bottom:16px;display:flex;justify-content:space-between;gap:12px;align-items:center}.demo-banner b{color:#fbbf24}
+    .topbar{display:flex;justify-content:space-between;gap:14px;align-items:center;margin-bottom:16px}.topbar h2{margin:0;font-weight:900}.topbar p{margin:3px 0 0;color:var(--muted)}
+    .cardx{background:var(--card);border:1px solid var(--line);border-radius:22px;box-shadow:0 10px 30px rgba(15,23,42,.06)}
+    .btn-auro{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;border:0;border-radius:14px;padding:10px 14px;font-weight:800;box-shadow:0 14px 30px rgba(139,30,90,.22)}
+    .btn-soft{background:var(--soft);color:var(--primary);border:1px solid #fbcfe8;border-radius:14px;padding:10px 14px;font-weight:800}.btn-line{background:#fff;color:#334155;border:1px solid var(--line);border-radius:14px;padding:10px 14px;font-weight:800}.btn-danger-soft{background:#fff1f2;color:#be123c;border:1px solid #fecdd3;border-radius:14px;padding:10px 14px;font-weight:800}
+    .form-control,.form-select{border-radius:14px;padding:10px 12px}.section-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:16px}.section-head h4{margin:0;font-weight:900}.section-head p{margin:3px 0 0;color:var(--muted)}
+    .premium-hero{background:radial-gradient(circle at top right,rgba(194,59,131,.13),transparent 34%),linear-gradient(135deg,#fff,#fff7fb 55%,#fdf2f8);border:1px solid #f6cfe2;border-radius:24px;padding:18px;margin-bottom:16px;box-shadow:0 18px 45px rgba(139,30,90,.08)}.premium-hero h4{margin:0;font-weight:950}.premium-hero p{margin:6px 0 0;color:var(--muted)}
+    .config-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}.config-tab{border:1px solid #f1d4e5;background:#fff;color:#7a174f;border-radius:999px;padding:9px 13px;font-weight:900}.config-tab.active,.config-tab:hover{background:linear-gradient(135deg,var(--primary),var(--primary2));color:#fff;border-color:transparent}
+    .screen{display:none}.screen.active{display:block}.stat{padding:18px;display:flex;gap:14px;align-items:center;min-height:96px}.stat-icon{width:48px;height:48px;border-radius:16px;background:var(--soft);color:var(--primary);display:grid;place-items:center;font-size:22px}.stat small{color:var(--muted);font-weight:800}.stat h3{margin:2px 0 0;font-weight:900}
+    .table-modern th{font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.04em;border-bottom:1px solid var(--line)}.table-modern td{vertical-align:middle;border-bottom:1px solid #f1f5f9}.badgex{border-radius:999px;padding:6px 10px;font-weight:800;font-size:12px;display:inline-block}.badge-ok{background:#dcfce7;color:#166534}.badge-warn{background:#fef3c7;color:#92400e}.badge-danger{background:#fee2e2;color:#991b1b}.badge-blue{background:#dbeafe;color:#1e40af}
+    .mobile-cards{display:none}.mobile-card{border:1px solid var(--line);border-radius:18px;padding:14px;background:#fff;margin-bottom:12px}.line{display:flex;justify-content:space-between;border-top:1px solid #f1f5f9;padding:8px 0;gap:12px;font-size:14px}.line span:first-child{color:var(--muted)}.line span:last-child{font-weight:700;text-align:right}
+    .notice{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:16px;padding:12px 14px;font-size:14px;font-weight:750}.readonly-pill{background:#eff6ff;border:1px solid #bfdbfe;color:#1d4ed8;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:900;display:inline-flex;gap:6px;align-items:center}
+    .modalx{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100;display:none;align-items:center;justify-content:center;padding:18px}.modalx.show{display:flex}.modal-panel{background:#fff;border-radius:24px;width:min(720px,100%);max-height:90vh;overflow:auto;box-shadow:0 25px 80px rgba(15,23,42,.28)}.modal-head{background:linear-gradient(135deg,#7a174f,#c23b83);color:#fff;padding:16px 18px;display:flex;justify-content:space-between;align-items:center}.modal-head h5{margin:0;font-weight:950}.modal-bodyx{padding:18px}.modal-close{border:0;background:rgba(255,255,255,.16);color:#fff;border-radius:12px;width:36px;height:36px;font-weight:950}
+    @media(max-width:980px){.sidebar{transform:translateX(-100%);transition:.25s}.sidebar.show{transform:translateX(0)}.main{margin-left:0;width:100%;padding:16px}.mobile-menu{display:inline-flex}.table-responsive{display:none}.mobile-cards{display:block}.demo-banner{display:block}.topbar{align-items:flex-start;flex-direction:column}.config-tabs{overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px}.config-tab{white-space:nowrap}.modalx{align-items:flex-end;padding:12px}.modal-panel{border-radius:22px 22px 0 0}}
+    @media(max-width:640px){.main{padding:12px}.topbar h2{font-size:22px}.cardx{border-radius:18px}.section-head{display:block}.section-head .btn-auro,.section-head .btn-soft{width:100%;margin-top:10px}.premium-hero{padding:15px;border-radius:20px}}
+  
+
+    /* ==========================================================
+       IASYN CONFIGURACION V5.0 ULTRA PREMIUM
+       SOLO VISUAL - NO MODIFICA FUNCIONES
+       Escritorio + Android + iPhone
+       ========================================================== */
+
+    /* Fondo general más fino */
+    body{
+      background:
+        radial-gradient(circle at top right, rgba(194,59,131,.075), transparent 30%),
+        linear-gradient(180deg,#fff7fb 0%,#f8fafc 42%,#ffffff 100%);
+    }
+
+    /* Hero premium */
+    .premium-hero{
+      position:relative;
+      overflow:hidden;
+      padding:24px!important;
+      border-radius:30px!important;
+      border:1px solid #f4c7dc!important;
+      background:
+        radial-gradient(circle at 92% 14%, rgba(194,59,131,.18), transparent 28%),
+        radial-gradient(circle at 5% 95%, rgba(139,30,90,.09), transparent 26%),
+        linear-gradient(135deg,#ffffff,#fff8fc 55%,#fdf2f8)!important;
+      box-shadow:0 24px 60px rgba(139,30,90,.10), inset 0 1px 0 rgba(255,255,255,.95)!important;
+    }
+    .premium-hero h4{
+      font-size:30px!important;
+      letter-spacing:-.035em!important;
+      color:#111827!important;
+    }
+    .premium-hero p{
+      font-size:15px!important;
+      line-height:1.65!important;
+      color:#64748b!important;
+      max-width:920px;
+    }
+    .readonly-pill{
+      background:linear-gradient(135deg,#eff6ff,#f8fbff)!important;
+      border-color:#bfdbfe!important;
+      box-shadow:0 10px 24px rgba(37,99,235,.06), inset 0 1px 0 rgba(255,255,255,.9)!important;
+    }
+
+    /* Tarjetas superiores */
+    .stat{
+      min-height:118px!important;
+      border-radius:28px!important;
+      background:
+        radial-gradient(circle at 88% 14%, rgba(194,59,131,.10), transparent 30%),
+        linear-gradient(180deg,#ffffff,#fffafd)!important;
+      border:1px solid #f1d4e5!important;
+      box-shadow:0 14px 38px rgba(15,23,42,.055), inset 0 1px 0 rgba(255,255,255,.95)!important;
+      transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+    .stat:hover{
+      transform:translateY(-3px);
+      border-color:#efb9d5!important;
+      box-shadow:0 24px 58px rgba(139,30,90,.13), 0 0 0 4px rgba(194,59,131,.055)!important;
+    }
+    .stat-icon{
+      width:62px!important;
+      height:62px!important;
+      font-size:27px!important;
+      border-radius:22px!important;
+      background:linear-gradient(135deg,#fff0f7,#fdf2f8)!important;
+      border:1px solid #f6cfe2!important;
+      box-shadow:0 12px 26px rgba(139,30,90,.08), inset 0 1px 0 rgba(255,255,255,.9)!important;
+    }
+    .stat small{
+      font-size:13px!important;
+      letter-spacing:.01em!important;
+      color:#64748b!important;
+    }
+    .stat h3{
+      font-size:38px!important;
+      line-height:1!important;
+      letter-spacing:-.035em!important;
+      color:#111827!important;
+    }
+
+    /* Tabs horizontales: conservar carrusel, hacerlo más premium */
+    .config-tabs{
+      gap:12px!important;
+      margin-bottom:22px!important;
+      padding:4px 2px 8px!important;
+    }
+    .config-tab{
+      min-height:46px!important;
+      padding:12px 18px!important;
+      border-radius:999px!important;
+      background:linear-gradient(180deg,#ffffff,#fff9fc)!important;
+      border:1px solid #f1d4e5!important;
+      color:#7a174f!important;
+      box-shadow:0 10px 24px rgba(139,30,90,.055), inset 0 1px 0 rgba(255,255,255,.9)!important;
+      transition:transform .18s ease, box-shadow .18s ease, filter .18s ease;
+    }
+    .config-tab:hover{
+      transform:translateY(-1px);
+      box-shadow:0 16px 34px rgba(139,30,90,.12),0 0 0 3px rgba(194,59,131,.08)!important;
+    }
+    .config-tab.active{
+      background:linear-gradient(135deg,#7a174f,#c23b83 70%,#d94695)!important;
+      color:#fff!important;
+      border-color:transparent!important;
+      box-shadow:0 16px 34px rgba(139,30,90,.22), inset 0 1px 0 rgba(255,255,255,.2)!important;
+    }
+
+    /* Cards principales */
+    .cardx{
+      border-radius:30px!important;
+      border:1px solid #f1d4e5!important;
+      box-shadow:0 20px 52px rgba(15,23,42,.065), inset 0 1px 0 rgba(255,255,255,.9)!important;
+      background:linear-gradient(180deg,#ffffff,#fffefe)!important;
+    }
+    .section-head h4{
+      font-size:31px!important;
+      letter-spacing:-.035em!important;
+      color:#111827!important;
+    }
+    .section-head p{
+      font-size:15px!important;
+      line-height:1.6!important;
+      color:#64748b!important;
+    }
+
+    /* Botones */
+    .btn-auro{
+      min-height:48px!important;
+      border-radius:17px!important;
+      padding:12px 20px!important;
+      background:linear-gradient(135deg,#7a174f,#c23b83 70%,#d94695)!important;
+      box-shadow:0 16px 36px rgba(139,30,90,.24), inset 0 1px 0 rgba(255,255,255,.18)!important;
+      transition:transform .18s ease, box-shadow .18s ease, filter .18s ease;
+    }
+    .btn-auro:hover{
+      color:#fff!important;
+      transform:translateY(-2px);
+      filter:saturate(1.06);
+      box-shadow:0 22px 44px rgba(139,30,90,.30),0 0 0 4px rgba(194,59,131,.10)!important;
+    }
+    .btn-soft,.btn-line,.btn-danger-soft{
+      border-radius:16px!important;
+      transition:transform .18s ease, box-shadow .18s ease, filter .18s ease;
+    }
+    .btn-soft{
+      background:linear-gradient(180deg,#fff7fb,#fdf2f8)!important;
+      border-color:#f4c7dc!important;
+      box-shadow:0 10px 22px rgba(139,30,90,.06), inset 0 1px 0 rgba(255,255,255,.9)!important;
+    }
+    .btn-line{
+      background:linear-gradient(180deg,#ffffff,#fff9fc)!important;
+      border-color:#f1d4e5!important;
+      box-shadow:0 10px 22px rgba(15,23,42,.045)!important;
+    }
+    .btn-soft:hover,.btn-line:hover,.btn-danger-soft:hover{
+      transform:translateY(-1px);
+      box-shadow:0 16px 34px rgba(139,30,90,.12),0 0 0 3px rgba(194,59,131,.075)!important;
+    }
+
+    /* Notice */
+    .notice{
+      border-radius:20px!important;
+      padding:16px 18px!important;
+      line-height:1.6!important;
+      background:linear-gradient(135deg,#fff7ed,#fffaf5)!important;
+      border:1px solid #fed7aa!important;
+      box-shadow:0 12px 28px rgba(154,52,18,.045), inset 0 1px 0 rgba(255,255,255,.9)!important;
+    }
+
+    /* Tablas */
+    .table-responsive{
+      border-radius:22px!important;
+      overflow:hidden!important;
+      border:1px solid #f1d4e5!important;
+      box-shadow:0 14px 34px rgba(15,23,42,.045)!important;
+      background:#fff!important;
+    }
+    .table-modern{
+      margin-bottom:0!important;
+    }
+    .table-modern th{
+      font-size:11px!important;
+      color:#8b1e5a!important;
+      background:#fff7fb!important;
+      padding:15px 14px!important;
+      border-bottom:1px solid #f3d5e5!important;
+    }
+    .table-modern td{
+      padding:18px 14px!important;
+      font-size:14px!important;
+      border-bottom:1px solid #f6edf3!important;
+    }
+    .table-modern tbody tr{
+      transition:background .18s ease;
+    }
+    .table-modern tbody tr:hover{
+      background:#fff8fc!important;
+    }
+    .table-modern tbody tr:last-child td{
+      border-bottom:0!important;
+    }
+    .badgex{
+      padding:8px 13px!important;
+      font-size:11.5px!important;
+      box-shadow:inset 0 1px 0 rgba(255,255,255,.75)!important;
+    }
+
+    /* Mobile cards */
+    .mobile-card{
+      border-radius:26px!important;
+      padding:20px!important;
+      border-color:#f1d4e5!important;
+      background:
+        radial-gradient(circle at 92% 10%, rgba(194,59,131,.08), transparent 30%),
+        linear-gradient(180deg,#fff,#fffafd)!important;
+      box-shadow:0 16px 40px rgba(15,23,42,.06), inset 0 1px 0 rgba(255,255,255,.92)!important;
+    }
+    .mobile-card b{
+      display:block;
+      font-size:21px!important;
+      line-height:1.25!important;
+      color:#111827!important;
+      letter-spacing:-.02em!important;
+      margin-bottom:8px!important;
+    }
+    .line{
+      padding:12px 0!important;
+      border-top:1px solid #f3edf2!important;
+    }
+    .line span:first-child{
+      font-size:13px!important;
+      color:#64748b!important;
+      font-weight:800!important;
+    }
+    .line span:last-child{
+      font-size:14px!important;
+      color:#334155!important;
+      font-weight:850!important;
+    }
+
+    /* Formularios y modales */
+    .modal-panel{
+      border-radius:32px!important;
+      border:1px solid rgba(255,255,255,.6)!important;
+      box-shadow:0 30px 90px rgba(15,23,42,.30)!important;
+    }
+    .modal-head{
+      padding:22px 24px!important;
+      background:linear-gradient(135deg,#7a174f,#c23b83 70%,#d94695)!important;
+    }
+    .modal-head h5{
+      font-size:23px!important;
+      letter-spacing:-.02em!important;
+    }
+    .modal-bodyx{
+      padding:24px!important;
+    }
+    .form-control,.form-select{
+      min-height:50px!important;
+      border-radius:17px!important;
+      border-color:#ead2df!important;
+      background-color:#fff!important;
+      font-size:15px!important;
+    }
+    .form-control:focus,.form-select:focus{
+      border-color:#c23b83!important;
+      box-shadow:0 0 0 .22rem rgba(194,59,131,.12)!important;
+    }
+    textarea.form-control{
+      min-height:88px!important;
+    }
+
+    /* Responsive */
+    @media(max-width:980px){
+      .main{padding:16px!important;}
+      .premium-hero{padding:20px!important;border-radius:26px!important;}
+      .premium-hero h4{font-size:24px!important;}
+      .premium-hero p{font-size:14.5px!important;}
+      .stat{min-height:104px!important;border-radius:25px!important;}
+      .stat-icon{width:54px!important;height:54px!important;font-size:24px!important;border-radius:19px!important;}
+      .stat h3{font-size:32px!important;}
+      .config-tabs{
+        flex-wrap:nowrap!important;
+        overflow-x:auto!important;
+        -webkit-overflow-scrolling:touch!important;
+        scroll-snap-type:x proximity;
+        padding-bottom:10px!important;
+      }
+      .config-tabs::-webkit-scrollbar{height:0;}
+      .config-tab{
+        flex:0 0 auto!important;
+        min-height:48px!important;
+        font-size:14px!important;
+        scroll-snap-align:start;
+      }
+      .section-head h4{font-size:28px!important;}
+      .section-head p{font-size:15px!important;}
+      .modalx{padding:12px!important;align-items:flex-end!important;}
+      .modal-panel{border-radius:28px 28px 0 0!important;max-height:88vh!important;}
+    }
+
+    @media(max-width:640px){
+      .main{padding:12px!important;}
+      .demo-banner{border-radius:18px!important;font-size:13px!important;}
+      .premium-hero{padding:17px!important;border-radius:24px!important;}
+      .premium-hero h4{font-size:22px!important;}
+      .readonly-pill{border-radius:16px!important;line-height:1.35!important;}
+      .stat{min-height:92px!important;padding:16px!important;}
+      .stat-icon{width:50px!important;height:50px!important;}
+      .stat h3{font-size:29px!important;}
+      .cardx{border-radius:26px!important;}
+      .section-head h4{font-size:25px!important;}
+      .section-head p{font-size:14.5px!important;}
+      .section-head .btn-auro,.section-head .btn-soft{width:100%!important;margin-top:12px!important;}
+      .btn-auro{width:100%;min-height:50px!important;font-size:16px!important;}
+      .mobile-card{padding:20px!important;border-radius:25px!important;}
+      .mobile-card b{font-size:22px!important;}
+      .modal-bodyx{padding:20px!important;}
+    }
+
+
+    /* ==========================================================
+       V5.2 - MICROAJUSTE PROPORCIONAL SOLO ESCRITORIO
+       Objetivo: equilibrar Configuración en desktop.
+       No toca móvil, JS, Apps Script, guardado ni base de datos.
+       ========================================================== */
+    @media (min-width:1024px){
+      .main{
+        padding:20px!important;
+      }
+
+      .demo-banner{
+        padding:10px 14px!important;
+        margin-bottom:13px!important;
+        border-radius:16px!important;
+        font-size:13.5px!important;
+      }
+
+      .topbar{
+        margin-bottom:13px!important;
+      }
+      .topbar h2{
+        font-size:27px!important;
+        letter-spacing:-.025em!important;
+      }
+      .topbar p{
+        font-size:14px!important;
+      }
+
+      .premium-hero{
+        padding:18px 20px!important;
+        border-radius:24px!important;
+        margin-bottom:14px!important;
+        box-shadow:0 18px 44px rgba(139,30,90,.085), inset 0 1px 0 rgba(255,255,255,.95)!important;
+      }
+      .premium-hero h4{
+        font-size:24px!important;
+        line-height:1.15!important;
+      }
+      .premium-hero p{
+        font-size:14.5px!important;
+        line-height:1.48!important;
+      }
+      .readonly-pill{
+        font-size:12.5px!important;
+        padding:6px 10px!important;
+      }
+
+      .row.g-3.mb-4{
+        margin-bottom:18px!important;
+      }
+      .stat{
+        min-height:96px!important;
+        padding:15px 16px!important;
+        gap:12px!important;
+        border-radius:22px!important;
+        box-shadow:0 12px 30px rgba(15,23,42,.05), inset 0 1px 0 rgba(255,255,255,.95)!important;
+      }
+      .stat:hover{
+        transform:translateY(-2px)!important;
+      }
+      .stat-icon{
+        width:50px!important;
+        height:50px!important;
+        font-size:22px!important;
+        border-radius:18px!important;
+      }
+      .stat small{
+        font-size:12.8px!important;
+      }
+      .stat h3{
+        font-size:30px!important;
+        line-height:1!important;
+      }
+
+      .config-tabs{
+        gap:9px!important;
+        margin-bottom:17px!important;
+        padding:2px 1px 5px!important;
+      }
+      .config-tab{
+        min-height:40px!important;
+        padding:9px 14px!important;
+        font-size:13.5px!important;
+      }
+
+      .cardx{
+        border-radius:24px!important;
+        box-shadow:0 16px 40px rgba(15,23,42,.055), inset 0 1px 0 rgba(255,255,255,.9)!important;
+      }
+      .cardx.p-4{
+        padding:20px!important;
+      }
+
+      .section-head{
+        margin-bottom:14px!important;
+      }
+      .section-head h4{
+        font-size:25px!important;
+        line-height:1.15!important;
+      }
+      .section-head p{
+        font-size:14.5px!important;
+        line-height:1.45!important;
+      }
+
+      .notice{
+        padding:13px 15px!important;
+        border-radius:17px!important;
+        font-size:14px!important;
+        line-height:1.5!important;
+      }
+
+      .table-responsive{
+        border-radius:18px!important;
+        box-shadow:0 12px 28px rgba(15,23,42,.04)!important;
+      }
+      .table-modern th{
+        font-size:11.2px!important;
+        padding:12px 12px!important;
+      }
+      .table-modern td{
+        font-size:14.2px!important;
+        padding:13px 12px!important;
+      }
+      .badgex{
+        padding:6.5px 11px!important;
+        font-size:11.5px!important;
+      }
+
+      .btn-auro,
+      .btn-soft,
+      .btn-line,
+      .btn-danger-soft{
+        min-height:42px!important;
+        padding:9px 14px!important;
+        border-radius:15px!important;
+        font-size:14px!important;
+      }
+
+      .form-label{
+        font-size:14.5px!important;
+      }
+      .text-muted.small,
+      small.text-muted{
+        font-size:12.5px!important;
+      }
+      .form-control,
+      .form-select{
+        min-height:44px!important;
+        border-radius:15px!important;
+        font-size:14.5px!important;
+        padding:9px 12px!important;
+      }
+      textarea.form-control{
+        min-height:80px!important;
+      }
+
+      .modal-panel{
+        border-radius:26px!important;
+      }
+      .modal-head{
+        padding:17px 20px!important;
+      }
+      .modal-head h5{
+        font-size:20px!important;
+      }
+      .modal-bodyx{
+        padding:20px!important;
+      }
+    }
+
+
+/* IASYN - SEGURIDAD Y ACCESOS / FASE 1 VISUAL */
+.security-subtabs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.security-subtab{border:1px solid #f1d4e5;background:linear-gradient(180deg,#fff,#fff8fc);color:#7a174f;border-radius:999px;padding:10px 16px;font-weight:900;transition:.18s}
+.security-subtab:hover{transform:translateY(-1px);box-shadow:0 12px 28px rgba(139,30,90,.12)}
+.security-subtab.active{color:#fff;border-color:transparent;background:linear-gradient(135deg,#7a174f,#c23b83 70%,#d94695);box-shadow:0 14px 30px rgba(139,30,90,.22)}
+.security-panel{display:none}.security-panel.active{display:block}
+.security-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.security-summary-card{border:1px solid #f1d4e5;border-radius:18px;background:linear-gradient(180deg,#fff,#fffafd);padding:12px 14px;min-height:82px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 10px 26px rgba(15,23,42,.045)}
+.security-summary-card small{display:block;color:#64748b;font-weight:800;margin-bottom:4px}
+.security-summary-card strong{font-size:23px;color:#111827;letter-spacing:-.03em;line-height:1}
+.security-empty{padding:28px 18px;text-align:center;color:#64748b;font-weight:700}
+.security-empty i{display:block;color:#c23b83;font-size:32px;margin-bottom:8px}
+@media(max-width:980px){.security-subtabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:5px}.security-subtab{flex:0 0 auto}.security-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){.security-summary{grid-template-columns:1fr}}
+
+
+/* IASYN FASE 1 - CONTRASEÑAS Y PERMISOS */
+.auro-password-wrap{position:relative}
+.auro-password-wrap .form-control{padding-right:50px!important}
+.auro-password-eye{
+  position:absolute;right:7px;top:50%;transform:translateY(-50%);
+  width:38px;height:38px;border:0;border-radius:12px;
+  background:#fff7fb;color:#8b1e5a;display:grid;place-items:center;
+  z-index:4;cursor:pointer
+}
+.auro-password-eye:hover{background:#fce7f3}
+.auro-permissions{
+  border:1px solid #f1d4e5;border-radius:20px;padding:15px;
+  background:linear-gradient(180deg,#fff,#fffafd)
+}
+.auro-permissions-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px
+}
+.auro-permission-item{
+  display:flex;align-items:flex-start;gap:9px;padding:10px 11px;
+  border:1px solid #f1e2ea;border-radius:14px;background:#fff
+}
+.auro-permission-item input{margin-top:3px}
+.auro-permission-item strong{display:block;font-size:14px;color:#334155}
+.auro-permission-item small{display:block;color:#64748b;line-height:1.35}
+@media(max-width:640px){.auro-permissions-grid{grid-template-columns:1fr}}
+
+
+
+    /* IASYN - Identidad de sesión visual equivalente al Index */
+    .auro-session-actions{
+      display:flex;align-items:center;justify-content:flex-end;
+      gap:10px;flex-wrap:wrap;
+    }
+    .auro-session-card{
+      background:white;border:1px solid var(--line);
+      padding:10px 14px;border-radius:18px;
+      display:flex;align-items:center;gap:10px;
+      box-shadow:0 8px 24px rgba(15,23,42,.06);
+      white-space:nowrap;min-width:260px;max-width:360px;
+    }
+    .auro-session-avatar{
+      width:38px;height:38px;flex:0 0 38px;border-radius:50%;
+      background:var(--soft);color:var(--primary);
+      display:grid;place-items:center;font-weight:800;font-size:12px;
+    }
+    .auro-session-data{min-width:0;flex:1 1 auto;line-height:1.2}
+    .auro-session-name,.auro-session-role{
+      display:block;max-width:220px;overflow:hidden;
+      text-overflow:ellipsis;white-space:nowrap;
+    }
+    .auro-session-name{color:#111827;font-size:13px;font-weight:850}
+    .auro-session-role{
+      margin-top:2px;color:var(--muted);font-size:11px;font-weight:700
+    }
+    .auro-session-logout{
+      width:38px;height:38px;flex:0 0 38px;
+      border:1px solid #ead5e2;border-radius:13px;
+      display:grid;place-items:center;background:#fff7fb;
+      color:var(--primary);cursor:pointer;transition:.18s ease;padding:0;
+    }
+    .auro-session-logout:hover{
+      background:var(--soft);transform:translateY(-1px)
+    }
+    @media(max-width:980px){
+      .auro-session-actions{width:100%;justify-content:flex-start}
+      .auro-session-card{width:100%;min-width:0;max-width:none}
+      .auro-session-name,.auro-session-role{max-width:none}
+    }
+
+</style>
+</head>
+<body style="visibility:hidden;">
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <div class="brand"><div class="brand-logo">I</div><div><h1>IASYN</h1><small>Configuración</small></div></div>
+    <div class="menu">
+      <div class="menu-title">Gestión</div>
+      <a href="secretaria.html"><i class="bi bi-speedometer2"></i> Dashboard</a>
+      <a href="secretaria.html#disponibilidad"><i class="bi bi-calendar-plus"></i> Disponibilidad</a>
+      <a href="secretaria.html#agenda"><i class="bi bi-calendar-check"></i> Agenda interna</a>
+      <a href="secretaria.html#pacientes"><i class="bi bi-people"></i> Pacientes básicos</a>
+      <a href="secretaria.html#whatsapp"><i class="bi bi-whatsapp"></i> WhatsApp</a>
+      <div class="menu-title">Sistema</div>
+      <a class="active" href="configuracion.html"><i class="bi bi-gear"></i> Configuración</a>
+      <a href="secretaria.html" onclick="if(document.referrer && document.referrer.includes('secretaria.html')){history.back();return false;}"><i class="bi bi-arrow-left-circle"></i> Volver a Secretaría</a>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="demo-banner"><div><b>ENTORNO DEMO</b> — Configuración del sistema de agendamiento. No usar con pacientes reales.</div><small>Conectado a IASYN ERP 2026</small></div>
+    <div class="topbar">
+      <div><button class="btn-soft mobile-menu mb-2" onclick="toggleSidebar()"><i class="bi bi-list"></i> Menú</button><h2>Configuración del sistema</h2><p>Parámetros para vender el agendamiento a médicos o centros médicos.</p></div>
+      <div class="auro-session-actions">
+        <div id="cfgSesionCard" class="auro-session-card" aria-label="Usuario conectado">
+          <div id="cfgSesionAvatar" class="auro-session-avatar">AU</div>
+          <div class="auro-session-data">
+            <b id="cfgSesionNombre" class="auro-session-name">Usuario autorizado</b>
+            <small id="cfgSesionRol" class="auro-session-role">Sesión activa</small>
+          </div>
+          <button id="cfgCerrarSesion" class="auro-session-logout" type="button" title="Cerrar sesión" aria-label="Cerrar sesión">
+            <i class="bi bi-box-arrow-right"></i>
+          </button>
+        </div>
+        <button id="btnRefrescarConfig" class="btn-line" onclick="refrescarDemo()"><i class="bi bi-arrow-clockwise"></i> <span>Actualizar vista</span></button>
+      </div>
+    </div>
+
+    <div class="premium-hero">
+      <h4><i class="bi bi-gear-fill me-2"></i> Panel de configuración inicial</h4>
+      <p>Módulo conectado para médicos, servicios, plantillas de horario y datos institucionales seguros desde Google Sheets.</p>
+      <div class="mt-3"><span class="readonly-pill"><i class="bi bi-shield-check"></i> Médicos, Servicios, Médico-Servicios y Plantillas de horario conectados a Apps Script</span></div>
+    </div>
+
+    <div class="row g-3 mb-4">
+      <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-person-badge"></i></div><div><small>Médicos</small><h3 id="stMedicos">3</h3></div></div></div>
+      <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-heart-pulse"></i></div><div><small>Servicios</small><h3 id="stServicios">0</h3></div></div></div>
+      <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-clock-history"></i></div><div><small>Plantillas</small><h3 id="stPlantillas">7</h3></div></div></div>
+      <div class="col-md-3"><div class="cardx stat"><div class="stat-icon"><i class="bi bi-building"></i></div><div><small>Centro</small><h3>DEMO</h3></div></div></div>
+    </div>
+
+    <div class="config-tabs">
+      <button class="config-tab active" data-config-target="medicos" data-permiso="configuracion_medicos" onclick="showConfig('medicos',this)"><i class="bi bi-person-badge me-1"></i> Médicos</button>
+      <button class="config-tab" data-config-target="servicios" data-permiso="configuracion_servicios" onclick="showConfig('servicios',this)"><i class="bi bi-heart-pulse me-1"></i> Servicios</button>
+      <button class="config-tab" data-config-target="horarios" data-permiso="configuracion_horarios" onclick="showConfig('horarios',this)"><i class="bi bi-clock me-1"></i> Horarios rápidos</button>
+      <button class="config-tab" data-config-target="centro" data-permiso="configuracion_centro" onclick="showConfig('centro',this)"><i class="bi bi-building me-1"></i> Datos del centro</button>
+      <button class="config-tab" data-config-target="finanzas" data-permiso="configuracion_finanzas" onclick="showConfig('finanzas',this)"><i class="bi bi-cash-coin me-1"></i> Finanzas</button>
+      <button class="config-tab" data-config-target="seguridadAccesos" data-permiso-cualquiera="configuracion_seguridad,usuarios,bitacora" onclick="showConfig('seguridadAccesos',this)"><i class="bi bi-shield-lock me-1"></i> Seguridad</button>
+    </div>
+
+    <section class="screen active" id="medicos" data-permiso="configuracion_medicos">
+      <div class="cardx p-4">
+        <div class="section-head"><div><h4>Gestión de médicos</h4><p>Profesionales que aparecerán en disponibilidad y formulario de citas.</p></div><button class="btn-auro" onclick="abrirModal('medico')"><i class="bi bi-plus-circle me-1"></i> Nuevo médico</button></div>
+        <div class="notice mb-3"><i class="bi bi-info-circle me-1"></i> Médicos conectado a Apps Script. Puede crear, editar y asignar servicios a cada profesional.</div>
+        <div class="table-responsive"><table class="table table-modern"><thead><tr><th>Código</th><th>Médico</th><th>Especialidad</th><th>Teléfono</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="medicosBody"></tbody></table></div>
+        <div id="medicosMobile" class="mobile-cards"></div>
+      </div>
+    </section>
+
+    <section class="screen" id="servicios" data-permiso="configuracion_servicios">
+      <div class="cardx p-4">
+        <div class="section-head"><div><h4>Servicios de agendamiento</h4><p>Servicios que puede seleccionar el paciente o secretaría.</p></div><button class="btn-auro" onclick="abrirModal('servicio')"><i class="bi bi-plus-circle me-1"></i> Nuevo servicio</button></div>
+        <div class="notice mb-3"><i class="bi bi-info-circle me-1"></i> Servicios conectado a Apps Script. Puede crear y editar servicios en la hoja <b>servicios</b>.</div>
+        <div class="table-responsive"><table class="table table-modern"><thead><tr><th>Servicio</th><th>Especialidad</th><th>Duración</th><th>Precio</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="serviciosBody"></tbody></table></div>
+        <div id="serviciosMobile" class="mobile-cards"></div>
+      </div>
+    </section>
+
+    <section class="screen" id="horarios" data-permiso="configuracion_horarios">
+      <div class="cardx p-4">
+        <div class="section-head"><div><h4>Plantillas de horario rápido</h4><p>Bloques reutilizables para crear disponibilidad sin escribir todo manualmente.</p></div><button class="btn-auro" onclick="abrirModalHorario('')"><i class="bi bi-plus-circle me-1"></i> Nueva plantilla</button></div>
+        <div class="table-responsive"><table class="table table-modern"><thead><tr><th>Plantilla</th><th>Horario</th><th>Intervalo</th><th>Tipo</th><th>Días</th><th>Estado</th><th>Acción</th></tr></thead><tbody id="horariosBody"></tbody></table></div>
+        <div id="horariosMobile" class="mobile-cards"></div>
+      </div>
+    </section>
+
+    <section class="screen" id="centro" data-permiso="configuracion_centro">
+      <div class="cardx p-4">
+        <div class="section-head">
+          <div>
+            <h4>Datos del centro médico</h4>
+            <p>Información institucional segura para personalizar el ERP sin tocar citas, disponibilidad ni pacientes.</p>
+          </div>
+          <button id="btnGuardarCentro" class="btn-auro" onclick="guardarConfiguracionCentro()"><i class="bi bi-save me-1"></i> Guardar configuración</button>
+        </div>
+
+        <div id="centroMsg" class="notice mb-3"><i class="bi bi-info-circle me-1"></i> Cargando datos institucionales...</div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label fw-bold">Nombre del centro</label>
+            <input id="cfgNombreClinica" class="form-control" placeholder="Ej. IASYN">
+            <div class="text-muted small mt-1">Se usa como nombre visible institucional del sistema.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold">WhatsApp principal</label>
+            <input id="cfgWhatsappClinica" class="form-control" placeholder="Ej. 0999999999">
+            <div class="text-muted small mt-1">Número oficial del centro. No reemplaza los WhatsApp de pacientes.</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold">Correo institucional</label>
+            <input id="cfgEmailClinica" class="form-control" placeholder="correo@centro.com">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold">Dirección</label>
+            <input id="cfgDireccionClinica" class="form-control" placeholder="Dirección del consultorio">
+          </div>
+          <div class="col-md-8">
+            <label class="form-label fw-bold">Logo URL</label>
+            <input id="cfgLogoUrl" class="form-control" placeholder="Pegue aquí el enlace público del logo propio del centro en Drive" oninput="actualizarPreviewLogoCentro()">
+            <div class="text-muted small mt-1">Recomendado: PNG transparente 600 × 600 px. Use únicamente un logo propio de esta instalación.</div>
+
+            <div class="mt-3">
+              <label class="form-label fw-bold">Subir logo desde este equipo</label>
+              <input id="cfgLogoFile" type="file" class="form-control" accept="image/png,image/jpeg,image/jpg,image/webp">
+              <div id="cfgLogoFileStatus" class="text-muted small mt-1">Seleccione un archivo PNG, JPG o WEBP menor a 2 MB. Se subirá al guardar configuración.</div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Vista previa</label>
+            <div style="height:112px;border:1px solid #f1d4e5;border-radius:18px;background:#fff7fb;display:grid;place-items:center;overflow:hidden">
+              <img id="cfgLogoPreview" alt="Logo" style="max-width:92px;max-height:92px;display:none;border-radius:16px">
+              <div id="cfgLogoFallback" style="width:72px;height:72px;border-radius:22px;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff;display:grid;place-items:center;font-weight:950;font-size:28px">A</div>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Color principal</label>
+            <input id="cfgColorPrincipal" type="color" class="form-control form-control-color" value="#8b1e5a" disabled>
+            <div class="text-muted small mt-1">Bloqueado por seguridad visual.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Color secundario</label>
+            <input id="cfgColorSecundario" type="color" class="form-control form-control-color" value="#c23b83" disabled>
+            <div class="text-muted small mt-1">Bloqueado por seguridad visual.</div>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-bold">Modo sistema</label>
+            <input id="cfgModoSistema" class="form-control" value="DEMO" disabled>
+            <div class="text-muted small mt-1">No editable para proteger el entorno.</div>
+          </div>
+
+          <div class="col-12">
+            <div class="notice"><b>Modo seguro:</b> solo se guardan nombre, WhatsApp, correo, dirección y logo URL. Colores y modo del sistema quedan bloqueados para no afectar el diseño premium ni el ERP global.</div>
+          </div>
+        </div>
+      </div>
+
+</section>
+
+<!-- ==========================================================
+     IASYN FINANZAS - CONFIGURACIÓN FASE 3
+     Panel aislado. No guarda por navegación.
+     La lógica vive exclusivamente en config-finanzas.js.
+     ========================================================== -->
+<style id="auroFinanzasPremiumResponsive">
+  /* IASYN FINANZAS — cierre visual premium, aislado y responsive */
+  #finanzas .fin-actions{display:flex;gap:6px;justify-content:flex-end;align-items:center;flex-wrap:wrap}
+  #finanzas .fin-actions .btn{min-width:34px;min-height:34px;border-radius:10px;display:inline-flex;align-items:center;justify-content:center}
+  #finanzas .fin-base-box{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;padding:12px 14px;margin-bottom:14px}
+  #finanzas .fin-base-box small{color:#64748b;font-weight:650;line-height:1.4}
+  #finanzas .fin-mobile-list{display:none}
+  #finanzas .fin-mobile-card{border:1px solid #e2e8f0;border-radius:18px;background:#fff;padding:14px;margin-bottom:12px;box-shadow:0 8px 24px rgba(15,23,42,.05)}
+  #finanzas .fin-mobile-title{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+  #finanzas .fin-mobile-title strong{font-size:15px;color:#0f172a}
+  #finanzas .fin-mobile-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 12px;font-size:13px}
+  #finanzas .fin-mobile-grid span{color:#64748b}.fin-mobile-grid b{color:#0f172a;text-align:right}
+  #finanzas .fin-mobile-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9}
+  #finanzas .fin-mobile-actions button{flex:1 1 95px;min-height:38px;border-radius:11px}
+  #finanzas .fin-state-active{background:#dcfce7;color:#166534;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+  #finanzas .fin-state-inactive{background:#f1f5f9;color:#475569;border-radius:999px;padding:4px 9px;font-size:11px;font-weight:900;white-space:nowrap}
+
+  /* IASYN 2026-08-18 — recuperación quirúrgica del resumen financiero */
+  #finanzas .fin-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+  #finanzas .fin-summary-card{border:1px solid #e2e8f0;border-radius:18px;background:#fff;padding:14px;min-height:92px;box-shadow:0 8px 24px rgba(15,23,42,.045)}
+  #finanzas .fin-summary-card small{display:block;color:#64748b;font-weight:800;margin-bottom:6px}
+  #finanzas .fin-summary-card strong{font-size:23px;color:#0f172a;letter-spacing:-.02em}
+  #finanzas .fin-result-ok{background:#f0fdf4;border-color:#bbf7d0}
+  #finanzas .fin-result-ok strong{color:#166534}
+  #finanzas .fin-result-bad{background:#fff1f2;border-color:#fecdd3}
+  #finanzas .fin-result-bad strong{color:#be123c}
+  #finanzas .fin-result-neutral{background:#f8fafc}
+
+  @media(max-width:980px){
+    #finanzas .table-responsive{display:none!important}
+    #finanzas .fin-mobile-list{display:block!important}
+    #finanzas .cardx{padding:16px!important}
+    #finanzas .row.g-3>[class*="col-"]{width:100%}
+    #finanzas .fin-base-box .btn-line{width:100%;justify-content:center}
+    #finanzas .fin-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+  @media(max-width:520px){
+    #finanzas .fin-mobile-grid{grid-template-columns:1fr}
+    #finanzas .fin-mobile-grid b{text-align:left;margin-top:-4px}
+    #finanzas .fin-mobile-actions button{flex:1 1 100%}
+    #finanzas .fin-summary-grid{grid-template-columns:1fr}
+  }
+</style>
+<section class="screen" id="finanzas" data-permiso="configuracion_finanzas">
+  <div class="cardx p-4 mb-4">
+    <div class="section-head">
+      <div>
+        <h4>Configuración financiera</h4>
+        <p>Parámetros económicos del centro. Esta configuración es independiente de médicos, servicios, datos institucionales y módulos clínicos.</p>
+      </div>
+      <button id="btnGuardarConfigFinanzas" type="button" class="btn-auro">
+        <i class="bi bi-save me-1"></i> Guardar parámetros
+      </button>
+    </div>
+
+    <div id="finanzasConfigMsg" class="notice mb-3">
+      <i class="bi bi-info-circle me-1"></i> Los parámetros financieros se cargan únicamente al ingresar a esta sección.
+    </div>
+
+    <div class="row g-3">
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Moneda</label>
+        <select id="cfgFinMoneda" class="form-select">
+          <option value="USD">USD - Dólar estadounidense</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Meta mensual</label>
+        <input id="cfgFinMetaMensual" type="number" min="0" step="0.01" class="form-control" placeholder="0.00">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Horas facturables / mes</label>
+        <input id="cfgFinHorasFacturables" type="number" min="0" step="0.01" class="form-control" placeholder="0">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Margen mínimo (%)</label>
+        <input id="cfgFinMargenMinimo" type="number" min="0" max="100" step="0.01" class="form-control" placeholder="0">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Referido predeterminado (%)</label>
+        <input id="cfgFinPorcentajeReferido" type="number" min="0" max="100" step="0.01" class="form-control" placeholder="0">
+      </div>
+      <div class="col-md-3">
+        <label class="form-label fw-bold">Vencimiento de cartera (días)</label>
+        <input id="cfgFinDiasCartera" type="number" min="0" step="1" class="form-control" placeholder="0">
+      </div>
+      <div class="col-12">
+        <div class="notice"><b>Guardado independiente:</b> estos parámetros se guardan únicamente en configuración financiera y no modifican Datos del centro, Médicos, Servicios, Seguridad ni información clínica.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="cardx p-4">
+    <div class="section-head">
+      <div>
+        <h4>Gastos fijos</h4>
+        <p>Registre gastos recurrentes para futuras métricas de rentabilidad. No generan movimientos clínicos ni cobros al paciente.</p>
+      </div>
+    </div>
+
+    <div class="fin-base-box">
+      <small><b>Plantilla base IASYN:</b> carga únicamente los gastos faltantes del modelo financiero aprobado. No sobrescribe registros existentes y usa la Fecha inicio seleccionada.</small>
+      <button id="btnCargarBaseGastosFinanzas" type="button" class="btn-line"><i class="bi bi-magic me-1"></i> Cargar gastos base</button>
+    </div>
+
+    <div id="finanzasGastosMsg" class="notice mb-3">
+      <i class="bi bi-info-circle me-1"></i> Cargando gastos fijos...
+    </div>
+
+    <input id="finGastoId" type="hidden">
+    <div class="row g-3 mb-3">
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Nombre del gasto</label>
+        <select id="finGastoNombre" class="form-select">
+          <option value="">Seleccione gasto...</option>
+          <option value="Alquiler">Alquiler</option>
+          <option value="Luz">Luz</option>
+          <option value="Agua">Agua</option>
+          <option value="Internet">Internet</option>
+          <option value="Mantenimiento aire acondicionado">Mantenimiento aire acondicionado</option>
+          <option value="Permiso de funcionamiento ACESS">Permiso de funcionamiento ACESS</option>
+          <option value="Permiso de Bomberos">Permiso de Bomberos</option>
+          <option value="Patente">Patente</option>
+          <option value="Tasa de Habilitación">Tasa de Habilitación</option>
+          <option value="Publicidad">Publicidad</option>
+          <option value="Contabilidad">Contabilidad</option>
+          <option value="Limpieza e insumos">Limpieza e insumos</option>
+          <option value="Mantenimiento de equipos">Mantenimiento de equipos</option>
+          <option value="Depreciación de equipos">Depreciación de equipos</option>
+          <option value="__OTRO__">Otro</option>
+        </select>
+        <input id="finGastoNombreOtro" class="form-control mt-2 d-none" placeholder="Escriba el nombre del gasto">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Categoría</label>
+        <select id="finGastoCategoria" class="form-select">
+          <option value="">Seleccione categoría...</option>
+          <option value="Infraestructura">Infraestructura</option>
+          <option value="Servicios básicos">Servicios básicos</option>
+          <option value="Mantenimiento">Mantenimiento</option>
+          <option value="Permisos e impuestos">Permisos e impuestos</option>
+          <option value="Marketing/Publicidad">Marketing/Publicidad</option>
+          <option value="Administración">Administración</option>
+          <option value="Limpieza e insumos">Limpieza e insumos</option>
+          <option value="Equipos/Depreciación">Equipos/Depreciación</option>
+          <option value="__OTRO__">Otro</option>
+        </select>
+        <input id="finGastoCategoriaOtro" class="form-control mt-2 d-none" placeholder="Escriba la categoría">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-bold">Valor</label>
+        <input id="finGastoValor" type="number" min="0" step="0.01" class="form-control" placeholder="0.00">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label fw-bold">Periodicidad</label>
+        <select id="finGastoPeriodicidad" class="form-select">
+          <option value="Mensual">Mensual</option>
+          <option value="Semanal">Semanal</option>
+          <option value="Quincenal">Quincenal</option>
+          <option value="Trimestral">Trimestral</option>
+          <option value="Semestral">Semestral</option>
+          <option value="Anual">Anual</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Valor mensual prorrateado</label>
+        <input id="finGastoValorMensual" class="form-control" readonly placeholder="0.00">
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Fecha inicio *</label>
+        <input id="finGastoFechaInicio" type="date" class="form-control" required>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Fecha fin (opcional)</label>
+        <input id="finGastoFechaFin" type="date" class="form-control">
+      </div>
+      <div class="col-12">
+        <label class="form-label fw-bold">Observaciones</label>
+        <textarea id="finGastoObservaciones" class="form-control" rows="2" placeholder="Observación opcional"></textarea>
+      </div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button id="btnGuardarGastoFinanzas" type="button" class="btn-auro"><i class="bi bi-save me-1"></i> Guardar gasto</button>
+        <button id="btnLimpiarGastoFinanzas" type="button" class="btn-line"><i class="bi bi-eraser me-1"></i> Limpiar</button>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-modern">
+        <thead><tr><th>Gasto</th><th>Categoría</th><th>Valor</th><th>Periodicidad</th><th>Mensual</th><th>Desde</th><th>Hasta</th><th>Estado</th><th>Acción</th></tr></thead>
+        <tbody id="finGastosTbody">
+          <tr><td colspan="9" class="text-center text-muted py-3">Sin gastos fijos cargados.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="finGastosMobile" class="fin-mobile-list" aria-live="polite"></div>
+  </div>
+
+
+  <!-- ==========================================================
+       IASYN FINANZAS — RESULTADO MENSUAL RECUPERADO 2026-08-18
+       Bloque exclusivamente de lectura. No altera Caja ni guardadores.
+       ========================================================== -->
+  <div class="cardx p-4 mt-4">
+    <div class="section-head">
+      <div>
+        <h4>Resultado mensual</h4>
+        <p>Resumen gerencial del período basado en ingresos realmente cobrados y costos configurados o registrados.</p>
+      </div>
+      <div class="d-flex gap-2 flex-wrap align-items-end">
+        <div>
+          <label class="form-label fw-bold mb-1">Período</label>
+          <input id="finResumenPeriodo" type="month" class="form-control">
+        </div>
+        <button id="btnActualizarResumenFinanzas" type="button" class="btn-line">
+          <i class="bi bi-arrow-clockwise me-1"></i> Actualizar resumen
+        </button>
+      </div>
+    </div>
+
+    <div id="finResumenMsg" class="notice mb-3">
+      <i class="bi bi-info-circle me-1"></i> Seleccione un período para analizar ingresos, gastos y rentabilidad.
+    </div>
+
+    <div class="fin-summary-grid">
+      <div class="fin-summary-card"><small>Ingresos cobrados</small><strong id="finResIngresos">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Facturación generada</small><strong id="finResFacturacion">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Por cobrar</small><strong id="finResCartera">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Gastos fijos</small><strong id="finResFijos">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Gastos periódicos</small><strong id="finResPeriodicos">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Costos variables</small><strong id="finResVariables">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Gastos extraordinarios</small><strong id="finResExtraordinarios">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Comisiones registradas</small><strong id="finResComisiones">$0.00</strong></div>
+      <div id="finResResultadoCard" class="fin-summary-card fin-result-neutral"><small>Resultado operativo estimado</small><strong id="finResResultado">$0.00</strong></div>
+      <div class="fin-summary-card"><small>Margen operativo</small><strong id="finResMargen">0.0%</strong></div>
+      <div class="fin-summary-card"><small>Punto de equilibrio</small><strong id="finResPuntoEquilibrio">—</strong></div>
+      <div class="fin-summary-card"><small>Atenciones / Ticket promedio</small><strong><span id="finResAtenciones">0</span> · <span id="finResTicket">$0.00</span></strong></div>
+    </div>
+
+    <div class="notice mt-3">
+      <b>Base gerencial:</b> el punto de equilibrio usa costos fijos + periódicos y el margen de contribución del período.
+      Los gastos variables y extraordinarios se reconocen en el mes de su fecha de inicio.
+      Los gastos recurrentes usan su costo mensual estimado.
+    </div>
+  </div>
+
+  <!-- IASYN FINANZAS: configuración económica de médicos.
+       Bloque visual aislado; no modifica el catálogo clínico de médicos. -->
+  <div class="cardx p-4 mt-4">
+    <div class="section-head">
+      <div>
+        <h4>Configuración económica de médicos</h4>
+        <p>Defina las condiciones económicas de cada médico usando el catálogo existente. Esta sección no modifica sus datos clínicos ni profesionales.</p>
+      </div>
+    </div>
+
+    <div id="finanzasMedicosMsg" class="notice mb-3">
+      <i class="bi bi-info-circle me-1"></i> Cargando configuración económica de médicos...
+    </div>
+
+    <input id="finMedicoConfigId" type="hidden">
+    <div class="row g-3 mb-3">
+      <div class="col-md-4"><label class="form-label fw-bold">Médico</label><select id="finMedicoId" class="form-select"><option value="">Seleccione médico...</option></select></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Tipo de pago</label><select id="finMedicoTipoPago" class="form-select"><option value="Porcentaje">Porcentaje</option><option value="Fijo">Valor fijo</option><option value="Hora">Por hora</option></select></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Estado</label><select id="finMedicoEstado" class="form-select"><option value="Activo">Activo</option><option value="Inactivo">Inactivo</option></select></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Porcentaje (%)</label><input id="finMedicoPorcentaje" type="number" min="0" max="100" step="0.01" class="form-control" placeholder="0"></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Valor fijo</label><input id="finMedicoValorFijo" type="number" min="0" step="0.01" class="form-control" placeholder="0.00"></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Valor por hora</label><input id="finMedicoValorHora" type="number" min="0" step="0.01" class="form-control" placeholder="0.00"></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Vigencia desde</label><input id="finMedicoVigenciaDesde" type="date" class="form-control"></div>
+      <div class="col-md-4"><label class="form-label fw-bold">Vigencia hasta (opcional)</label><input id="finMedicoVigenciaHasta" type="date" class="form-control"></div>
+      <div class="col-12"><label class="form-label fw-bold">Observaciones</label><textarea id="finMedicoObservaciones" class="form-control" rows="2" placeholder="Condición económica u observación opcional"></textarea></div>
+      <div class="col-12 d-flex gap-2 flex-wrap">
+        <button id="btnGuardarMedicoFinanzas" type="button" class="btn-auro"><i class="bi bi-save me-1"></i> Guardar condición médica</button>
+        <button id="btnLimpiarMedicoFinanzas" type="button" class="btn-line"><i class="bi bi-eraser me-1"></i> Limpiar</button>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-modern">
+        <thead><tr><th>Médico</th><th>Tipo</th><th>%</th><th>Fijo</th><th>Hora</th><th>Desde</th><th>Estado</th><th>Acción</th></tr></thead>
+        <tbody id="finMedicosTbody"><tr><td colspan="8" class="text-center text-muted py-3">Sin configuraciones económicas cargadas.</td></tr></tbody>
+      </table>
+    </div>
+    <div id="finMedicosMobile" class="fin-mobile-list" aria-live="polite"></div>
+  </div>
+</section>
+
+<section class="screen" id="seguridadAccesos" data-permiso-cualquiera="configuracion_seguridad,usuarios,bitacora">
+  <div class="cardx p-4">
+    <div class="section-head">
+      <div>
+        <h4><i class="bi bi-shield-lock me-2"></i> Seguridad y accesos</h4>
+        <p>Administración de usuarios autorizados y consulta de la bitácora del sistema.</p>
+      </div>
+      <span class="readonly-pill"><i class="bi bi-shield-check"></i> Control de acceso preparado</span>
+    </div>
+
+    <div class="notice mb-3">
+      <i class="bi bi-info-circle me-1"></i>
+      Administre usuarios autorizados, permisos y consulte el historial de accesos del sistema desde un solo lugar.
+    </div>
+
+    <div class="security-subtabs">
+      <button class="security-subtab active" type="button" data-security-target="securityUsuarios" data-permiso="usuarios" onclick="showSecurityPanel('securityUsuarios',this)">
+        <i class="bi bi-people me-1"></i> Usuarios
+      </button>
+      <button class="security-subtab" type="button" data-security-target="securityBitacora" data-permiso="bitacora" onclick="showSecurityPanel('securityBitacora',this)">
+        <i class="bi bi-journal-text me-1"></i> Bitácora
+      </button>
+      <button id="tabAuditoriaClinica" class="security-subtab" type="button" data-security-target="securityAuditoriaClinica" onclick="showSecurityPanel('securityAuditoriaClinica',this)">
+        <i class="bi bi-clipboard2-pulse me-1"></i> Auditoría clínica
+      </button>
+    </div>
+
+    <div id="securityUsuarios" class="security-panel active" data-permiso="usuarios">
+      <div class="security-summary">
+        <div class="security-summary-card"><small>Usuarios registrados</small><strong id="secTotalUsuarios">0</strong></div>
+        <div class="security-summary-card"><small>Administradores</small><strong id="secTotalAdministradores">0</strong></div>
+        <div class="security-summary-card"><small>Médicos</small><strong id="secTotalMedicos">0</strong></div>
+        <div class="security-summary-card"><small>Secretaría</small><strong id="secTotalSecretaria">0</strong></div>
+      </div>
+
+
+      <div id="secEstadoConexion" class="notice mb-3">
+        <i class="bi bi-arrow-clockwise me-1"></i>
+        Validando la sesión administrativa…
+      </div>
+
+      <div class="section-head">
+        <div>
+          <h4 style="font-size:22px!important">Usuarios autorizados</h4>
+          <p>Gestione las cuentas autorizadas y sus niveles de acceso al ERP.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+          <button id="btnCambiarMiClave" class="btn-line" type="button" onclick="abrirModalCambioClave()">
+            <i class="bi bi-key me-1"></i> Cambiar mi contraseña
+          </button>
+          <button id="btnNuevoUsuario" class="btn-auro" type="button">
+            <i class="bi bi-person-plus me-1"></i> Crear usuario
+          </button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-modern">
+          <thead><tr><th>Usuario</th><th>Nombre</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th>Acción</th></tr></thead>
+          <tbody id="usuariosSeguridadBody">
+            <tr><td colspan="6" class="security-empty"><i class="bi bi-person-lock"></i>No hay usuarios para mostrar. Las cuentas autorizadas aparecerán aquí.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="usuariosSeguridadMobile" class="mobile-cards">
+        <div class="mobile-card security-empty"><i class="bi bi-person-lock"></i>No hay usuarios para mostrar. Las cuentas autorizadas aparecerán aquí.</div>
+      </div>
+    </div>
+
+    <div id="securityBitacora" class="security-panel" data-permiso="bitacora">
+      <div class="security-summary">
+        <div class="security-summary-card"><small>Eventos hoy</small><strong id="secEventosHoy">0</strong></div>
+        <div class="security-summary-card"><small>Accesos exitosos</small><strong id="secAccesosExitosos">0</strong></div>
+        <div class="security-summary-card"><small>Alertas</small><strong id="secAlertasSeguridad">0</strong></div>
+        <div class="security-summary-card"><small>Último evento</small><strong id="secUltimoEvento" style="font-size:16px">—</strong></div>
+      </div>
+
+      <div class="section-head">
+        <div>
+          <h4 style="font-size:22px!important">Bitácora del sistema</h4>
+          <p>Consulte accesos, acciones relevantes y resultados de auditoría del sistema.</p>
+        </div>
+        <span class="readonly-pill"><i class="bi bi-eye"></i> Solo lectura</span>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-3">
+          <label class="form-label fw-bold" for="bitacoraDesde">Desde</label>
+          <input id="bitacoraDesde" type="date" class="form-control" disabled>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold" for="bitacoraHasta">Hasta</label>
+          <input id="bitacoraHasta" type="date" class="form-control" disabled>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold" for="bitacoraUsuario">Usuario</label>
+          <select id="bitacoraUsuario" class="form-select" disabled><option>Todos los usuarios</option></select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold" for="bitacoraAccion">Acción</label>
+          <select id="bitacoraAccion" class="form-select" disabled><option>Todas las acciones</option></select>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-modern">
+          <thead><tr><th>Fecha y hora</th><th>Usuario</th><th>Módulo</th><th>Acción</th><th>Paciente</th><th>Equipo</th><th>Resultado</th></tr></thead>
+          <tbody id="bitacoraSeguridadBody">
+            <tr><td colspan="7" class="security-empty"><i class="bi bi-journal-check"></i>Aún no existen eventos registrados. Los accesos y acciones aparecerán aquí automáticamente.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="bitacoraSeguridadMobile" class="mobile-cards">
+        <div class="mobile-card security-empty"><i class="bi bi-journal-check"></i>Aún no existen eventos registrados. Los accesos y acciones aparecerán aquí automáticamente.</div>
+      </div>
+    </div>
+
+    <div id="securityAuditoriaClinica" class="security-panel">
+      <div class="security-summary">
+        <div class="security-summary-card"><small>Eventos visibles</small><strong id="audClinTotal">0</strong></div>
+        <div class="security-summary-card"><small>Dentro del plazo</small><strong id="audClinDentro24">0</strong></div>
+        <div class="security-summary-card"><small>Fuera del plazo</small><strong id="audClinFuera24">0</strong></div>
+        <div class="security-summary-card"><small>Último evento</small><strong id="audClinUltimo" style="font-size:16px">—</strong></div>
+      </div>
+
+      <div class="section-head">
+        <div>
+          <h4 style="font-size:22px!important">Auditoría clínica</h4>
+          <p>Control y trazabilidad independiente de correcciones en Diagnóstico, Plan clínico y Recetas. Historia clínica queda preparada para una fase futura.</p>
+        </div>
+        <span class="readonly-pill"><i class="bi bi-shield-check"></i> Auditoría siempre activa · Administrador</span>
+      </div>
+
+      <div class="auro-audit-control-card mb-3" id="audClinControlCard">
+        <div class="auro-audit-control-head">
+          <div>
+            <strong><i class="bi bi-sliders2 me-1"></i> Control de correcciones</strong>
+            <small>La atención en proceso permanece libre. Estas reglas se aplican al finalizarla.</small>
+          </div>
+          <span id="audClinConfigEstado" class="readonly-pill"><i class="bi bi-clock-history"></i> Cargando…</span>
+        </div>
+        <div class="row g-3 align-items-end">
+          <div class="col-md-3">
+            <label class="form-label fw-bold" for="audClinControlEdicion">Control de edición</label>
+            <select id="audClinControlEdicion" class="form-select">
+              <option value="SI">Activado</option>
+              <option value="NO">Desactivado</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-bold" for="audClinPlazoPreset">Plazo normal</label>
+            <select id="audClinPlazoPreset" class="form-select">
+              <option value="24">24 horas</option>
+              <option value="48">48 horas</option>
+              <option value="72">72 horas</option>
+              <option value="PERSONALIZADO">Personalizado</option>
+            </select>
+          </div>
+          <div class="col-md-2" id="audClinHorasCustomWrap" style="display:none">
+            <label class="form-label fw-bold" for="audClinHorasCustom">Horas</label>
+            <input id="audClinHorasCustom" type="number" min="1" max="720" step="1" class="form-control" value="24">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-bold" for="audClinCorreccionExcepcional">Corrección excepcional</label>
+            <select id="audClinCorreccionExcepcional" class="form-select">
+              <option value="SI">Activada</option>
+              <option value="NO">Desactivada</option>
+            </select>
+          </div>
+          <div class="col-md-auto">
+            <button id="audClinGuardarConfig" type="button" class="btn-auro">
+              <i class="bi bi-save me-1"></i> Guardar control
+            </button>
+          </div>
+        </div>
+        <div class="auro-audit-control-note">
+          <i class="bi bi-info-circle me-1"></i>
+          Toda corrección posterior al cierre exige justificativo. Fuera del plazo se registra como enmienda excepcional cuando esté habilitada.
+        </div>
+      </div>
+
+      <div id="audClinEstado" class="notice mb-3">
+        <i class="bi bi-shield-check me-1"></i>
+        La auditoría clínica se carga únicamente al abrir esta pestaña.
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-2">
+          <label class="form-label fw-bold" for="audClinDesde">Desde</label>
+          <input id="audClinDesde" type="date" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-bold" for="audClinHasta">Hasta</label>
+          <input id="audClinHasta" type="date" class="form-control">
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-bold" for="audClinModulo">Módulo</label>
+          <select id="audClinModulo" class="form-select">
+            <option value="">Todos</option>
+            <option value="ATENCION">Atención</option>
+            <option value="DIAGNOSTICO">Diagnóstico</option>
+            <option value="PLAN">Plan clínico</option>
+            <option value="RECETA">Receta</option>
+            <option value="HISTORIA_CLINICA" disabled>Historia clínica (futuro)</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <label class="form-label fw-bold" for="audClinAccion">Acción</label>
+          <select id="audClinAccion" class="form-select">
+            <option value="">Todas</option>
+            <option value="FINALIZACION">Finalización</option>
+            <option value="REGISTRO">Registro</option>
+            <option value="EMISION">Emisión</option>
+            <option value="CORRECCION">Corrección</option>
+            <option value="ENMIENDA">Enmienda</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold" for="audClinBuscar">Buscar</label>
+          <input id="audClinBuscar" class="form-control" placeholder="Paciente, CIE-10, médico, usuario o ID">
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 flex-wrap mb-3">
+        <button id="audClinRefrescar" type="button" class="btn-soft"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar auditoría</button>
+        <button id="audClinLimpiar" type="button" class="btn-line"><i class="bi bi-eraser me-1"></i> Limpiar filtros</button>
+      </div>
+
+      <div class="table-responsive">
+        <table class="table table-modern">
+          <thead><tr><th>Fecha y hora</th><th>Paciente</th><th>Consulta</th><th>Módulo</th><th>Acción</th><th>Médico / usuario</th><th>Ventana</th><th>Detalle</th></tr></thead>
+          <tbody id="audClinBody">
+            <tr><td colspan="8" class="security-empty"><i class="bi bi-clipboard2-check"></i><b>Aún no hay correcciones auditadas.</b><br><span>Cuando se corrija una atención finalizada en Diagnóstico, Plan o Receta, el evento aparecerá aquí automáticamente.</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="audClinMobile" class="mobile-cards">
+        <div class="mobile-card security-empty"><i class="bi bi-clipboard2-check"></i><b>Aún no hay correcciones auditadas.</b><br><span>Cuando se corrija una atención finalizada en Diagnóstico, Plan o Receta, el evento aparecerá aquí automáticamente.</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+  </main>
+</div>
+
+<div class="modalx" id="modalConfig" onclick="cerrarModal(event)"><div class="modal-panel" onclick="event.stopPropagation()"><div class="modal-head"><h5 id="modalTitle">Nuevo registro</h5><button class="modal-close" onclick="cerrarModal()"><i class="bi bi-x-lg"></i></button></div><div class="modal-bodyx" id="modalBody"></div></div></div>
+
+<script src="iasyn-config.js?v=1.1.0"></script>
+<script>
+  const API_URL = String(
+    (window.IASYN_CONFIG && window.IASYN_CONFIG.apiUrl) || ''
+  ).trim();
+
+  let medicos = [];
+  let servicios = [];
+  let medicoServicios = [];
+  let horarios = [];
+  let configuracionCentro = {};
+
+  function toggleSidebar(){
+    document.getElementById('sidebar').classList.toggle('show');
+  }
+
+  function obtenerNombreSesionConfiguracion_(usuario){
+    const nombres = [usuario && usuario.nombres, usuario && usuario.apellidos]
+      .filter(Boolean)
+      .join(' ')
+      .trim();
+
+    return String(
+      (usuario && (
+        usuario.nombre_completo ||
+        usuario.nombre ||
+        nombres ||
+        usuario.usuario ||
+        usuario.username
+      )) ||
+      'Usuario'
+    ).trim();
+  }
+
+  function obtenerRolSesionConfiguracion_(usuario){
+    return String(
+      (usuario && (
+        usuario.rol ||
+        usuario.nombre_rol ||
+        usuario.perfil ||
+        usuario.tipo_usuario
+      )) ||
+      'Usuario autorizado'
+    ).trim();
+  }
+
+  function obtenerInicialesSesionConfiguracion_(nombre){
+    const partes = String(nombre || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    if(!partes.length) return 'AU';
+    if(partes.length === 1) return partes[0].slice(0,2).toUpperCase();
+
+    return (
+      partes[0].charAt(0) +
+      partes[partes.length - 1].charAt(0)
+    ).toUpperCase();
+  }
+
+  function pintarSesionConfiguracion_(seguridad, usuario){
+    const nombre = obtenerNombreSesionConfiguracion_(usuario);
+    const rol = obtenerRolSesionConfiguracion_(usuario);
+
+    const nombreEl = document.getElementById('cfgSesionNombre');
+    const rolEl = document.getElementById('cfgSesionRol');
+    const avatarEl = document.getElementById('cfgSesionAvatar');
+    const cerrarEl = document.getElementById('cfgCerrarSesion');
+
+    if(nombreEl) nombreEl.textContent = nombre;
+    if(rolEl) rolEl.textContent = rol;
+    if(avatarEl) avatarEl.textContent = obtenerInicialesSesionConfiguracion_(nombre);
+
+    if(cerrarEl){
+      cerrarEl.onclick = async function(){
+        cerrarEl.disabled = true;
+
+        try{
+          if(seguridad && typeof seguridad.cerrarSesion === 'function'){
+            await seguridad.cerrarSesion();
+            return;
+          }
+
+          if(seguridad && typeof seguridad.limpiarSesion === 'function'){
+            seguridad.limpiarSesion();
+          }
+
+          window.location.replace('login.html');
+        }catch(error){
+          console.error('No se pudo cerrar la sesión:', error);
+
+          if(seguridad && typeof seguridad.limpiarSesion === 'function'){
+            seguridad.limpiarSesion();
+          }
+
+          window.location.replace('login.html');
+        }
+      };
+    }
+  }
+
+  function obtenerSeguridadConfiguracion_(){
+    return window.IASYN_SEGURIDAD || window.IASYN_SEGURIDAD || null;
+  }
+
+  function redirigirSegunPermisosConfiguracion_(seguridad, usuario){
+    if(seguridad && seguridad.tienePermiso('dashboard', usuario)){
+      window.location.replace('index.html');
+      return;
+    }
+
+    if(seguridad && seguridad.tienePermiso('secretaria', usuario)){
+      window.location.replace('secretaria.html');
+      return;
+    }
+
+    window.location.replace('login.html');
+  }
+
+  function aplicarPermisosCompuestosConfiguracion_(seguridad, usuario){
+    document.querySelectorAll('[data-permiso-cualquiera]').forEach(elemento => {
+      const permisos = String(elemento.getAttribute('data-permiso-cualquiera') || '')
+        .split(',')
+        .map(valor => valor.trim())
+        .filter(Boolean);
+
+      const autorizado = permisos.some(clave =>
+        seguridad.tienePermiso(clave, usuario)
+      );
+
+      elemento.style.display = autorizado ? '' : 'none';
+    });
+  }
+
+  function activarPrimerPanelSeguridadPermitido_(){
+    const tabs = Array.from(
+      document.querySelectorAll('#seguridadAccesos .security-subtab')
+    ).filter(tab => tab.style.display !== 'none');
+
+    document.querySelectorAll('#seguridadAccesos .security-subtab')
+      .forEach(tab => tab.classList.remove('active'));
+
+    document.querySelectorAll('#seguridadAccesos .security-panel')
+      .forEach(panel => panel.classList.remove('active'));
+
+    if(!tabs.length) return;
+
+    const primera = tabs[0];
+    const destino = primera.getAttribute('data-security-target');
+    primera.classList.add('active');
+
+    const panel = destino ? document.getElementById(destino) : null;
+    if(panel) panel.classList.add('active');
+  }
+
+  function activarPrimeraConfiguracionPermitida_(seguridad, usuario){
+    const tabs = Array.from(
+      document.querySelectorAll('.config-tab[data-config-target]')
+    ).filter(tab => tab.style.display !== 'none');
+
+    document.querySelectorAll('.config-tab')
+      .forEach(tab => tab.classList.remove('active'));
+
+    document.querySelectorAll('.screen')
+      .forEach(screen => screen.classList.remove('active'));
+
+    /* IASYN 2026-08-19 · CONFIGURACIÓN GENERAL SIN SUBMÓDULOS
+       Si el usuario tiene únicamente el permiso general "configuracion",
+       permanece dentro de configuracion.html aunque no tenga ningún
+       submódulo habilitado. No se redirige a Index por tener dashboard.
+       El panel queda sin pestañas internas, tal como fue autorizado. */
+    if(!tabs.length){
+      if(
+        seguridad &&
+        typeof seguridad.tienePermiso === 'function' &&
+        seguridad.tienePermiso('configuracion', usuario)
+      ){
+        return true;
+      }
+
+      return false;
+    }
+
+    const primera = tabs[0];
+    const destino = primera.getAttribute('data-config-target');
+
+    primera.classList.add('active');
+
+    const pantalla = destino ? document.getElementById(destino) : null;
+    if(pantalla) pantalla.classList.add('active');
+
+    if(destino === 'seguridadAccesos'){
+      activarPrimerPanelSeguridadPermitido_();
+    }
+
+    return true;
+  }
+
+  async function validarAccesoConfiguracion_(){
+    const seguridad = obtenerSeguridadConfiguracion_();
+
+    if(!seguridad){
+      window.location.replace('login.html');
+      return null;
+    }
+
+    const validacion = await seguridad.validarSesionActual();
+
+    if(!validacion || validacion.success !== true){
+      seguridad.limpiarSesion();
+      window.location.replace('login.html');
+      return null;
+    }
+
+    const usuario =
+      validacion.usuario ||
+      (validacion.sesion && validacion.sesion.usuario_publico) ||
+      seguridad.obtenerUsuario() ||
+      {};
+
+    const permisosEntradaConfiguracion = 'configuracion,configuracion_medicos,configuracion_servicios,configuracion_horarios,configuracion_centro,configuracion_finanzas,configuracion_seguridad,usuarios,bitacora'
+      .split(',')
+      .map(clave => clave.trim())
+      .filter(Boolean);
+
+    const puedeEntrarConfiguracion = permisosEntradaConfiguracion.some(clave =>
+      seguridad.tienePermiso(clave, usuario)
+    );
+
+    if(!puedeEntrarConfiguracion){
+      redirigirSegunPermisosConfiguracion_(seguridad, usuario);
+      return null;
+    }
+
+    seguridad.aplicarPermisos(document);
+    aplicarPermisosCompuestosConfiguracion_(seguridad, usuario);
+
+    if(!activarPrimeraConfiguracionPermitida_(seguridad, usuario)){
+      redirigirSegunPermisosConfiguracion_(seguridad, usuario);
+      return null;
+    }
+
+    document.body.style.visibility = 'visible';
+
+    return {
+      seguridad: seguridad,
+      usuario: usuario
+    };
+  }
+
+  function badge(e){
+    const estado = e || 'Activo';
+    const cls = String(estado).toLowerCase()==='activo' ? 'badge-ok' : 'badge-warn';
+    return '<span class="badgex '+cls+'">'+estado+'</span>';
+  }
+
+  function safeText(value){
+    return String(value ?? '')
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;')
+      .replace(/"/g,'&quot;')
+      .replace(/'/g,'&#039;');
+  }
+
+
+  function normalizarHoraVisual(valor){
+    if(valor === null || valor === undefined) return '';
+
+    if(typeof valor === 'number' && isFinite(valor)){
+      const total = Math.round((valor % 1) * 24 * 60);
+      const hh = Math.floor(total / 60) % 24;
+      const mm = total % 60;
+      return String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+    }
+
+    let txt = String(valor).trim();
+    if(!txt) return '';
+
+    const iso = txt.match(/T(\d{2}):(\d{2})/);
+    if(iso) return iso[1] + ':' + iso[2];
+
+    if(/^\d{1}:\d{2}$/.test(txt)) return '0' + txt;
+    if(/^\d{1,2}:\d{2}/.test(txt)){
+      const p = txt.split(':');
+      return String(p[0]).padStart(2,'0') + ':' + String(p[1]).substring(0,2);
+    }
+
+    if(/^\d{4}$/.test(txt)) return txt.substring(0,2) + ':' + txt.substring(2,4);
+
+    return txt;
+  }
+
+  function showConfig(id,btn){
+    document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.config-tab').forEach(b=>b.classList.remove('active'));
+    if(btn)btn.classList.add('active');
+
+    /* IASYN FINANZAS FASE 3: solo carga al entrar; nunca guarda por navegación. */
+    if(id === 'finanzas' && window.auroConfigFinanzas){
+      window.auroConfigFinanzas.preparar();
+      window.auroConfigFinanzas.inicializar();
+    }
+  }
+
+
+function showSecurityPanel(id,btn){
+  document.querySelectorAll('#seguridadAccesos .security-panel').forEach(panel=>panel.classList.remove('active'));
+  const panel = document.getElementById(id);
+  if(panel) panel.classList.add('active');
+  document.querySelectorAll('#seguridadAccesos .security-subtab').forEach(tab=>tab.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+}
+
+  /* ==========================================================
+     IASYN · CAPA DE AUTONOMÍA INSTITUCIONAL
+     QUIRÚRGICA / ANTIRREGRESIVA
+     ----------------------------------------------------------
+     OBJETIVO:
+     - Mantener idéntica interfaz y contratos del módulo Configuración.
+     - No mostrar ni reutilizar identidad/Drive heredados de AUROSANAX.
+     - No tocar contraseña, usuarios, seguridad ni lógica clínica.
+     - No realizar escrituras automáticas al abrir la pantalla.
+     - Bloquear cualquier intento de volver a enlazar IDs legacy.
+     ========================================================== */
+
+  const IASYN_LEGACY_IDS_BLOQUEADOS_UI = Object.freeze([
+    '1v16jb_jwvI6D4yIE0HyjtZDwC5ytpa32_X_j56FG_y0',
+    '1IlV5bnWhfn0FTJQahJIbNz2bT8CP3pkp4ZPBKFJvLBw',
+    '1EDd-4Yk5cl1VM5UTpYUsCMbJ2BzfmCi2FDnuFl2gZqA',
+    '1SkTFM2SDl0G0z4pe-JFWFGE3TykoNI3v',
+    '1-4DR5Z8BndQrILMlsE8QA7khhUFyvUGV',
+    '1z5qIQuEEWW5A73uMAEDlGPHeu7EVE3Uj'
+  ]);
+
+  const IASYN_CLAVES_RECURSO_UI = Object.freeze(new Set([
+    'drive_root_folder_id','drive_root_folder_url',
+    'drive_identidad_folder_id','drive_identidad_folder_url',
+    'drive_logos_folder_id','drive_logos_folder_url',
+    'drive_firmas_folder_id','drive_firmas_folder_url',
+    'drive_sellos_folder_id','drive_sellos_folder_url',
+    'drive_pdfs_folder_id','drive_pdfs_folder_url',
+    'drive_documentos_firmados_folder_id','drive_documentos_firmados_folder_url',
+    'drive_respaldos_folder_id','drive_respaldos_folder_url',
+    'drive_documentos_clinicos_folder_id','drive_documentos_clinicos_folder_url',
+    'logo_file_id','logo_url','logo_drive_url'
+  ]));
+
+  function iasynContieneLegacyUI_(valor){
+    const txt = String(valor === null || valor === undefined ? '' : valor).trim();
+    if(!txt) return false;
+    return IASYN_LEGACY_IDS_BLOQUEADOS_UI.some(id => txt.includes(id));
+  }
+
+  function iasynEsIdentidadAurosanaxLegacy_(clave, valor){
+    const k = String(clave || '').trim();
+    const v = String(valor === null || valor === undefined ? '' : valor).trim();
+    const n = v.toLowerCase();
+
+    if(k === 'nombre_clinica'){
+      return n === 'aurosanaxmedic' || n === 'aurosanax' || n === 'aurosanax medic';
+    }
+    if(k === 'email_clinica'){
+      return n === 'dra_aurora_andagoya@hotmail.com' || n === 'aurosanax@hotmail.com';
+    }
+    if(k === 'direccion_clinica'){
+      return n === 'edificio agora 21 piso 6' || n === 'edificio ágora 21 piso 6';
+    }
+    if(k === 'mensaje_recordatorio_cita'){
+      return /\baurosanax\b/i.test(v);
+    }
+    return false;
+  }
+
+  function iasynSanitizarConfiguracionUI_(config){
+    if(!config || typeof config !== 'object' || Array.isArray(config)) return config;
+
+    const limpio = Object.assign({}, config);
+
+    Object.keys(limpio).forEach(clave => {
+      const valor = limpio[clave];
+
+      if(IASYN_CLAVES_RECURSO_UI.has(clave) && iasynContieneLegacyUI_(valor)){
+        limpio[clave] = '';
+        return;
+      }
+
+      if(iasynEsIdentidadAurosanaxLegacy_(clave, valor)){
+        if(clave === 'mensaje_recordatorio_cita'){
+          limpio[clave] = 'Hola {paciente}, le recordamos su cita el {fecha} a las {hora}.';
+        }else{
+          limpio[clave] = '';
+        }
+      }
+    });
+
+    return limpio;
+  }
+
+  function iasynValidarEscrituraConfiguracionUI_(accion, data){
+    if(accion !== 'editarConfiguracion' && accion !== 'guardarConfiguracion') return;
+
+    const d = data && typeof data === 'object' ? data : {};
+    const clave = String(d.clave || '').trim();
+    const valor = d.valor === null || d.valor === undefined ? '' : String(d.valor).trim();
+
+    if(clave && IASYN_CLAVES_RECURSO_UI.has(clave) && iasynContieneLegacyUI_(valor)){
+      throw new Error('IASYN bloqueó una referencia heredada de AUROSANAX. Use un recurso propio de IASYN.');
+    }
+
+    if(clave && iasynEsIdentidadAurosanaxLegacy_(clave, valor)){
+      throw new Error('IASYN bloqueó datos institucionales heredados de AUROSANAX. Ingrese los datos propios del nuevo centro.');
+    }
+  }
+
+  async function apiGet(accion){
+    const url = API_URL + '?accion=' + encodeURIComponent(accion) + '&t=' + Date.now();
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Error HTTP ' + res.status);
+    const json = await res.json();
+    return accion === 'obtenerConfiguracion' ? iasynSanitizarConfiguracionUI_(json) : json;
+  }
+
+  async function apiGetParams(accion, params){
+    const q = new URLSearchParams({accion, t: Date.now()});
+    Object.entries(params || {}).forEach(([k,v]) => q.append(k, v ?? ''));
+    const res = await fetch(API_URL + '?' + q.toString());
+    if(!res.ok) throw new Error('Error HTTP ' + res.status);
+    const json = await res.json();
+    return accion === 'obtenerConfiguracion' ? iasynSanitizarConfiguracionUI_(json) : json;
+  }
+
+  async function apiPost(accion, data){
+    iasynValidarEscrituraConfiguracionUI_(accion, data);
+
+    const res = await fetch(API_URL, {
+      method:'POST',
+      body: JSON.stringify({accion, data})
+    });
+    if(!res.ok) throw new Error('Error HTTP ' + res.status);
+    return await res.json();
+  }
+
+  function textoMedicoNombre(m){
+    return ((m.nombres || '') + ' ' + (m.apellidos || '')).trim() || m.nombre || m.nombre_completo || 'Sin nombre';
+  }
+
+  function textoMedicoEspecialidad(m){
+    return m.especialidad_principal || m.especialidad || '—';
+  }
+
+  function textoServicioNombre(s){
+    return s.nombre_servicio || s.nombre || 'Sin nombre';
+  }
+
+  function textoServicioEspecialidad(s){
+    return s.id_especialidad || s.especialidad || '—';
+  }
+
+  function textoServicioDuracion(s){
+    const d = s.duracion_minutos || s.duracion || '';
+    return d ? String(d).replace(' min','') + ' min' : '—';
+  }
+
+  function textoServicioPrecio(s){
+    const p = s.precio || '';
+    return p ? '$' + String(p).replace('$','') : '—';
+  }
+
+
+  function textoPlantillaNombre(h){
+    return h.nombre_plantilla || h.nombre || 'Sin nombre';
+  }
+
+  function textoPlantillaHorario(h){
+    const inicio = normalizarHoraVisual(h.hora_inicio || h.inicio || '');
+    const fin = normalizarHoraVisual(h.hora_fin || h.fin || '');
+    if(inicio && fin) return inicio + ' - ' + fin;
+    return h.horario || '—';
+  }
+
+  function textoPlantillaIntervalo(h){
+    const i = h.intervalo_minutos || h.intervalo || '';
+    if(!i) return '—';
+    return String(i).replace(' min','') + ' min';
+  }
+
+  function textoPlantillaTipo(h){
+    return h.tipo_bloque || h.tipo || '—';
+  }
+
+  function textoPlantillaDias(h){
+    return h.aplica_dia || h.dias || '—';
+  }
+
+  async function cargarMedicos(){
+    try{
+      medicos = await apiGet('listarMedicos');
+      if(!Array.isArray(medicos)) medicos = [];
+      renderMedicos();
+      document.getElementById('stMedicos').textContent = medicos.length;
+    }catch(e){
+      console.error(e);
+      medicosBody.innerHTML = '<tr><td colspan="6" class="text-danger fw-bold">Error cargando médicos. Revise Apps Script o la implementación.</td></tr>';
+      medicosMobile.innerHTML = '<div class="mobile-card text-danger fw-bold">Error cargando médicos.</div>';
+    }
+  }
+
+  async function cargarServicios(){
+    try{
+      servicios = await apiGet('listarServicios');
+      if(!Array.isArray(servicios)) servicios = [];
+      renderServicios();
+      document.getElementById('stServicios').textContent = servicios.length;
+    }catch(e){
+      console.error(e);
+      serviciosBody.innerHTML = '<tr><td colspan="6" class="text-danger fw-bold">Error cargando servicios. Revise Apps Script o la implementación.</td></tr>';
+      serviciosMobile.innerHTML = '<div class="mobile-card text-danger fw-bold">Error cargando servicios.</div>';
+    }
+  }
+
+  async function cargarMedicoServicios(){
+    try{
+      medicoServicios = await apiGet('listarMedicoServicios');
+      if(!Array.isArray(medicoServicios)) medicoServicios = [];
+    }catch(e){
+      console.error(e);
+      medicoServicios = [];
+    }
+  }
+
+
+  async function cargarPlantillasHorario(){
+    try{
+      horarios = await apiGet('listarPlantillasHorario');
+      if(!Array.isArray(horarios)) horarios = [];
+      renderHorarios();
+      document.getElementById('stPlantillas').textContent = horarios.length;
+    }catch(e){
+      console.error(e);
+      horarios = [];
+      horariosBody.innerHTML = '<tr><td colspan="7" class="text-danger fw-bold">Error cargando plantillas de horario. Revise Apps Script o la implementación.</td></tr>';
+      horariosMobile.innerHTML = '<div class="mobile-card text-danger fw-bold">Error cargando plantillas de horario.</div>';
+      document.getElementById('stPlantillas').textContent = '0';
+    }
+  }
+
+
+  /* Datos del centro modularizados en config-centro.js */
+
+  async function refrescarDemo(){
+    const seguridad = obtenerSeguridadConfiguracion_();
+    const usuario = seguridad ? seguridad.obtenerUsuario() || {} : {};
+    const boton = document.getElementById('btnRefrescarConfig');
+    const original = boton ? boton.innerHTML : '';
+
+    if(boton){
+      boton.disabled = true;
+      boton.innerHTML = '<i class="bi bi-arrow-clockwise"></i> <span>Actualizando...</span>';
+    }
+
+    try{
+      if(seguridad && seguridad.tienePermiso('configuracion_medicos', usuario)){
+        await cargarMedicos();
+        await cargarMedicoServicios();
+      }
+
+      if(seguridad && seguridad.tienePermiso('configuracion_servicios', usuario)){
+        await cargarServicios();
+      }
+
+      if(seguridad && seguridad.tienePermiso('configuracion_horarios', usuario)){
+        await cargarPlantillasHorario();
+      }
+
+      if(seguridad && seguridad.tienePermiso('configuracion_centro', usuario)){
+        await cargarConfiguracionCentro();
+      }
+
+      if(seguridad && seguridad.tienePermiso('configuracion_finanzas', usuario) && window.auroConfigFinanzas){
+        await window.auroConfigFinanzas.preparar();
+      }
+
+      if(boton){
+        boton.innerHTML = '<i class="bi bi-check-circle"></i> <span>Actualizado</span>';
+      }
+
+      window.setTimeout(() => {
+        if(boton) boton.innerHTML = original;
+      }, 1200);
+    }catch(error){
+      console.error('Error actualizando Configuración:', error);
+
+      if(boton){
+        boton.innerHTML = '<i class="bi bi-exclamation-triangle"></i> <span>Error al actualizar</span>';
+      }
+
+      window.setTimeout(() => {
+        if(boton) boton.innerHTML = original;
+      }, 1600);
+    }finally{
+      if(boton) boton.disabled = false;
+    }
+  }
+
+  function renderMedicos(){
+    medicosBody.innerHTML = medicos.map(m=>`
+      <tr>
+        <td><b>${safeText(m.id_medico || '—')}</b></td>
+        <td>${safeText(textoMedicoNombre(m))}</td>
+        <td>${safeText(textoMedicoEspecialidad(m))}</td>
+        <td>${safeText(m.telefono || '—')}</td>
+        <td>${badge(m.estado || 'Activo')}</td>
+        <td><button class="btn-soft btn-sm" onclick="abrirModalMedico('${safeText(m.id_medico || '')}')">Editar</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="6" class="text-center text-muted py-4">No hay médicos registrados.</td></tr>';
+
+    medicosMobile.innerHTML = medicos.map(m=>`
+      <div class="mobile-card">
+        <b>${safeText(textoMedicoNombre(m))}</b>
+        <div class="line"><span>Código</span><span>${safeText(m.id_medico || '—')}</span></div>
+        <div class="line"><span>Especialidad</span><span>${safeText(textoMedicoEspecialidad(m))}</span></div>
+        <div class="line"><span>Teléfono</span><span>${safeText(m.telefono || '—')}</span></div>
+        <div class="line"><span>Estado</span><span>${badge(m.estado || 'Activo')}</span></div>
+        <button class="btn-soft w-100 mt-2" onclick="abrirModalMedico('${safeText(m.id_medico || '')}')">Editar</button>
+      </div>
+    `).join('') || '<div class="mobile-card text-center text-muted">No hay médicos registrados.</div>';
+  }
+
+  function renderServicios(){
+    serviciosBody.innerHTML = servicios.map(s=>`
+      <tr>
+        <td><b>${safeText(textoServicioNombre(s))}</b></td>
+        <td>${safeText(textoServicioEspecialidad(s))}</td>
+        <td>${safeText(textoServicioDuracion(s))}</td>
+        <td>${safeText(textoServicioPrecio(s))}</td>
+        <td>${badge(s.estado || 'Activo')}</td>
+        <td><button class="btn-soft btn-sm" onclick="abrirModalServicio('${safeText(s.id_servicio || '')}')">Editar</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="6" class="text-center text-muted py-4">No hay servicios registrados.</td></tr>';
+
+    serviciosMobile.innerHTML = servicios.map(s=>`
+      <div class="mobile-card">
+        <b>${safeText(textoServicioNombre(s))}</b>
+        <div class="line"><span>Especialidad</span><span>${safeText(textoServicioEspecialidad(s))}</span></div>
+        <div class="line"><span>Duración</span><span>${safeText(textoServicioDuracion(s))}</span></div>
+        <div class="line"><span>Precio</span><span>${safeText(textoServicioPrecio(s))}</span></div>
+        <div class="line"><span>Estado</span><span>${badge(s.estado || 'Activo')}</span></div>
+        <button class="btn-soft w-100 mt-2" onclick="abrirModalServicio('${safeText(s.id_servicio || '')}')">Editar</button>
+      </div>
+    `).join('') || '<div class="mobile-card text-center text-muted">No hay servicios registrados.</div>';
+  }
+
+  function renderHorarios(){
+    document.getElementById('stPlantillas').textContent = horarios.length;
+
+    horariosBody.innerHTML = horarios.map(h => `
+      <tr>
+        <td><b>${safeText(textoPlantillaNombre(h))}</b><br><small class="text-muted fw-bold">${safeText(h.id_plantilla_horario || '—')}</small></td>
+        <td>${safeText(textoPlantillaHorario(h))}</td>
+        <td>${safeText(textoPlantillaIntervalo(h))}</td>
+        <td>${safeText(textoPlantillaTipo(h))}</td>
+        <td>${safeText(textoPlantillaDias(h))}</td>
+        <td>${badge(h.estado || 'Activo')}</td>
+        <td><button class="btn-soft btn-sm" onclick="abrirModalHorario('${safeText(h.id_plantilla_horario || '')}')">Editar</button></td>
+      </tr>
+    `).join('') || '<tr><td colspan="7" class="text-center text-muted py-4">No hay plantillas de horario registradas.</td></tr>';
+
+    horariosMobile.innerHTML = horarios.map(h => `
+      <div class="mobile-card">
+        <b>${safeText(textoPlantillaNombre(h))}</b>
+        <div class="line"><span>Código</span><span>${safeText(h.id_plantilla_horario || '—')}</span></div>
+        <div class="line"><span>Horario</span><span>${safeText(textoPlantillaHorario(h))}</span></div>
+        <div class="line"><span>Intervalo</span><span>${safeText(textoPlantillaIntervalo(h))}</span></div>
+        <div class="line"><span>Tipo</span><span>${safeText(textoPlantillaTipo(h))}</span></div>
+        <div class="line"><span>Días</span><span>${safeText(textoPlantillaDias(h))}</span></div>
+        <div class="line"><span>Estado</span><span>${badge(h.estado || 'Activo')}</span></div>
+        <button class="btn-soft w-100 mt-2" onclick="abrirModalHorario('${safeText(h.id_plantilla_horario || '')}')">Editar</button>
+      </div>
+    `).join('') || '<div class="mobile-card text-center text-muted">No hay plantillas de horario registradas.</div>';
+  }
+
+  function render(){
+    renderMedicos();
+    renderServicios();
+    renderHorarios();
+  }
+
+
+  function abrirModalHorario(id_plantilla_horario){
+    const h = horarios.find(x => String(x.id_plantilla_horario || '') === String(id_plantilla_horario || '')) || {};
+    modalTitle.textContent = id_plantilla_horario ? 'Editar plantilla de horario' : 'Nueva plantilla de horario';
+
+    modalBody.innerHTML = `
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nombre plantilla</label>
+          <input id="horNombre" class="form-control" value="${safeText(h.nombre_plantilla || '')}" placeholder="Ej. Tarde normal">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Inicio</label>
+          <input id="horInicio" class="form-control" value="${safeText(normalizarHoraVisual(h.hora_inicio || ''))}" placeholder="16:00">
+        </div>
+        <div class="col-md-3">
+          <label class="form-label fw-bold">Fin</label>
+          <input id="horFin" class="form-control" value="${safeText(normalizarHoraVisual(h.hora_fin || ''))}" placeholder="20:00">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Intervalo</label>
+          <select id="horIntervalo" class="form-select">
+            <option value="30" ${String(h.intervalo_minutos || '') === '30' || !h.intervalo_minutos ? 'selected' : ''}>30 min</option>
+            <option value="45" ${String(h.intervalo_minutos || '') === '45' ? 'selected' : ''}>45 min</option>
+            <option value="60" ${String(h.intervalo_minutos || '') === '60' ? 'selected' : ''}>60 min</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Tipo</label>
+          <select id="horTipo" class="form-select">
+            <option ${String(h.tipo_bloque || 'Consulta') === 'Consulta' ? 'selected' : ''}>Consulta</option>
+            <option ${String(h.tipo_bloque || '') === 'Procedimiento' ? 'selected' : ''}>Procedimiento</option>
+            <option ${String(h.tipo_bloque || '') === 'Ecografía' ? 'selected' : ''}>Ecografía</option>
+            <option ${String(h.tipo_bloque || '') === 'Bloque administrativo' ? 'selected' : ''}>Bloque administrativo</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Días que aplica</label>
+          <input id="horDias" class="form-control" value="${safeText(h.aplica_dia || '')}" placeholder="Ej. Lun-Vie / Domingo / Todos">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Estado</label>
+          <select id="horEstado" class="form-select">
+            <option ${String(h.estado || 'Activo') === 'Activo' ? 'selected' : ''}>Activo</option>
+            <option ${String(h.estado || '') === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-bold">Observación</label>
+          <textarea id="horObservacion" class="form-control" rows="2" placeholder="Observación interna">${safeText(h.observacion || '')}</textarea>
+        </div>
+      </div>
+      <div id="horMsg" class="notice mt-3">
+        Plantillas conectadas a la hoja <b>plantillas_horario</b>. Puede crear y editar plantillas sin afectar otras áreas.
+      </div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-line" onclick="cerrarModal()">Cancelar</button>
+        <button id="btnGuardarHorario" class="btn-auro" onclick="guardarPlantillaHorarioReal('${safeText(id_plantilla_horario || '')}')">
+          <i class="bi bi-save me-1"></i> Guardar plantilla
+        </button>
+      </div>
+    `;
+
+    modalConfig.classList.add('show');
+  }
+
+
+  async function guardarPlantillaHorarioReal(id_plantilla_horario){
+    const data = {
+      nombre_plantilla: document.getElementById('horNombre').value.trim(),
+      hora_inicio: normalizarHoraVisual(document.getElementById('horInicio').value.trim()),
+      hora_fin: normalizarHoraVisual(document.getElementById('horFin').value.trim()),
+      intervalo_minutos: document.getElementById('horIntervalo').value,
+      tipo_bloque: document.getElementById('horTipo').value,
+      aplica_dia: document.getElementById('horDias').value.trim(),
+      estado: document.getElementById('horEstado').value || 'Activo',
+      observacion: document.getElementById('horObservacion').value.trim()
+    };
+
+    if(id_plantilla_horario) data.id_plantilla_horario = id_plantilla_horario;
+
+    if(!data.nombre_plantilla){
+      document.getElementById('horMsg').innerHTML = 'Ingrese el nombre de la plantilla.';
+      return;
+    }
+
+    if(!data.hora_inicio || !data.hora_fin){
+      document.getElementById('horMsg').innerHTML = 'Ingrese hora de inicio y hora de fin.';
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarHorario');
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Guardando...';
+
+    try{
+      const accion = id_plantilla_horario ? 'editarPlantillaHorario' : 'guardarPlantillaHorario';
+      const r = await apiPost(accion, data);
+
+      if(!r.success) throw new Error(r.message || 'No se pudo guardar la plantilla de horario');
+
+      document.getElementById('horMsg').innerHTML = 'Plantilla de horario guardada correctamente en <b>plantillas_horario</b>.';
+      await cargarPlantillasHorario();
+
+      setTimeout(() => cerrarModal(), 700);
+    }catch(e){
+      console.error(e);
+      document.getElementById('horMsg').innerHTML = 'Error: ' + (e.message || e);
+      alert('Error al guardar plantilla: ' + (e.message || e));
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = old;
+    }
+  }
+
+  function abrirModal(tipo){
+    if(tipo === 'medico') return abrirModalMedico('');
+    if(tipo === 'servicio') return abrirModalServicio('');
+    if(tipo === 'horario') return abrirModalHorario('');
+
+    const title={horario:'Plantilla de horario'}[tipo]||'Registro';
+    modalTitle.textContent='Nuevo / editar '+title;
+    let body='';
+
+    if(tipo==='horario') body=`<div class="row g-3"><div class="col-md-6"><label class="form-label fw-bold">Nombre plantilla</label><input class="form-control" placeholder="Tarde normal"></div><div class="col-md-3"><label class="form-label fw-bold">Inicio</label><input class="form-control" placeholder="16:00"></div><div class="col-md-3"><label class="form-label fw-bold">Fin</label><input class="form-control" placeholder="20:00"></div><div class="col-md-6"><label class="form-label fw-bold">Intervalo</label><select class="form-select"><option>30 min</option><option>45 min</option><option>60 min</option></select></div><div class="col-md-6"><label class="form-label fw-bold">Tipo</label><select class="form-select"><option>Consulta</option><option>Procedimiento</option><option>Ecografía</option></select></div></div>`;
+
+    modalBody.innerHTML=body+`<div class="notice mt-3">Este módulo sigue visual por ahora. La conexión real será en la siguiente fase.</div><div class="d-flex justify-content-end gap-2 mt-3"><button class="btn-line" onclick="cerrarModal()">Cancelar</button><button class="btn-auro" onclick="alert('Guardado visual. Pendiente conectar este módulo.')">Guardar</button></div>`;
+    modalConfig.classList.add('show');
+  }
+
+  function servicioAsignadoActivo(id_medico, id_servicio){
+    return medicoServicios.some(r =>
+      String(r.id_medico || '') === String(id_medico || '') &&
+      String(r.id_servicio || '') === String(id_servicio || '') &&
+      String(r.estado || '').toLowerCase() === 'activo'
+    );
+  }
+
+  function relacionServicio(id_medico, id_servicio){
+    return medicoServicios.find(r =>
+      String(r.id_medico || '') === String(id_medico || '') &&
+      String(r.id_servicio || '') === String(id_servicio || '')
+    ) || null;
+  }
+
+  function serviciosMedicoHTML(id_medico){
+    if(!id_medico){
+      return `
+        <div class="notice mt-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Primero guarde el médico. Luego podrá editarlo y asignarle servicios.
+        </div>
+      `;
+    }
+
+    if(!servicios.length){
+      return `
+        <div class="notice mt-3">
+          <i class="bi bi-info-circle me-1"></i>
+          Todavía no hay servicios registrados. Cree servicios en la pestaña <b>Servicios</b>.
+        </div>
+      `;
+    }
+
+    const activos = servicios.filter(s => String(s.estado || 'Activo').toLowerCase() === 'activo' || String(s.estado || '') === '');
+
+    return `
+      <div class="mt-4 p-3" style="border:1px solid #f1d4e5;border-radius:18px;background:#fff7fb">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+          <div>
+            <label class="form-label fw-bold mb-1">Servicios asignados al médico</label>
+            <div class="text-muted small">Marque los servicios que este profesional puede atender.</div>
+          </div>
+          <span class="readonly-pill"><i class="bi bi-link-45deg"></i> medico_servicios</span>
+        </div>
+        <div class="row g-2">
+          ${activos.map(s => {
+            const idServicio = String(s.id_servicio || '').trim();
+            const checked = servicioAsignadoActivo(id_medico, idServicio) ? 'checked' : '';
+            return `
+              <div class="col-md-6">
+                <label class="d-flex align-items-start gap-2 p-2 bg-white rounded-3 border">
+                  <input class="form-check-input mt-1 medico-servicio-check" type="checkbox" value="${safeText(idServicio)}" ${checked}>
+                  <span>
+                    <b>${safeText(textoServicioNombre(s))}</b>
+                    <br><small class="text-muted">${safeText(textoServicioEspecialidad(s))} · ${safeText(textoServicioDuracion(s))}</small>
+                  </span>
+                </label>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  async function abrirModalMedico(id_medico){
+    await cargarMedicoServicios();
+    const m = medicos.find(x => String(x.id_medico || '') === String(id_medico || '')) || {};
+    modalTitle.textContent = id_medico ? 'Editar médico' : 'Nuevo médico';
+
+    modalBody.innerHTML = `
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nombres</label>
+          <input id="medNombres" class="form-control" value="${safeText(m.nombres || '')}" placeholder="Ej. Aurora">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Apellidos</label>
+          <input id="medApellidos" class="form-control" value="${safeText(m.apellidos || '')}" placeholder="Ej. Andagoya">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Especialidad principal</label>
+          <input id="medEspecialidad" class="form-control" value="${safeText(m.especialidad_principal || '')}" placeholder="Ej. Ginecología">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Estado</label>
+          <select id="medEstado" class="form-select">
+            <option ${String(m.estado || 'Activo') === 'Activo' ? 'selected' : ''}>Activo</option>
+            <option ${String(m.estado || '') === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Registro SENESCYT</label>
+          <input id="medSenescyt" class="form-control" value="${safeText(m.registro_senescyt || '')}" placeholder="Opcional">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Registro MSP</label>
+          <input id="medMsp" class="form-control" value="${safeText(m.registro_msp || '')}" placeholder="Opcional">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Teléfono</label>
+          <input id="medTelefono" class="form-control" value="${safeText(m.telefono || '')}" placeholder="0999999999">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Email</label>
+          <input id="medEmail" class="form-control" value="${safeText(m.email || '')}" placeholder="correo@ejemplo.com">
+        </div>
+      </div>
+
+      ${serviciosMedicoHTML(id_medico)}
+
+      <div id="medMsg" class="notice mt-3">Este formulario guarda en <b>medicos</b> y, si corresponde, actualiza la relación en <b>medico_servicios</b>.</div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-line" onclick="cerrarModal()">Cancelar</button>
+        <button id="btnGuardarMedico" class="btn-auro" onclick="guardarMedicoReal('${safeText(id_medico || '')}')">
+          <i class="bi bi-save me-1"></i> Guardar médico
+        </button>
+      </div>
+    `;
+    modalConfig.classList.add('show');
+  }
+
+  function abrirModalServicio(id_servicio){
+    const s = servicios.find(x => String(x.id_servicio || '') === String(id_servicio || '')) || {};
+    modalTitle.textContent = id_servicio ? 'Editar servicio' : 'Nuevo servicio';
+
+    modalBody.innerHTML = `
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nombre del servicio</label>
+          <input id="servNombre" class="form-control" value="${safeText(s.nombre_servicio || '')}" placeholder="Ej. Consulta ginecológica">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Especialidad / Área</label>
+          <input id="servEspecialidad" class="form-control" value="${safeText(s.id_especialidad || '')}" placeholder="Ej. Ginecología">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Duración</label>
+          <select id="servDuracion" class="form-select">
+            <option value="30" ${String(s.duracion_minutos || '') === '30' ? 'selected' : ''}>30 min</option>
+            <option value="45" ${String(s.duracion_minutos || '') === '45' ? 'selected' : ''}>45 min</option>
+            <option value="60" ${String(s.duracion_minutos || '') === '60' || !s.duracion_minutos ? 'selected' : ''}>60 min</option>
+            <option value="90" ${String(s.duracion_minutos || '') === '90' ? 'selected' : ''}>90 min</option>
+            <option value="120" ${String(s.duracion_minutos || '') === '120' ? 'selected' : ''}>120 min</option>
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Precio</label>
+          <input id="servPrecio" class="form-control" value="${safeText(s.precio || '')}" placeholder="Opcional">
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-bold">Estado</label>
+          <select id="servEstado" class="form-select">
+            <option ${String(s.estado || 'Activo') === 'Activo' ? 'selected' : ''}>Activo</option>
+            <option ${String(s.estado || '') === 'Inactivo' ? 'selected' : ''}>Inactivo</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Orden</label>
+          <input id="servOrden" type="number" class="form-control" value="${safeText(s.orden || '')}" placeholder="Ej. 1">
+        </div>
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Requiere consentimiento</label>
+          <select id="servConsentimiento" class="form-select">
+            <option value="No" ${String(s.requiere_consentimiento || 'No') === 'No' ? 'selected' : ''}>No</option>
+            <option value="Sí" ${String(s.requiere_consentimiento || '') === 'Sí' ? 'selected' : ''}>Sí</option>
+          </select>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-bold">Descripción</label>
+          <textarea id="servDescripcion" class="form-control" rows="2" placeholder="Descripción breve del servicio">${safeText(s.descripcion || '')}</textarea>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-bold">Observación interna</label>
+          <textarea id="servObservacion" class="form-control" rows="2" placeholder="Opcional">${safeText(s.observacion || '')}</textarea>
+        </div>
+      </div>
+      <div id="servMsg" class="notice mt-3">Este formulario ya guarda en la hoja <b>servicios</b>.</div>
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-line" onclick="cerrarModal()">Cancelar</button>
+        <button id="btnGuardarServicio" class="btn-auro" onclick="guardarServicioReal('${safeText(id_servicio || '')}')">
+          <i class="bi bi-save me-1"></i> Guardar servicio
+        </button>
+      </div>
+    `;
+    modalConfig.classList.add('show');
+  }
+
+  async function guardarServiciosMedico(id_medico){
+    if(!id_medico) return;
+
+    const checks = Array.from(document.querySelectorAll('.medico-servicio-check'));
+    if(!checks.length) return;
+
+    const operaciones = [];
+
+    checks.forEach(ch => {
+      const idServicio = String(ch.value || '').trim();
+      if(!idServicio) return;
+
+      const rel = relacionServicio(id_medico, idServicio);
+      const activo = rel && String(rel.estado || '').toLowerCase() === 'activo';
+
+      if(ch.checked && !rel){
+        operaciones.push(apiPost('guardarMedicoServicio', {
+          id_medico: id_medico,
+          id_servicio: idServicio,
+          estado: 'Activo'
+        }));
+      }else if(ch.checked && rel && !activo){
+        operaciones.push(apiPost('editarMedicoServicio', {
+          id_relacion: rel.id_relacion,
+          id_medico: id_medico,
+          id_servicio: idServicio,
+          estado: 'Activo'
+        }));
+      }else if(!ch.checked && rel && activo){
+        operaciones.push(apiPost('editarMedicoServicio', {
+          id_relacion: rel.id_relacion,
+          id_medico: id_medico,
+          id_servicio: idServicio,
+          estado: 'Inactivo'
+        }));
+      }
+    });
+
+    if(operaciones.length){
+      const resultados = await Promise.all(operaciones);
+      const fallo = resultados.find(r => !r.success);
+      if(fallo) throw new Error(fallo.message || 'No se pudo guardar la relación médico-servicio');
+    }
+
+    await cargarMedicoServicios();
+  }
+
+  async function guardarMedicoReal(id_medico){
+    const data = {
+      nombres: document.getElementById('medNombres').value.trim(),
+      apellidos: document.getElementById('medApellidos').value.trim(),
+      especialidad_principal: document.getElementById('medEspecialidad').value.trim(),
+      registro_senescyt: document.getElementById('medSenescyt').value.trim(),
+      registro_msp: document.getElementById('medMsp').value.trim(),
+      telefono: document.getElementById('medTelefono').value.trim(),
+      email: document.getElementById('medEmail').value.trim(),
+      estado: document.getElementById('medEstado').value || 'Activo'
+    };
+
+    if(id_medico) data.id_medico = id_medico;
+
+    if(!data.nombres || !data.apellidos){
+      document.getElementById('medMsg').innerHTML = 'Ingrese nombres y apellidos.';
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarMedico');
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Guardando...';
+
+    try{
+      const accion = id_medico ? 'editarMedico' : 'guardarMedico';
+      const r = await apiPost(accion, data);
+
+      if(!r.success) throw new Error(r.message || 'No se pudo guardar el médico');
+
+      const idFinalMedico = id_medico || r.id || data.id_medico || '';
+      await guardarServiciosMedico(idFinalMedico);
+
+      document.getElementById('medMsg').innerHTML = 'Médico y servicios asignados guardados correctamente.';
+      await cargarMedicos();
+
+      setTimeout(() => cerrarModal(), 700);
+    }catch(e){
+      console.error(e);
+      document.getElementById('medMsg').innerHTML = 'Error: ' + (e.message || e);
+      alert('Error al guardar médico: ' + (e.message || e));
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = old;
+    }
+  }
+
+  async function guardarServicioReal(id_servicio){
+    const data = {
+      nombre_servicio: document.getElementById('servNombre').value.trim(),
+      id_especialidad: document.getElementById('servEspecialidad').value.trim(),
+      descripcion: document.getElementById('servDescripcion').value.trim(),
+      duracion_minutos: document.getElementById('servDuracion').value,
+      precio: document.getElementById('servPrecio').value.trim(),
+      estado: document.getElementById('servEstado').value || 'Activo',
+      orden: document.getElementById('servOrden').value.trim(),
+      requiere_consentimiento: document.getElementById('servConsentimiento').value || 'No',
+      observacion: document.getElementById('servObservacion').value.trim()
+    };
+
+    if(id_servicio) data.id_servicio = id_servicio;
+
+    if(!data.nombre_servicio){
+      document.getElementById('servMsg').innerHTML = 'Ingrese el nombre del servicio.';
+      return;
+    }
+
+    const btn = document.getElementById('btnGuardarServicio');
+    const old = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Guardando...';
+
+    try{
+      const accion = id_servicio ? 'editarServicio' : 'guardarServicio';
+      const r = await apiPost(accion, data);
+
+      if(!r.success) throw new Error(r.message || 'No se pudo guardar el servicio');
+
+      document.getElementById('servMsg').innerHTML = 'Servicio guardado correctamente.';
+      await cargarServicios();
+
+      setTimeout(() => cerrarModal(), 700);
+    }catch(e){
+      console.error(e);
+      document.getElementById('servMsg').innerHTML = 'Error: ' + (e.message || e);
+      alert('Error al guardar servicio: ' + (e.message || e));
+    }finally{
+      btn.disabled = false;
+      btn.innerHTML = old;
+    }
+  }
+
+
+
+  function alternarClaveCampo(idCampo, boton){
+    const campo = document.getElementById(idCampo);
+    if(!campo) return;
+
+    const mostrar = campo.type === 'password';
+    campo.type = mostrar ? 'text' : 'password';
+
+    if(boton){
+      const icono = boton.querySelector('i');
+      if(icono){
+        icono.className = mostrar ? 'bi bi-eye-slash' : 'bi bi-eye';
+      }
+      boton.setAttribute('aria-label', mostrar ? 'Ocultar contraseña' : 'Mostrar contraseña');
+      boton.setAttribute('aria-pressed', mostrar ? 'true' : 'false');
+    }
+
+    campo.focus();
+  }
+
+  function abrirModalCambioClave(){
+    const modal = document.getElementById('modalConfig');
+    const title = document.getElementById('modalTitle');
+    const body = document.getElementById('modalBody');
+
+    if(!modal || !title || !body){
+      alert('No se encontró el modal de Configuración.');
+      return;
+    }
+
+    title.textContent = 'Cambiar mi contraseña';
+
+    body.innerHTML = `
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label fw-bold">Contraseña actual</label>
+          <div class="auro-password-wrap">
+            <input id="claveActualUsuario" type="password" class="form-control" autocomplete="current-password" placeholder="Ingrese su contraseña actual">
+            <button class="auro-password-eye" type="button" onclick="alternarClaveCampo('claveActualUsuario',this)" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Nueva contraseña</label>
+          <div class="auro-password-wrap">
+            <input id="claveNuevaUsuario" type="password" class="form-control" autocomplete="new-password" placeholder="Mínimo 8 caracteres">
+            <button class="auro-password-eye" type="button" onclick="alternarClaveCampo('claveNuevaUsuario',this)" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <label class="form-label fw-bold">Confirmar nueva contraseña</label>
+          <div class="auro-password-wrap">
+            <input id="claveConfirmarUsuario" type="password" class="form-control" autocomplete="new-password" placeholder="Repita la nueva contraseña">
+            <button class="auro-password-eye" type="button" onclick="alternarClaveCampo('claveConfirmarUsuario',this)" aria-label="Mostrar contraseña"><i class="bi bi-eye"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <div id="cambioClaveMsg" class="notice mt-3">
+        La nueva contraseña debe tener al menos 8 caracteres.
+      </div>
+
+      <div class="d-flex justify-content-end gap-2 mt-3">
+        <button class="btn-line" type="button" onclick="cerrarModal()">Cancelar</button>
+        <button id="btnGuardarCambioClave" class="btn-auro" type="button" onclick="guardarCambioClaveUsuario()">
+          <i class="bi bi-shield-lock me-1"></i> Guardar nueva contraseña
+        </button>
+      </div>
+    `;
+
+    modal.classList.add('show');
+
+    setTimeout(() => {
+      const campo = document.getElementById('claveActualUsuario');
+      if(campo) campo.focus();
+    }, 80);
+  }
+
+  async function guardarCambioClaveUsuario(){
+    const claveActual = document.getElementById('claveActualUsuario')?.value || '';
+    const claveNueva = document.getElementById('claveNuevaUsuario')?.value || '';
+    const confirmar = document.getElementById('claveConfirmarUsuario')?.value || '';
+    const mensaje = document.getElementById('cambioClaveMsg');
+    const boton = document.getElementById('btnGuardarCambioClave');
+
+    function mostrarCambioClave(texto, error){
+      if(!mensaje) return;
+      mensaje.className = error ? 'notice mt-3 text-danger' : 'notice mt-3';
+      mensaje.innerHTML = (error
+        ? '<i class="bi bi-exclamation-triangle me-1"></i>'
+        : '<i class="bi bi-check-circle me-1"></i>') + safeText(texto);
+    }
+
+    if(!claveActual){
+      mostrarCambioClave('Ingrese su contraseña actual.', true);
+      return;
+    }
+
+    if(claveNueva.length < 8){
+      mostrarCambioClave('La nueva contraseña debe tener al menos 8 caracteres.', true);
+      return;
+    }
+
+    if(claveNueva !== confirmar){
+      mostrarCambioClave('La confirmación no coincide con la nueva contraseña.', true);
+      return;
+    }
+
+    if(claveActual === claveNueva){
+      mostrarCambioClave('La nueva contraseña debe ser diferente de la actual.', true);
+      return;
+    }
+
+    const token = sessionStorage.getItem('iasyn_seguridad_token') || '';
+    if(!token){
+      mostrarCambioClave('No existe una sesión activa. Inicie sesión nuevamente.', true);
+      return;
+    }
+
+    const original = boton ? boton.innerHTML : '';
+
+    if(boton){
+      boton.disabled = true;
+      boton.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i> Guardando...';
+    }
+
+    try{
+      const respuesta = await fetch(API_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify({
+          accion: 'cambiarClaveUsuario',
+          data: {
+            clave_actual: claveActual,
+            clave_nueva: claveNueva,
+            token: token
+          }
+        })
+      });
+
+      if(!respuesta.ok){
+        throw new Error('Error de conexión HTTP ' + respuesta.status + '.');
+      }
+
+      const resultado = await respuesta.json();
+
+      if(!resultado || resultado.success !== true){
+        throw new Error(
+          resultado && resultado.message
+            ? resultado.message
+            : 'No se pudo cambiar la contraseña.'
+        );
+      }
+
+      // Actualiza la bandera local para que la sesión ya no figure como temporal.
+      try{
+        const rawSesion = sessionStorage.getItem('iasyn_seguridad_sesion');
+        if(rawSesion){
+          const sesion = JSON.parse(rawSesion);
+          sesion.requiere_cambio_clave = false;
+          sessionStorage.setItem('iasyn_seguridad_sesion', JSON.stringify(sesion));
+        }
+
+        const rawUsuario = sessionStorage.getItem('iasyn_seguridad_usuario');
+        if(rawUsuario){
+          const usuario = JSON.parse(rawUsuario);
+          usuario.requiere_cambio_clave = 'NO';
+          sessionStorage.setItem('iasyn_seguridad_usuario', JSON.stringify(usuario));
+        }
+      }catch(errorSesion){
+        console.warn('No se pudo actualizar la bandera local de cambio de clave:', errorSesion);
+      }
+
+      mostrarCambioClave(
+        resultado.message || 'Contraseña actualizada correctamente.',
+        false
+      );
+
+      ['claveActualUsuario','claveNuevaUsuario','claveConfirmarUsuario'].forEach(id => {
+        const campo = document.getElementById(id);
+        if(campo) campo.value = '';
+      });
+
+      setTimeout(() => cerrarModal(), 900);
+
+    }catch(error){
+      console.error('Error cambiando contraseña:', error);
+      mostrarCambioClave(
+        error && error.message
+          ? error.message
+          : 'No se pudo cambiar la contraseña.',
+        true
+      );
+    }finally{
+      if(boton){
+        boton.disabled = false;
+        boton.innerHTML = original;
+      }
+    }
+  }
+
+  function cerrarModal(event){
+    if(event && event.target!==event.currentTarget)return;
+    modalConfig.classList.remove('show');
+  }
+
+  document.addEventListener('DOMContentLoaded', async () => {
+    const acceso = await validarAccesoConfiguracion_();
+    if(!acceso) return;
+
+    const seguridad = acceso.seguridad;
+    const usuario = acceso.usuario;
+
+    pintarSesionConfiguracion_(seguridad, usuario);
+
+    if(seguridad.tienePermiso('configuracion_medicos', usuario)){
+      await cargarMedicos();
+      await cargarMedicoServicios();
+    }
+
+    if(seguridad.tienePermiso('configuracion_servicios', usuario)){
+      await cargarServicios();
+    }
+
+    if(seguridad.tienePermiso('configuracion_horarios', usuario)){
+      await cargarPlantillasHorario();
+    }
+
+    if(seguridad.tienePermiso('configuracion_centro', usuario)){
+      await cargarConfiguracionCentro();
+    }
+  });
+
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
+</script>
+<script src="config-centro.js"></script>
+<script src="config-finanzas.js"></script>
+<script src="seguridad.js?v=20260907-ENDPOINT-CENTRAL-V1"></script>
+<script src="auditoria_clinica.js?v=2.0.0"></script>
+
+</body>
+</html>
