@@ -7202,6 +7202,7 @@ function auroHistoriaFechaRegistro(registro){
    HORA LITERAL DE GOOGLE SHEETS - SOLO MÓDULOS INDEPENDIENTES
    ------------------------------------------------------------
    ALCANCE ESTRICTO:
+   - hc_antecedentes
    - hc_estetica
    - hc_diagnostico
    - hc_plan
@@ -7216,13 +7217,14 @@ function auroHistoriaFechaRegistro(registro){
    - NO guarda.
    - NO escribe localStorage.
    - NO modifica timestamps persistidos.
-   - NO altera Anamnesis, Antecedentes ni Obstetricia.
+   - NO altera Anamnesis ni Obstetricia.
    - Examen físico conserva íntegro su guardado; solo cambia cómo se presenta
      el timestamp que su resolver REAL ya leyó desde Google Sheets.
    - Reutiliza la fecha que el resolver REAL del módulo ya leyó.
 ============================================================ */
 function auroHistoriaModuloHoraLiteralSheets(idModulo){
   return new Set([
+    'hc_antecedentes',
     'hc_estetica',
     'hc_diagnostico',
     'hc_plan',
@@ -7240,7 +7242,7 @@ function auroHistoriaFormatearFechaLiteralSheets(valor){
   /*
     Google Sheets / Apps Script puede serializar una celda horaria como ISO
     terminado en Z aunque la hora de pared almacenada en la hoja sea la que
-    debe mostrarse al médico. Para estos seis módulos se conservan literalmente
+    debe mostrarse al médico. Para estos módulos se conservan literalmente
     los componentes de fecha/hora y NO se aplica conversión UTC.
   */
   const iso = raw.match(
@@ -7687,7 +7689,10 @@ async function auroHistoriaRefrescarEstadoConsultaActiva(idModulo){
     if(token !== window.__auroEstadoRealModuloToken) return;
 
     if(estadoHistoria.existe){
-      const fecha = auroHistoriaFormatearFechaReal(estadoHistoria.fecha);
+      const fecha = auroHistoriaFormatearFechaPorModulo(
+        estadoHistoria.fecha,
+        modulo
+      );
       auroHistoriaMostrarEstado(
         nombreModulo +
         (fecha ? ' · Última actualización: ' + fecha : ' · Historia clínica guardada.'),
