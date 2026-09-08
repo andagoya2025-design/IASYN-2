@@ -2,7 +2,7 @@
    IASYN CLINICAL ERP
    Archivo de reemplazo propuesto: informe_historico.js
    Entrega externa: TXT completo para revisión manual
-   Versión propuesta: 2.4.0-DEPURACION-DOCUMENTAL-ORDENADA-ANTIRREGRESIVO
+   Versión propuesta: 2.5.3-CABECERA-LOGO-SCROLLBAR-ANTIRREGRESIVO
    Fecha: 2026-08-31
    Baseline leído en GitHub (SOLO LECTURA):
    informe_historico.js v2.3.0-RENDIMIENTO-LECTURA-CONTROLADA-ANTIRREGRESIVO
@@ -62,6 +62,26 @@
    - Los registros sin id_atencion se muestran agrupados como "Otros registros
      clínicos del paciente" sin atribuirlos artificialmente a una consulta.
    - No se implementan cambios de permisos en esta fase; seguridad queda intacta.
+
+   CORRECCIÓN QUIRÚRGICA V2.5.1 — SOBRE BASELINE VISUAL BUENO
+   - Conserva estructura visual/documental V2.4 como base.
+   - PA sistólica/diastólica se desglosa solo en presentación cuando el valor
+     persistido tiene formato inequívoco sistólica/diastólica.
+   - Fechas y horas mixtas se normalizan solo para lectura/orden.
+   - Se conservan todos los GET y el límite de 8 solicitudes simultáneas.
+   - Se mejora legibilidad de subtítulos y barra del visor sin tocar PDF.
+
+   CORRECCIÓN QUIRÚRGICA V2.5.2 — SOLO VISOR RESPONSIVE MÓVIL
+   - Conserva íntegro el documento clínico, escritorio, impresión y PDF.
+   - En pantallas de hasta 760 px permite que "Ajustar ancho" reduzca la hoja
+     por debajo del antiguo límite visual de 75%, hasta el ancho real del móvil.
+   - En escritorio el zoom mínimo continúa siendo 75%; no cambia su conducta.
+   - No modifica lecturas GET, asociaciones, validación, contenido ni backend.
+
+   CORRECCIÓN QUIRÚRGICA V2.5.3 — CABECERA / LOGO / SCROLLBAR
+   - El logo institucional falla de forma limpia si la imagen no está disponible.
+   - La barra del visor es más visible en escritorio y compacta en móvil.
+   - SOLO presentación; no modifica impresión/PDF, backend ni persistencia.
 ============================================================================ */
 (function(){
   'use strict';
@@ -71,7 +91,7 @@
     return;
   }
 
-  const VERSION = '2.4.0-DEPURACION-DOCUMENTAL-ORDENADA-ANTIRREGRESIVO';
+  const VERSION = '2.5.3-CABECERA-LOGO-SCROLLBAR-ANTIRREGRESIVO';
   const MODULO = 'IASYN INFORME HISTÓRICO';
 
   /*
@@ -300,6 +320,21 @@
   }
 
   function fechaISO(v){
+    if(v instanceof Date && Number.isFinite(v.getTime())){
+      const y = v.getFullYear();
+      const m = String(v.getMonth()+1).padStart(2,'0');
+      const d = String(v.getDate()).padStart(2,'0');
+      return `${y}-${m}-${d}`;
+    }
+
+    if(typeof v === 'number' && Number.isFinite(v) && v >= 1 && v < 100000){
+      const ms = Math.round((v - 25569) * 86400000);
+      const d = new Date(ms);
+      if(Number.isFinite(d.getTime())){
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+      }
+    }
+
     const raw = txt(v);
     if(!raw) return '';
     let m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -317,18 +352,46 @@
   }
 
   function horaVista(v){
+    if(typeof v === 'number' && Number.isFinite(v) && v >= 0 && v < 1){
+      const minutos = Math.round(v * 24 * 60) % (24 * 60);
+      return `${String(Math.floor(minutos/60)).padStart(2,'0')}:${String(minutos%60).padStart(2,'0')}`;
+    }
     const raw = txt(v);
     if(!raw) return '';
-    const m = raw.match(/(?:T|\s)?(\d{1,2}):(\d{2})/);
+    const m = raw.match(/(?:T|\s|^)(\d{1,2}):(\d{2})(?::\d{2})?/);
     return m ? `${String(m[1]).padStart(2,'0')}:${m[2]}` : raw;
   }
 
-  function timestampAtencion(a){
-    const f = fechaISO(a?.fecha_atencion || a?.fecha_consulta || a?.fecha || a?.creado_en);
+  function timestampClinico(fechaValor, horaValor=''){
+    const f = fechaISO(fechaValor);
     if(!f) return 0;
-    const h = horaVista(a?.hora_atencion || a?.hora_consulta || a?.hora) || '00:00';
-    const n = new Date(`${f}T${h}:00`).getTime();
+
+    let h = horaVista(horaValor);
+    if(!h){
+      const raw = txt(fechaValor);
+      const m = raw.match(/(?:T|\s)(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+      h = m ? `${String(m[1]).padStart(2,'0')}:${m[2]}:${String(m[3] || '00').padStart(2,'0')}` : '00:00:00';
+    }
+
+    const hm = txt(h).match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    const hora = hm ? Number(hm[1]) : 0;
+    const minuto = hm ? Number(hm[2]) : 0;
+    const segundo = hm ? Number(hm[3] || 0) : 0;
+    const [y,m,d] = f.split('-').map(Number);
+    const n = Date.UTC(y,m-1,d,hora,minuto,segundo);
     return Number.isFinite(n) ? n : 0;
+  }
+
+  function timestampRegistro(r){
+    if(!r || typeof r !== 'object') return 0;
+    return timestampClinico(r.actualizado_en) || timestampClinico(r.creado_en) || 0;
+  }
+
+  function timestampAtencion(a){
+    return timestampClinico(
+      a?.fecha_atencion || a?.fecha_consulta || a?.fecha || a?.creado_en,
+      a?.hora_atencion || a?.hora_consulta || a?.hora || ''
+    );
   }
 
   function esAtencionClinicaValida(a){
@@ -649,8 +712,8 @@
     return (historias || [])
       .filter(tiene)
       .sort((a,b)=>{
-        const ta = new Date(a?.actualizado_en || a?.fecha_apertura || a?.creado_en || 0).getTime() || 0;
-        const tb = new Date(b?.actualizado_en || b?.fecha_apertura || b?.creado_en || 0).getTime() || 0;
+        const ta = timestampClinico(a?.actualizado_en || a?.fecha_apertura || a?.creado_en);
+        const tb = timestampClinico(b?.actualizado_en || b?.fecha_apertura || b?.creado_en);
         return tb-ta;
       })[0] || historias?.[0] || null;
   }
@@ -955,9 +1018,12 @@
   }
 
   function ultimoRegistro(lista){
-    return (lista || []).slice().sort((a,b)=>
-      txt(b?.actualizado_en || b?.creado_en).localeCompare(txt(a?.actualizado_en || a?.creado_en))
-    )[0] || null;
+    return (lista || []).slice().sort((a,b)=>{
+      const tb = timestampRegistro(b);
+      const ta = timestampRegistro(a);
+      if(tb !== ta) return tb-ta;
+      return txt(b?.actualizado_en || b?.creado_en).localeCompare(txt(a?.actualizado_en || a?.creado_en));
+    })[0] || null;
   }
 
   function contenidoEquivalente(a,b){
@@ -1156,11 +1222,25 @@
     const ex = examen || {};
     const elegir = (claves,o={}) => vital(ex,claves,o) || vital(pre,claves,o);
 
+    /*
+      Espejo de examenfisico.js: el dato persistido sigue siendo
+      presion_arterial = "sistólica/diastólica". Solo se desglosa en presentación
+      cuando el formato es inequívoco.
+    */
+    const paRegistrada = elegir(['presion_arterial','pa']);
+    const paMatch = txt(paRegistrada).match(/^\s*(\d{2,3})\s*\/\s*(\d{2,3})\s*(?:mmHg)?\s*$/i);
+    const presion = paMatch
+      ? [
+          ['Presión arterial sistólica',`${paMatch[1]} mmHg`],
+          ['Presión arterial diastólica',`${paMatch[2]} mmHg`]
+        ]
+      : (valorClinico(paRegistrada) ? [['Presión arterial',paRegistrada]] : []);
+
     return [
       ['Peso',elegir(['peso_kg','peso'])],
       ['Talla',elegir(['talla_cm','talla'])],
       ['IMC',elegir(['imc'])],
-      ['Presión arterial',elegir(['presion_arterial','pa'])],
+      ...presion,
       ['Frecuencia cardíaca',elegir(['frecuencia_cardiaca','fc'])],
       ['Frecuencia respiratoria',elegir(['frecuencia_respiratoria','fr'])],
       ['Temperatura',elegir(['temperatura'])],
@@ -1263,6 +1343,9 @@
       const fa = fechaISO(a?.fecha || a?.fecha_atencion || a?.fecha_registro || a?.creado_en);
       const fb = fechaISO(b?.fecha || b?.fecha_atencion || b?.fecha_registro || b?.creado_en);
       if(fa && fb && fa !== fb) return fa.localeCompare(fb);
+      const ta = timestampRegistro(a);
+      const tb = timestampRegistro(b);
+      if(ta !== tb) return ta-tb;
       return txt(a?.creado_en || a?.actualizado_en).localeCompare(txt(b?.creado_en || b?.actualizado_en));
     });
 
@@ -1526,7 +1609,12 @@
     const registros = (lista || []).filter(r=>{
       return [r?.peso_kg,r?.peso,r?.imc,r?.porcentaje_grasa,r?.grasa_corporal,r?.masa_muscular,r?.musculo,r?.porcentaje_agua,r?.agua_corporal]
         .some(v=>valorClinico(v));
-    }).sort((a,b)=>fechaISO(a.fecha||a.fecha_registro||a.creado_en).localeCompare(fechaISO(b.fecha||b.fecha_registro||b.creado_en)));
+    }).sort((a,b)=>{
+      const ta = timestampClinico(a?.fecha || a?.fecha_registro || a?.creado_en);
+      const tb = timestampClinico(b?.fecha || b?.fecha_registro || b?.creado_en);
+      if(ta !== tb) return ta-tb;
+      return txt(a?.fecha || a?.fecha_registro || a?.creado_en).localeCompare(txt(b?.fecha || b?.fecha_registro || b?.creado_en));
+    });
 
     if(!registros.length) return '';
 
@@ -1714,7 +1802,7 @@
     return `<div class="aih-doc">
       <div class="aih-topline">
         <div class="aih-confidential">CONFIDENCIAL</div>
-        <div class="aih-doc-code">Informe clínico longitudinal · HISTÓRICO V2.4</div>
+        <div class="aih-doc-code">Informe clínico longitudinal · HISTÓRICO V2.5.1</div>
       </div>
 
       <header class="aih-header">
@@ -1724,7 +1812,7 @@
           ${valorClinico(inst.razon_social)?`<small>${esc(inst.razon_social)}${valorClinico(inst.ruc)?` · RUC ${esc(inst.ruc)}`:''}</small>`:(valorClinico(inst.ruc)?`<small>RUC ${esc(inst.ruc)}</small>`:'')}
         </div>
         <div class="aih-brand">
-          ${inst.logo ? `<img src="${esc(inst.logo)}" alt="">` : ''}
+          ${inst.logo ? `<img src="${esc(inst.logo)}" alt="" onerror="this.hidden=true;this.removeAttribute('src')">` : ''}
           <div><b>${esc(inst.nombre_comercial)}</b>${valorClinico(inst.subtitulo)?`<span>${esc(inst.subtitulo)}</span>`:''}</div>
         </div>
       </header>
@@ -1759,7 +1847,7 @@
         <div>
           <span>Emitido: ${esc(generado)}</span>
           <span>Atenciones con contenido clínico incluidas: ${numeroVisible}</span>
-          <span>Versión documental: HISTORICO_V2.4</span>
+          <span>Versión documental: HISTORICO_V2.5.1</span>
         </div>
       </footer>
 
@@ -1798,14 +1886,14 @@
       /* Distribución fluida: el último dato crece y no deja celdas vacías. */
       .aih-mini-grid{display:flex;flex-wrap:wrap;gap:0 12px;align-items:stretch}
       .aih-mini{flex:1 1 145px;min-width:0;border-bottom:1px solid var(--aih-line-soft);padding:4px 1px 5px}
-      .aih-mini span{display:block;font-size:7.3px;text-transform:uppercase;color:#8a516f;font-weight:900;letter-spacing:.045em;margin-bottom:1px}
+      .aih-mini span{display:block;font-size:8.2px;text-transform:uppercase;color:#7a174f;font-weight:900;letter-spacing:.035em;margin-bottom:2px}
       .aih-mini b{display:block;font-size:9.5px;line-height:1.35;overflow-wrap:anywhere;color:#222b38}
       .aih-document-summary .aih-mini{border-bottom:0;padding-top:3px;padding-bottom:3px}
 
       .aih-major{margin:13px 0 0}
       .aih-major>h2,.aih-signature>h2{font-size:12.7px;color:#1f2937;margin:0 0 7px;border-bottom:1px solid #d8c3cf;padding:0 0 5px;font-weight:900}
       .aih-major-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;border-bottom:1px solid #d8c3cf;padding-bottom:5px;margin-bottom:8px}
-      .aih-major-heading span{font-size:7.4px;color:var(--aih-primary);text-transform:uppercase;letter-spacing:.09em;font-weight:900;white-space:nowrap}
+      .aih-major-heading span{font-size:8.2px;color:var(--aih-primary);text-transform:uppercase;letter-spacing:.075em;font-weight:900;white-space:nowrap}
       .aih-major-heading h2{font-size:12.8px;color:#1f2937;margin:0;font-weight:900;text-align:right}
 
       /* Antecedentes: grupos sin reserva de espacio y tarjetas fluidas. */
@@ -1823,7 +1911,7 @@
       .aih-attention:first-of-type{border-top:0}
       .aih-attention-head{display:flex;align-items:center;gap:9px;background:linear-gradient(90deg,var(--aih-primary-soft),#fff 72%);border-left:3px solid var(--aih-primary);padding:7px 8px;margin-bottom:5px}
       .aih-attention-index{width:25px;height:25px;flex:0 0 25px;border-radius:50%;display:grid;place-items:center;background:#fff;border:1px solid #d8c3cf;color:var(--aih-primary);font-size:9px;font-weight:900}
-      .aih-attention-title{min-width:0}.aih-attention-kicker{display:block;font-size:7.2px;text-transform:uppercase;letter-spacing:.075em;color:var(--aih-primary);font-weight:900;margin-bottom:1px}
+      .aih-attention-title{min-width:0}.aih-attention-kicker{display:block;font-size:8.1px;text-transform:uppercase;letter-spacing:.06em;color:var(--aih-primary);font-weight:900;margin-bottom:2px}
       .aih-attention-head h2{font-size:11.7px;margin:0;color:#111827;line-height:1.2}.aih-attention-head h2 small{font-size:9.2px;color:#64748b;font-weight:700}
       .aih-attention>.aih-mini-grid{padding:0 4px 3px}
 
@@ -1832,7 +1920,7 @@
       .aih-special{background:#fff;border-left:2px solid #dfc4d3;padding-left:8px}
       .aih-record{padding:3px 0 5px;border-bottom:1px solid var(--aih-line-soft)}.aih-record:last-child{border-bottom:0}.aih-record-title{font-size:8.6px;color:#6d3655;margin:1px 0 3px;font-weight:900}
       .aih-block{margin:5px 0 7px;break-inside:auto;page-break-inside:auto}
-      .aih-block h3{font-size:8.7px;margin:0 0 2px;color:#6d3655;font-weight:900}
+      .aih-block h3{font-size:9.4px;margin:0 0 3px;color:#6d3655;font-weight:900}
       .aih-block-body{font-size:9.5px;line-height:1.48;color:#273244;overflow-wrap:anywhere}
       .aih-danger h3{color:var(--aih-danger)}.aih-danger .aih-block-body{color:#7f1d1d}
 
@@ -1878,6 +1966,7 @@
      - NO consulta backend ni dispara eventos clínicos.
   ======================================================================== */
   const VISOR_ZOOM_MIN = 0.75;
+  const VISOR_ZOOM_MIN_MOVIL = 0.30;
   const VISOR_ZOOM_MAX = 2.00;
   const VISOR_ZOOM_STEP = 0.10;
 
@@ -1885,10 +1974,29 @@
     return document.querySelector('#aihPreviewDocument .aih-doc');
   }
 
+  /*
+    V2.5.2 — BLINDAJE RESPONSIVE:
+    escritorio conserva exactamente el mínimo histórico de 75%.
+    Solo móvil (<=760 px) puede bajar más para que una hoja A4 entre completa
+    en el ancho físico disponible, siguiendo el principio ya probado del visor
+    de Certificados. Esto afecta únicamente la vista previa.
+  */
+  function visorEsMovil(){
+    try{
+      return window.matchMedia?.('(max-width:760px)')?.matches === true;
+    }catch(_e){
+      return Number(window.innerWidth || 0) <= 760;
+    }
+  }
+
+  function visorZoomMinimo(){
+    return visorEsMovil() ? VISOR_ZOOM_MIN_MOVIL : VISOR_ZOOM_MIN;
+  }
+
   function visorZoomNormalizado(valor){
     const n = Number(valor);
     if(!Number.isFinite(n)) return 1.25;
-    return Math.min(VISOR_ZOOM_MAX, Math.max(VISOR_ZOOM_MIN, n));
+    return Math.min(VISOR_ZOOM_MAX, Math.max(visorZoomMinimo(), n));
   }
 
   function actualizarControlesVisor(){
@@ -1899,7 +2007,7 @@
     const zoom = visorZoomNormalizado(state.visor?.zoom);
 
     if(etiqueta) etiqueta.textContent = `${Math.round(zoom * 100)}%`;
-    if(btnMenos) btnMenos.disabled = zoom <= VISOR_ZOOM_MIN + 0.001;
+    if(btnMenos) btnMenos.disabled = zoom <= visorZoomMinimo() + 0.001;
     if(btnMas) btnMas.disabled = zoom >= VISOR_ZOOM_MAX - 0.001;
     if(btnAjustar){
       btnAjustar.classList.toggle('active', state.visor?.ajusteAncho === true);
@@ -1942,6 +2050,10 @@
       const anchoDocumento = doc.getBoundingClientRect().width || doc.offsetWidth || 1;
       const margenSeguro = window.innerWidth <= 760 ? 16 : 44;
       const anchoDisponible = Math.max(1, body.clientWidth - margenSeguro);
+      /*
+        En móvil visorZoomNormalizado admite escala < 75%, necesaria para que
+        210 mm A4 entren realmente en iPhone/Android. En escritorio no cambia.
+      */
       const zoom = visorZoomNormalizado(anchoDisponible / anchoDocumento);
       aplicarZoomVisor(zoom,{ajusteAncho:true});
       body.scrollLeft = Math.max(0, scrollIzq);
@@ -1958,9 +2070,16 @@
       .aih-preview-head{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:10px 13px;background:#fff;border-bottom:1px solid #e5e7eb;min-height:58px}.aih-preview-head h3{margin:0;font-size:16px;color:#111827}.aih-preview-head small{display:block;color:#64748b;margin-top:2px}.aih-preview-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}.aih-preview-actions button{border-radius:9px;padding:8px 11px;font-weight:800;border:1px solid #d8dee6;background:#fff;color:#344054;cursor:pointer;white-space:nowrap}.aih-preview-actions .primary{background:#8b1e5a;color:#fff;border-color:#8b1e5a}.aih-preview-actions button:disabled{opacity:.45;cursor:not-allowed}.aih-preview-actions button.active{background:#fff7fb;color:#8b1e5a;border-color:#d9a5c2}
       .aih-zoom-group{display:inline-flex;align-items:center;gap:0;border:1px solid #d8dee6;border-radius:10px;overflow:hidden;background:#fff;height:36px}.aih-zoom-group button{height:34px;min-width:36px;padding:0 10px;border:0;border-radius:0;border-right:1px solid #e5e7eb;font-size:16px;line-height:1}.aih-zoom-group button:last-child{border-right:0}.aih-zoom-label{min-width:58px;text-align:center;font-size:11px;font-weight:900;color:#475569;padding:0 8px;user-select:none}
       .aih-validation{padding:7px 13px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;gap:6px;flex-wrap:wrap}.aih-validation span{font-size:10px;border:1px solid #e5e7eb;background:#f8fafc;border-radius:999px;padding:5px 8px;font-weight:750;color:#475569}.aih-validation .ok{background:#f0fdf4;border-color:#bbf7d0;color:#166534}.aih-validation .warn{background:#fff7ed;border-color:#fed7aa;color:#9a3412}.aih-validation .bad{background:#fff1f2;border-color:#fecdd3;color:#9f1239}
-      .aih-preview-body{overflow:auto;padding:0;background:#dde3ea;overscroll-behavior:contain}.aih-preview-stage{min-width:100%;width:max-content;min-height:100%;padding:18px 22px 46px}.aih-preview-stage .aih-doc{margin:0 auto 42px;transform-origin:top center}.aih-loading{display:grid;place-items:center;height:100%;min-height:320px;color:#64748b}.aih-loading-card{background:#fff;padding:22px 26px;border-radius:16px;box-shadow:0 12px 35px rgba(15,23,42,.12);text-align:center;max-width:580px}.aih-spinner{width:32px;height:32px;border:4px solid #f1d9e7;border-top-color:#8b1e5a;border-radius:50%;margin:0 auto 11px;animation:aihspin .75s linear infinite}@keyframes aihspin{to{transform:rotate(360deg)}}
+      .aih-preview-body{overflow:scroll;padding:0;background:#dde3ea;overscroll-behavior:contain;scrollbar-gutter:stable;scrollbar-width:auto;scrollbar-color:#526174 #e7ebf0}
+      /* V2.5.3: scrollbar SOLO del visor. Más visible/manipulable en escritorio; no toca la barra del navegador. */
+      #aihPreviewBody::-webkit-scrollbar,.aih-preview-body::-webkit-scrollbar{width:24px;height:24px}
+      #aihPreviewBody::-webkit-scrollbar-track,.aih-preview-body::-webkit-scrollbar-track{background:#e7ebf0;border-radius:14px}
+      #aihPreviewBody::-webkit-scrollbar-thumb,.aih-preview-body::-webkit-scrollbar-thumb{background:#526174;border:4px solid #e7ebf0;border-radius:14px;min-height:72px;min-width:72px}
+      #aihPreviewBody::-webkit-scrollbar-thumb:hover,.aih-preview-body::-webkit-scrollbar-thumb:hover{background:#334155}
+      #aihPreviewBody::-webkit-scrollbar-corner,.aih-preview-body::-webkit-scrollbar-corner{background:#e7ebf0}
+      .aih-preview-stage{min-width:100%;width:max-content;min-height:100%;padding:18px 22px 46px}.aih-preview-stage .aih-doc{margin:0 auto 42px;transform-origin:top center}.aih-loading{display:grid;place-items:center;height:100%;min-height:320px;color:#64748b}.aih-loading-card{background:#fff;padding:22px 26px;border-radius:16px;box-shadow:0 12px 35px rgba(15,23,42,.12);text-align:center;max-width:580px}.aih-spinner{width:32px;height:32px;border:4px solid #f1d9e7;border-top-color:#8b1e5a;border-radius:50%;margin:0 auto 11px;animation:aihspin .75s linear infinite}@keyframes aihspin{to{transform:rotate(360deg)}}
       @media(max-width:980px){.aih-preview-head{align-items:flex-start}.aih-preview-actions{max-width:70%}.aih-preview-actions button{padding:7px 9px;font-size:11px}.aih-zoom-group{height:34px}.aih-zoom-group button{height:32px}.aih-validation{max-height:70px;overflow:auto}}
-      @media(max-width:760px){.aih-overlay{padding:0}.aih-preview-shell{width:100vw;height:100vh;border-radius:0}.aih-preview-head{align-items:flex-start;flex-direction:column;padding:9px 10px}.aih-preview-actions{width:100%;max-width:none;justify-content:flex-start}.aih-preview-actions>button{flex:1 1 auto}.aih-zoom-group{flex:0 0 auto}.aih-preview-body{padding:0}.aih-preview-stage{padding:8px 8px 34px}.aih-preview-stage .aih-doc{margin:0 auto 30px}.aih-validation{padding:6px 8px;max-height:64px}.aih-mini-grid,.aih-kv-grid,.aih-ant-grid{grid-template-columns:1fr}.aih-line{grid-template-columns:1fr;gap:2px}}
+      @media(max-width:760px){.aih-overlay{padding:0}.aih-preview-shell{width:100vw;height:100vh;border-radius:0}.aih-preview-head{align-items:flex-start;flex-direction:column;padding:9px 10px}.aih-preview-actions{width:100%;max-width:none;justify-content:flex-start}.aih-preview-actions>button{flex:1 1 auto}.aih-zoom-group{flex:0 0 auto}.aih-preview-body{padding:0}.aih-preview-stage{padding:8px 8px 34px}.aih-preview-stage .aih-doc{margin:0 auto 30px}.aih-validation{padding:6px 8px;max-height:64px}.aih-mini-grid,.aih-kv-grid,.aih-ant-grid{grid-template-columns:1fr}.aih-line{grid-template-columns:1fr;gap:2px}#aihPreviewBody::-webkit-scrollbar,.aih-preview-body::-webkit-scrollbar{width:12px;height:12px}#aihPreviewBody::-webkit-scrollbar-thumb,.aih-preview-body::-webkit-scrollbar-thumb{border-width:3px;min-height:44px;min-width:44px}}
       @media(max-width:460px){.aih-preview-actions{gap:5px}.aih-preview-actions button{font-size:10.5px;padding:7px 8px}.aih-zoom-label{min-width:50px;padding:0 5px}.aih-zoom-group button{min-width:32px;padding:0 8px}.aih-preview-head small{font-size:10px}}
     `;
     document.head.appendChild(s);
@@ -2113,20 +2232,21 @@
     const atencionesP = cargarAtencionesPaciente(idPaciente);
     const medicosP = cargarMedicos();
     const configuracionP = cargarConfiguracion();
-    const globalesP = cargarColeccionesGlobales();
 
     const atenciones = await atencionesP;
 
     if(token !== state.token) throw new Error('La generación anterior fue cancelada por un nuevo contexto.');
 
     /*
-      No existe límite por "grupo de atención". Cada cargarModuloAtencion puede
-      encolar sus 7 GET, pero la cola privada permite como máximo
-      MAX_GET_CONCURRENCIA solicitudes reales simultáneas.
+      V2.5.1 — optimización conservadora:
+      se conservan todos los GET y MAX_GET_CONCURRENCIA = 8. Las colecciones
+      globales arrancan después de conocer las atenciones, evitando ocupar antes
+      la cola con lecturas globales que todavía no pueden asociarse.
     */
     const detalleAtencionesP = Promise.all(
       (atenciones || []).map(cargarModuloAtencion)
     );
+    const globalesP = cargarColeccionesGlobales();
 
     const [paciente, historias, medicos, configuracion, globalesBase, detalleAtenciones] = await Promise.all([
       pacienteP,
