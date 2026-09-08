@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#7a174f">
+  <title>IASYN · Instalación del sistema</title>
+  <style>
+    :root{
+      --primary:#7a174f;
+      --primary2:#a3256c;
+      --primary3:#c23b83;
+      --soft:#fff7fb;
+      --bg:#f8fafc;
+      --text:#172033;
+      --muted:#64748b;
+      --line:#e8d7e2;
+      --ok:#166534;
+      --okbg:#f0fdf4;
+      --warn:#92400e;
+      --warnbg:#fffbeb;
+      --danger:#b42318;
+      --dangerbg:#fff1f2;
+      --card:#fff;
+      --shadow:0 22px 60px rgba(63,20,48,.12);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      min-height:100vh;
+      font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      background:
+        radial-gradient(circle at 10% 15%,rgba(194,59,131,.10),transparent 28%),
+        radial-gradient(circle at 92% 8%,rgba(122,23,79,.08),transparent 30%),
+        linear-gradient(145deg,#fff 0%,#fff9fc 48%,#f8fafc 100%);
+      color:var(--text);
+    }
+    .wrap{width:min(1080px,calc(100% - 30px));margin:34px auto 56px}
+    .hero{
+      padding:28px;
+      border-radius:28px;
+      background:linear-gradient(135deg,var(--primary),var(--primary2) 62%,var(--primary3));
+      color:#fff;
+      box-shadow:var(--shadow);
+      position:relative;
+      overflow:hidden;
+    }
+    .hero:after{
+      content:"";
+      position:absolute;
+      width:260px;height:260px;border-radius:50%;
+      right:-90px;top:-110px;background:rgba(255,255,255,.10)
+    }
+    .hero small{font-weight:850;letter-spacing:.08em;text-transform:uppercase;opacity:.82}
+    .hero h1{font-size:clamp(30px,5vw,50px);margin:8px 0 10px;line-height:1;letter-spacing:-.04em}
+    .hero p{margin:0;max-width:760px;line-height:1.6;color:rgba(255,255,255,.88)}
+    .grid{display:grid;grid-template-columns:1.25fr .75fr;gap:18px;margin-top:18px}
+    .card{
+      background:rgba(255,255,255,.97);
+      border:1px solid var(--line);
+      border-radius:24px;
+      padding:22px;
+      box-shadow:0 12px 36px rgba(15,23,42,.06)
+    }
+    .card h2{margin:0 0 5px;font-size:21px}
+    .card p{margin:0 0 18px;color:var(--muted);line-height:1.55}
+    .field{margin-bottom:16px}
+    label{display:block;font-size:13px;font-weight:850;margin-bottom:7px}
+    input{
+      width:100%;
+      min-height:48px;
+      border:1px solid #d9c7d3;
+      border-radius:14px;
+      padding:11px 13px;
+      font:inherit;
+      color:#111827;
+      background:#fff;
+      outline:none
+    }
+    input:focus{border-color:var(--primary3);box-shadow:0 0 0 4px rgba(194,59,131,.10)}
+    .help{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.45}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+    button{
+      min-height:46px;border:0;border-radius:14px;padding:10px 16px;
+      font:inherit;font-weight:850;cursor:pointer
+    }
+    .primary{background:linear-gradient(135deg,var(--primary),var(--primary3));color:#fff}
+    .secondary{background:#fff7fb;color:var(--primary);border:1px solid #edcade}
+    .line{background:#fff;color:#475569;border:1px solid #dbe2ea}
+    button:disabled{opacity:.55;cursor:not-allowed}
+    .status-list{display:grid;gap:10px}
+    .status{
+      display:grid;grid-template-columns:32px 1fr auto;gap:10px;align-items:center;
+      border:1px solid #e8edf3;border-radius:16px;padding:12px;background:#fff
+    }
+    .dot{
+      width:30px;height:30px;border-radius:10px;display:grid;place-items:center;
+      background:#f1f5f9;color:#475569;font-weight:900
+    }
+    .status strong{font-size:13.5px}
+    .status small{display:block;color:var(--muted);margin-top:2px;line-height:1.35}
+    .pill{font-size:11px;font-weight:900;border-radius:999px;padding:5px 8px;background:#f1f5f9;color:#475569}
+    .status.ok .dot,.pill.ok{background:var(--okbg);color:var(--ok)}
+    .status.warn .dot,.pill.warn{background:var(--warnbg);color:var(--warn)}
+    .status.bad .dot,.pill.bad{background:var(--dangerbg);color:var(--danger)}
+    .notice{margin-top:16px;padding:13px 14px;border-radius:15px;border:1px solid #dbe2ea;background:#f8fafc;color:#475569;line-height:1.5;font-size:13px}
+    .notice.ok{border-color:#bbf7d0;background:var(--okbg);color:var(--ok)}
+    .notice.bad{border-color:#fecdd3;background:var(--dangerbg);color:var(--danger)}
+    .credentials{
+      display:none;margin-top:16px;padding:16px;border-radius:18px;
+      border:1px solid #fde68a;background:#fffbeb
+    }
+    .credentials h3{margin:0 0 10px;font-size:17px;color:#92400e}
+    .cred-row{display:grid;grid-template-columns:120px 1fr auto;gap:8px;align-items:center;margin-top:8px}
+    code{
+      display:block;overflow-wrap:anywhere;padding:9px 10px;border-radius:10px;
+      background:#fff;border:1px solid #e5e7eb;color:#111827
+    }
+    .frontend{
+      display:none;margin-top:18px;padding:18px;border-radius:20px;border:1px solid #c7d2fe;background:#f5f7ff
+    }
+    .frontend h3{margin:0 0 8px;color:#3730a3}
+    .frontend p{margin:0 0 10px;color:#475569;font-size:13px}
+    .footer{margin-top:18px;color:#7c8798;font-size:12px;text-align:center;line-height:1.5}
+    .spinner{display:none;width:16px;height:16px;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+    .loading .spinner{display:inline-block}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @media(max-width:850px){.grid{grid-template-columns:1fr}.wrap{margin-top:18px}.hero,.card{border-radius:20px}}
+    @media(max-width:540px){.cred-row{grid-template-columns:1fr}.actions button{width:100%}}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="hero">
+      <small>IASYN Clinical ERP · Setup V1</small>
+      <h1>Instalación del sistema</h1>
+      <p>
+        Asistente técnico independiente. Conecta la copia del Google Sheet, prepara
+        Google Drive, registra los IDs propios de esta instalación y valida el backend.
+        No modifica pacientes, historias, atenciones, finanzas ni la identidad del centro.
+      </p>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Datos técnicos de la instalación</h2>
+        <p>Complete únicamente los datos de infraestructura. La identidad del centro continúa en Configuración → Datos del centro.</p>
+
+        <div class="field">
+          <label for="webAppUrl">URL del Web App de esta copia *</label>
+          <input id="webAppUrl" type="url" autocomplete="off"
+                 placeholder="https://script.google.com/macros/s/XXXXXXXX/exec">
+          <div class="help">Use la URL <b>/exec</b> de la implementación propia de esta instalación.</div>
+        </div>
+
+        <div class="field">
+          <label for="spreadsheetRef">Google Sheet de esta instalación *</label>
+          <input id="spreadsheetRef" autocomplete="off"
+                 placeholder="Pegue URL o ID del Google Sheet">
+          <div class="help">Puede pegar la URL completa de Sheets o solamente su ID.</div>
+        </div>
+
+        <div class="field">
+          <label for="driveRootRef">Carpeta raíz de Drive (opcional)</label>
+          <input id="driveRootRef" autocomplete="off"
+                 placeholder="Pegue URL/ID o déjelo vacío para crearla automáticamente">
+          <div class="help">Si está vacío, IASYN crea una carpeta raíz propia en el Drive del propietario del Web App.</div>
+        </div>
+
+        <div class="actions">
+          <button id="btnVerificar" class="secondary" type="button">Verificar conexión</button>
+          <button id="btnInstalar" class="primary" type="button">
+            <span class="spinner"></span>
+            <span class="btn-text">Instalar IASYN</span>
+          </button>
+        </div>
+
+        <div id="mensaje" class="notice" aria-live="polite">
+          Ingrese la URL del Web App y el Google Sheet para comenzar.
+        </div>
+
+        <div id="credenciales" class="credentials">
+          <h3>Credenciales iniciales de Seguridad</h3>
+          <div class="help">Solo aparecen si la hoja <b>usuarios</b> estaba vacía y se creó el Administrador inicial mediante la función de Seguridad existente.</div>
+          <div class="cred-row">
+            <strong>Usuario</strong>
+            <code id="credUsuario">—</code>
+            <button class="line" type="button" data-copy-target="credUsuario">Copiar</button>
+          </div>
+          <div class="cred-row">
+            <strong>Clave temporal</strong>
+            <code id="credClave">—</code>
+            <button class="line" type="button" data-copy-target="credClave">Copiar</button>
+          </div>
+        </div>
+
+        <div id="frontendPaso" class="frontend">
+          <h3>Último paso del frontend</h3>
+          <p>El backend ya quedó instalado. En el archivo central <b>iasyn-config.js</b>, la única línea específica del clon debe usar esta URL:</p>
+          <code id="lineaConfig">—</code>
+          <div class="actions">
+            <button id="btnCopiarConfig" class="secondary" type="button">Copiar línea</button>
+            <button id="btnIrLogin" class="line" type="button">Abrir login</button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="card">
+        <h2>Diagnóstico</h2>
+        <p>El instalador cambia de “pendiente” a “correcto” conforme valida cada dependencia.</p>
+
+        <div class="status-list">
+          <div id="stWebApp" class="status">
+            <div class="dot">1</div>
+            <div><strong>Web App</strong><small>Endpoint propio /exec</small></div>
+            <span class="pill">Pendiente</span>
+          </div>
+          <div id="stSheet" class="status">
+            <div class="dot">2</div>
+            <div><strong>Base de datos</strong><small>IASYN_SPREADSHEET_ID</small></div>
+            <span class="pill">Pendiente</span>
+          </div>
+          <div id="stConexion" class="status">
+            <div class="dot">3</div>
+            <div><strong>Conexión</strong><small>getSS() → Sheet instalado</small></div>
+            <span class="pill">Pendiente</span>
+          </div>
+          <div id="stDrive" class="status">
+            <div class="dot">4</div>
+            <div><strong>Google Drive</strong><small>Raíz y estructura técnica</small></div>
+            <span class="pill">Pendiente</span>
+          </div>
+          <div id="stDocumentos" class="status">
+            <div class="dot">5</div>
+            <div><strong>Documentos clínicos</strong><small>Carpeta propia registrada</small></div>
+            <span class="pill">Pendiente</span>
+          </div>
+          <div id="stSeguridad" class="status">
+            <div class="dot">6</div>
+            <div><strong>Seguridad</strong><small>Usuarios / bootstrap existente</small></div>
+            <span class="pill">Pendiente</span>
+          </div>
+          <div id="stFinal" class="status">
+            <div class="dot">✓</div>
+            <div><strong>Instalación</strong><small>Estado técnico final</small></div>
+            <span class="pill">Pendiente</span>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="footer">
+      IASYN Setup V1 · El instalador no administra nombre, logo, médicos, servicios,
+      finanzas ni permisos cotidianos. Esas funciones permanecen en sus módulos propietarios.
+    </div>
+  </main>
+
+  <script src="instalacion.js?v=1.0.0"></script>
+</body>
+</html>
