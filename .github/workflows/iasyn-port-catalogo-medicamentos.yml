@@ -1,4 +1,4 @@
-name: IASYN 2 - Port catálogo medicamentos completo
+name: IASYN 2 - Port catalogo medicamentos completo
 
 on:
   push:
@@ -30,31 +30,17 @@ jobs:
           test "$(git hash-object /tmp/catalogo_donor.js)" = "f0fd21d93c7b0cab44c4e76f304d67af3e0db90b"
 
       - name: Adapt donor locally to IASYN 2 without changing clinical data
-        shell: python
         run: |
+          python - <<'PY'
           from pathlib import Path
-
           donor = Path('/tmp/catalogo_donor.js').read_text(encoding='utf-8')
           marker = '\n})();\n'
           if marker not in donor:
-              raise SystemExit('No se encontró cierre esperado del catálogo donor')
-
-          alias = r'''
-
-    /* ============================================================
-       IASYN 2 - ALIASES LOCALES DE COMPATIBILIDAD
-       ------------------------------------------------------------
-       El contenido clínico superior es una copia local exacta del
-       catálogo probado de Aurosanax Prueba. Estas dos referencias
-       exponen ese MISMO catálogo bajo la API principal de IASYN 2.
-       No existe lectura remota, dependencia entre instalaciones,
-       escritura clínica ni modificación de id_atencion.
-    ============================================================ */
-    window.MEDICAMENTOS_IASYN_BASE = window.MEDICAMENTOS_AUROSANAX_BASE;
-    window.IASYN_CATALOGO_MEDICAMENTOS = window.AUROSANAX_CATALOGO_MEDICAMENTOS;
-'''
+              raise SystemExit('No se encontro cierre esperado del catalogo donor')
+          alias = "\n\n    /* IASYN 2 - aliases locales de compatibilidad. El catalogo es una copia local; no existe dependencia remota. */\n    window.MEDICAMENTOS_IASYN_BASE = window.MEDICAMENTOS_AUROSANAX_BASE;\n    window.IASYN_CATALOGO_MEDICAMENTOS = window.AUROSANAX_CATALOGO_MEDICAMENTOS;\n"
           adapted = donor.replace(marker, alias + marker, 1)
           Path('catalogo_medicamentos.js').write_text(adapted, encoding='utf-8')
+          PY
 
       - name: JavaScript syntax check
         run: node --check catalogo_medicamentos.js
@@ -64,66 +50,32 @@ jobs:
           node <<'NODE'
           const fs = require('fs');
           const vm = require('vm');
-
           function load(path){
             const ctx = { window: {} };
             vm.createContext(ctx);
             vm.runInContext(fs.readFileSync(path,'utf8'), ctx, {filename:path});
             return ctx.window;
           }
-
           const before = load('/tmp/catalogo_iasyn_pre.js');
           const after  = load('catalogo_medicamentos.js');
           const donor  = load('/tmp/catalogo_donor.js');
-
           const beforeList = before.IASYN_CATALOGO_MEDICAMENTOS.obtenerTodos();
           const afterList  = after.IASYN_CATALOGO_MEDICAMENTOS.obtenerTodos();
           const donorList  = donor.AUROSANAX_CATALOGO_MEDICAMENTOS.obtenerTodos();
-
           const fields = ['med','pres','via','frec','dur','ind'];
           const stableBefore = beforeList.slice(0,15).map(x => Object.fromEntries(fields.map(k => [k, x[k] ?? ''])));
           const stableAfter  = afterList.slice(0,15).map(x => Object.fromEntries(fields.map(k => [k, x[k] ?? ''])));
-          if (JSON.stringify(stableBefore) !== JSON.stringify(stableAfter)) {
-            throw new Error('Regresión detectada en los 15 medicamentos históricos');
-          }
-
-          if (JSON.stringify(afterList) !== JSON.stringify(donorList)) {
-            throw new Error('El contenido IASYN adaptado no coincide 1:1 con el donor completo');
-          }
-
-          if (after.MEDICAMENTOS_IASYN_BASE !== after.MEDICAMENTOS_AUROSANAX_BASE) {
-            throw new Error('Alias local IASYN de colección no apunta al mismo catálogo');
-          }
-          if (after.IASYN_CATALOGO_MEDICAMENTOS !== after.AUROSANAX_CATALOGO_MEDICAMENTOS) {
-            throw new Error('Alias local IASYN de API no apunta al mismo catálogo');
-          }
-
-          const required = [
-            'Bencilpenicilina benzatínica',
-            'Cefazolina',
-            'Vitamina B12',
-            'Mio-inositol + D-quiro-inositol',
-            'Acetilcisteína mucolítico'
-          ];
-          for (const name of required) {
-            if (!afterList.some(x => x.med === name)) throw new Error('Falta medicamento esperado: ' + name);
-          }
-
+          if (JSON.stringify(stableBefore) !== JSON.stringify(stableAfter)) throw new Error('Regresion en los 15 medicamentos historicos');
+          if (JSON.stringify(afterList) !== JSON.stringify(donorList)) throw new Error('IASYN no coincide 1:1 con donor completo');
+          if (after.MEDICAMENTOS_IASYN_BASE !== after.MEDICAMENTOS_AUROSANAX_BASE) throw new Error('Alias IASYN coleccion incorrecto');
+          if (after.IASYN_CATALOGO_MEDICAMENTOS !== after.AUROSANAX_CATALOGO_MEDICAMENTOS) throw new Error('Alias IASYN API incorrecto');
+          const required = ['Bencilpenicilina benzatínica','Cefazolina','Vitamina B12','Mio-inositol + D-quiro-inositol','Acetilcisteína mucolítico'];
+          for (const name of required) if (!afterList.some(x => x.med === name)) throw new Error('Falta medicamento esperado: ' + name);
           const clotr = after.IASYN_CATALOGO_MEDICAMENTOS.obtenerVariantes('Clotrimazol');
-          if (!clotr.length) throw new Error('Clotrimazol perdió variantes');
           const cef = after.IASYN_CATALOGO_MEDICAMENTOS.obtenerVariantes('Ceftriaxona');
-          if (cef.length < 2) throw new Error('Ceftriaxona perdió variantes');
-
-          console.log(JSON.stringify({
-            beforeCount: beforeList.length,
-            afterCount: afterList.length,
-            donorCount: donorList.length,
-            stable15: true,
-            donorParity: true,
-            aliasesIASYN: true,
-            clotrimazolVariants: clotr.length,
-            ceftriaxonaVariants: cef.length
-          }, null, 2));
+          if (!clotr.length) throw new Error('Clotrimazol perdio variantes');
+          if (cef.length < 2) throw new Error('Ceftriaxona perdio variantes');
+          console.log(JSON.stringify({beforeCount:beforeList.length,afterCount:afterList.length,donorCount:donorList.length,stable15:true,donorParity:true,aliasesIASYN:true,clotrimazolVariants:clotr.length,ceftriaxonaVariants:cef.length}, null, 2));
           NODE
 
       - name: Assert no unrelated tracked file changed
