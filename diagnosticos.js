@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.5.14-IASYN2 - persistencia verificada + estado visual de guardado
+ Versión: 1.5.15-IASYN2 - flujo abierto estable + persistencia verificada + CIE-10 profesional
  Fecha: 2026-07-24
  -----------------------------------------------------------------------
  OBJETIVO
@@ -43,7 +43,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'IASYN DIAGNÓSTICOS';
-  const VERSION = '1.5.14-IASYN2';
+  const VERSION = '1.5.15-IASYN2';
   /*
     COMPATIBILIDAD TEMPORAL IASYN:
     Las claves de sessionStorage/localStorage, eventos aurosanax:* y nombres
@@ -54,7 +54,7 @@
     de forma aislada.
   */
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260909_dx_persistencia_cie10_visual_estado_guardado_v2';
+  const RELEASE = '20260909_dx_flujo_abierto_estable_persistencia_cie10_v3';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -488,12 +488,19 @@
   }
 
   function auroDxInstalarPresentacionCie10(){
-    /* Solo sustituye funciones públicas de búsqueda/render; no persistencia. */
+    /*
+      IASYN 2 — instalación inmediata, catálogo remoto diferido.
+      ---------------------------------------------------------
+      La presentación con punto queda disponible sin esperar red.
+      El catálogo maestro remoto se carga al buscar un diagnóstico o después
+      de pintar primero los diagnósticos de la atención. Así la lectura clínica
+      inicial no compite con una consulta adicional a Apps Script.
+      No modifica persistencia ni el código compacto interno.
+    */
     window.buscarDiagnosticoCie10 = auroDxBuscarDiagnosticoCie10IASYN;
     window.renderDiagnosticosSeleccionados = auroDxRenderSeleccionadosIASYN;
 
     try{ auroDxRenderSeleccionadosIASYN(); }catch(_e){}
-    Promise.resolve(auroDxCargarCatalogoMaestro()).catch(() => {});
     return true;
   }
   /* ==========================================================
@@ -1349,9 +1356,6 @@
     const estadoTexto = ctx.editable ? 'Atención activa y editable' : 'Consulta histórica · Solo lectura';
     const totalTexto = c.total === 1 ? '1 diagnóstico registrado' : c.total + ' diagnósticos registrados';
     const asociadosTexto = c.asociados === 1 ? '1 asociado' : c.asociados + ' asociados';
-    const cambiosDiagnosticoPendientes =
-      state.edicionDiagnosticoAbierto === true &&
-      auroDxCambiosDiagnosticoPendientesVisual === true;
 
     box.innerHTML = `
       <div class="auro-dx-contexto-main">
@@ -1381,12 +1385,10 @@
         </div>
       ` : `
         <div class="auro-dx-correccion-actions">
-          <span class="auro-dx-correccion-note ${state.edicionDiagnosticoAbierto ? (cambiosDiagnosticoPendientes ? 'auro-dx-note-pendiente' : 'auro-dx-note-edicion') : 'auro-dx-note-protegido'}">
-            <i class="bi ${state.edicionDiagnosticoAbierto ? (cambiosDiagnosticoPendientes ? 'bi-exclamation-circle-fill' : 'bi-pencil-square') : 'bi-shield-lock'}"></i>
+          <span class="auro-dx-correccion-note ${state.edicionDiagnosticoAbierto ? 'auro-dx-note-edicion' : 'auro-dx-note-protegido'}">
+            <i class="bi ${state.edicionDiagnosticoAbierto ? 'bi-pencil-square' : 'bi-shield-lock'}"></i>
             ${state.edicionDiagnosticoAbierto
-              ? (cambiosDiagnosticoPendientes
-                  ? 'Hay cambios de diagnóstico sin guardar. Verifique y presione “Guardar diagnóstico”.'
-                  : 'Edición activa. No hay cambios de diagnóstico pendientes.')
+              ? 'Edición activa. Modifique los CIE-10 y luego presione “Guardar cambios del diagnóstico”.'
               : (state.diagnosticos.length
                   ? 'Diagnóstico protegido. Presione “Editar diagnóstico” para habilitar los campos CIE-10.'
                   : 'Diagnóstico protegido. Presione “Agregar diagnóstico” para habilitar los campos CIE-10.')}
@@ -1395,14 +1397,11 @@
           ${state.edicionDiagnosticoAbierto ? `
             <button
               type="button"
-              class="auro-dx-btn ${cambiosDiagnosticoPendientes ? 'auro-dx-pending' : 'auro-dx-clean'}"
+              class="auro-dx-btn auro-dx-save-ready"
               id="auroDxGuardarCambiosAbiertosBtn"
               onclick="window.auroDxGuardarCambiosAtencionAbierta()"
-              title="${cambiosDiagnosticoPendientes ? 'Existen cambios de diagnóstico pendientes de guardar' : 'No hay cambios pendientes; puede verificar nuevamente el diagnóstico si lo desea'}"
             >
-              ${cambiosDiagnosticoPendientes
-                ? '<i class="bi bi-exclamation-circle-fill"></i> Cambios sin guardar · Guardar diagnóstico'
-                : '<i class="bi bi-check2-circle"></i> Sin cambios · Verificar diagnóstico'}
+              <i class="bi bi-save"></i> Guardar cambios del diagnóstico
             </button>
             <button
               type="button"
@@ -1481,115 +1480,6 @@
   let auroDxGuardandoCambiosAbiertos = false;
   let auroDxGuardadoAbiertoToken = 0;
 
-  /*
-    IASYN 2 — ESTADO VISUAL DE EDICIÓN CIE-10 (SOLO INTERFAZ)
-    ----------------------------------------------------------
-    - NO añade un segundo guardado.
-    - NO modifica lectura, limpieza, id_atencion, id_examen ni timestamps.
-    - NO cambia la verificación autoritativa posterior al guardado.
-    - Solo compara la firma del editor con la firma tomada al iniciar edición
-      para informar al médico si existen cambios pendientes.
-  */
-  let auroDxFirmaEdicionDiagnosticoBase = '';
-  let auroDxCambiosDiagnosticoPendientesVisual = false;
-  let auroDxObservadorVisualEdicionInstalado = false;
-
-  function auroDxFirmaEditorDiagnosticoActual(){
-    try{
-      return auroDxFirmaDiagnosticos(diagnosticosLocales());
-    }catch(_e){
-      return '';
-    }
-  }
-
-  function auroDxReiniciarEstadoVisualEdicionDiagnostico(){
-    auroDxFirmaEdicionDiagnosticoBase = auroDxFirmaEditorDiagnosticoActual();
-    auroDxCambiosDiagnosticoPendientesVisual = false;
-  }
-
-  function auroDxHayCambiosVisualesDiagnostico(){
-    if(state.edicionDiagnosticoAbierto !== true) return false;
-    return auroDxFirmaEditorDiagnosticoActual() !== auroDxFirmaEdicionDiagnosticoBase;
-  }
-
-  function auroDxRefrescarEstadoVisualEdicionDiagnostico(){
-    if(
-      state.edicionDiagnosticoAbierto !== true ||
-      auroDxGuardandoCambiosAbiertos === true
-    ){
-      return false;
-    }
-
-    const pendientes = auroDxHayCambiosVisualesDiagnostico();
-    if(pendientes === auroDxCambiosDiagnosticoPendientesVisual){
-      return pendientes;
-    }
-
-    auroDxCambiosDiagnosticoPendientesVisual = pendientes;
-
-    /*
-      Redibuja únicamente el estado de la cabecera/botón.
-      No consulta ni escribe datos y no altera el editor clínico.
-    */
-    renderContextoSuperior();
-    auroDxAplicarEstadoEditorHistorico();
-    configurarModoProtocoloMaestro();
-    return pendientes;
-  }
-
-  function auroDxProgramarRevisionVisualEdicionDiagnostico(){
-    window.setTimeout(() => {
-      try{
-        auroDxRefrescarEstadoVisualEdicionDiagnostico();
-      }catch(_e){}
-    }, 0);
-  }
-
-  function auroDxInstalarObservadorVisualEdicionDiagnostico(){
-    if(auroDxObservadorVisualEdicionInstalado) return true;
-    auroDxObservadorVisualEdicionInstalado = true;
-
-    /*
-      Observadores exclusivamente visuales. No interceptan ni duplican clics,
-      no llaman al guardador y no bloquean navegación.
-    */
-    document.addEventListener('change', evento => {
-      if(
-        state.edicionDiagnosticoAbierto !== true ||
-        auroDxGuardandoCambiosAbiertos === true
-      ) return;
-
-      const el = evento.target;
-      if(!el || typeof el.matches !== 'function') return;
-
-      if(el.matches('.diagnostico-radio,.diagnostico-tipo-select')){
-        auroDxProgramarRevisionVisualEdicionDiagnostico();
-      }
-    });
-
-    document.addEventListener('click', evento => {
-      if(
-        state.edicionDiagnosticoAbierto !== true ||
-        auroDxGuardandoCambiosAbiertos === true
-      ) return;
-
-      const btn = evento.target?.closest?.('button');
-      if(!btn) return;
-
-      const accion = String(btn.getAttribute('onclick') || '');
-      const cambiaDiagnostico =
-        btn.classList.contains('diagnostico-add') ||
-        btn.classList.contains('diagnostico-delete') ||
-        /agregarDiagnosticoCie10|eliminarDiagnosticoCie10|marcarDiagnosticoPrincipal|cambiarTipoDiagnostico/.test(accion);
-
-      if(cambiaDiagnostico){
-        auroDxProgramarRevisionVisualEdicionDiagnostico();
-      }
-    });
-
-    return true;
-  }
-
   function auroDxIniciarEdicionDiagnosticoAbierto(){
     const ctx = contextoAtencionSeleccionada();
 
@@ -1608,8 +1498,6 @@
       }
     }catch(_e){}
     state.edicionDiagnosticoAbierto = true;
-    auroDxInstalarObservadorVisualEdicionDiagnostico();
-    auroDxReiniciarEstadoVisualEdicionDiagnostico();
     renderContextoSuperior();
     auroDxAplicarEstadoEditorHistorico();
     configurarModoProtocoloMaestro();
@@ -1617,8 +1505,8 @@
     mensaje(
       'aviso',
       state.diagnosticos.length
-        ? 'Edición de diagnóstico habilitada. El botón le avisará cuando existan cambios pendientes.'
-        : 'Edición habilitada. Agregue los diagnósticos; el botón le avisará cuando existan cambios pendientes.'
+        ? 'Edición de diagnóstico habilitada. Modifique los CIE-10 y luego presione “Guardar cambios del diagnóstico”.'
+        : 'Edición habilitada. Agregue los diagnósticos y luego presione “Guardar cambios del diagnóstico”.'
     );
 
     try{
@@ -1641,7 +1529,6 @@
         window.auroLimpiarBusquedaDiagnosticoCie10(false);
       }
     }catch(_e){}
-    auroDxReiniciarEstadoVisualEdicionDiagnostico();
     state.edicionDiagnosticoAbierto = false;
     renderContextoSuperior();
     auroDxAplicarEstadoEditorHistorico();
@@ -1972,7 +1859,7 @@
     if(btn){
       btn.disabled = true;
       btn.setAttribute('aria-busy','true');
-      btn.classList.remove('auro-dx-save-ready','auro-dx-clean','auro-dx-pending','auro-dx-saved','auro-dx-error');
+      btn.classList.remove('auro-dx-save-ready','auro-dx-saved','auro-dx-error');
       btn.classList.add('auro-dx-saving');
       btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Guardando diagnóstico…';
     }
@@ -2034,7 +1921,6 @@
 
       state.diagnosticos = clonar(verificacionPersistencia.persistidos, []);
       sincronizarEditorCie10DesdeDiagnosticos();
-      auroDxReiniciarEstadoVisualEdicionDiagnostico();
 
       if(state.diagnosticos.length === 0){
         state.protocolos = [];
@@ -2077,11 +1963,9 @@
       if(btn && document.body.contains(btn)){
         btn.disabled = true;
         btn.removeAttribute('aria-busy');
-        btn.classList.remove('auro-dx-saving','auro-dx-save-ready','auro-dx-clean','auro-dx-pending','auro-dx-error');
+        btn.classList.remove('auro-dx-saving','auro-dx-save-ready','auro-dx-error');
         btn.classList.add('auro-dx-saved');
-        btn.innerHTML = resultado.sin_cambios
-          ? '<i class="bi bi-check-circle-fill me-1"></i> Diagnóstico verificado · Sin cambios ✓'
-          : '<i class="bi bi-check-circle-fill me-1"></i> Diagnóstico guardado y verificado ✓';
+        btn.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Diagnóstico guardado ✓';
       }
 
       mensaje(
@@ -2107,7 +1991,7 @@
       /*
         La edición clínica ya terminó y el editor se bloquea de inmediato.
         La cabecera se redibuja 700 ms después para que el médico alcance a
-        percibir la confirmación de guardado/verificación. Esta espera NO bloquea persistencia,
+        percibir “Diagnóstico guardado ✓”. Esta espera NO bloquea persistencia,
         protocolos ni navegación interna.
       */
       auroDxAplicarEstadoEditorHistorico();
@@ -2128,10 +2012,8 @@
       auroDxNotificarGuardadoAbierto(
         'ok',
         state.diagnosticos.length === 0
-          ? 'Diagnóstico verificado: la atención quedó sin diagnósticos.'
-          : (resultado.sin_cambios
-              ? 'Diagnóstico verificado. No había cambios pendientes.'
-              : 'Diagnóstico guardado y verificado correctamente.')
+          ? 'Diagnóstico guardado: la atención quedó sin diagnósticos.'
+          : 'Diagnóstico guardado correctamente.'
       );
 
       try{
@@ -2167,17 +2049,15 @@
         btn.removeAttribute('aria-busy');
         btn.classList.remove('auro-dx-saving','auro-dx-saved');
         btn.classList.add('auro-dx-error');
-        btn.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> No se confirmó el guardado · Reintentar';
+        btn.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> Error al guardar · Reintentar';
 
         window.setTimeout(() => {
           try{
             if(document.body.contains(btn) && state.edicionDiagnosticoAbierto === true){
               btn.classList.remove('auro-dx-error');
-              auroDxCambiosDiagnosticoPendientesVisual =
-                auroDxHayCambiosVisualesDiagnostico();
-              renderContextoSuperior();
-              auroDxAplicarEstadoEditorHistorico();
-              configurarModoProtocoloMaestro();
+              btn.classList.add('auro-dx-save-ready');
+              btn.innerHTML =
+                htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
             }
           }catch(_e){}
         }, 1600);
@@ -2204,11 +2084,10 @@
         botonActual.removeAttribute('aria-busy');
 
         if(!botonActual.classList.contains('auro-dx-error')){
-          auroDxCambiosDiagnosticoPendientesVisual =
-            auroDxHayCambiosVisualesDiagnostico();
-          renderContextoSuperior();
-          auroDxAplicarEstadoEditorHistorico();
-          configurarModoProtocoloMaestro();
+          botonActual.classList.remove('auro-dx-saving','auro-dx-saved');
+          botonActual.classList.add('auro-dx-save-ready');
+          botonActual.innerHTML =
+            htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
         }
       }
     }
@@ -2751,14 +2630,6 @@
         background:linear-gradient(135deg,var(--primary,#8b1e5a),var(--primary-2,#c23b83));
         color:#fff;box-shadow:0 7px 16px rgba(139,30,90,.18);
       }
-      .auro-dx-btn.auro-dx-clean{
-        background:#f8fafc;color:#475569;border:1px solid #cbd5e1;
-        box-shadow:0 5px 14px rgba(15,23,42,.06);
-      }
-      .auro-dx-btn.auro-dx-pending{
-        background:#fff7ed;color:#9a3412;border:1px solid #fdba74;
-        box-shadow:0 7px 18px rgba(234,88,12,.12);
-      }
       .auro-dx-btn.auro-dx-saving{
         background:var(--warning,#f59e0b)!important;color:#fff!important;
         box-shadow:0 7px 18px rgba(245,158,11,.22)!important;
@@ -2780,10 +2651,6 @@
         background:#f8fafc;border:1px solid #e2e8f0;color:#475569;
       }
       .auro-dx-correccion-note.auro-dx-note-edicion{
-        display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border-radius:11px;
-        background:#f8fafc;border:1px solid #e2e8f0;color:#475569;
-      }
-      .auro-dx-correccion-note.auro-dx-note-pendiente{
         display:inline-flex;align-items:center;gap:7px;padding:8px 10px;border-radius:11px;
         background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;
       }
@@ -3457,7 +3324,15 @@
         ? 'Transfiere el protocolo seleccionado al módulo Plan'
         : 'Disponible únicamente en la última atención activa y editable';
     }
-    renderContextoSuperior();
+
+    /*
+      Mientras el médico edita una atención abierta, los protocolos pueden
+      actualizarse en segundo plano, pero no deben reconstruir la cabecera ni
+      reemplazar el botón de Guardar/Cancelar.
+    */
+    if(state.edicionDiagnosticoAbierto !== true){
+      renderContextoSuperior();
+    }
   }
 
   function fuenteTieneDatos(obj){
@@ -5867,19 +5742,13 @@
         const promesaDiagnosticos = consultarDiagnosticos(idAtencion);
 
         /*
-          FASE 2 — INTEGRACIÓN CLÍNICA
-          Estas lecturas continúan en paralelo: examen, historia, anamnesis
-          y especialidades. No se cambia su fuente ni su estructura.
+          IASYN 2 — PRIORIDAD REAL AL DIAGNÓSTICO
+          ---------------------------------------
+          Primero se espera SOLO la consulta de diagnósticos. La integración
+          clínica pesada se inicia después de que el CIE-10 ya fue leído.
+          Así la lectura principal no compite desde el primer milisegundo con
+          seis solicitudes adicionales a Apps Script.
         */
-        const promesaIntegracion = Promise.all([
-          consultarDetalleExamen(idAtencion),
-          consultarHistoria(idPaciente, idAtencion),
-          consultarAnamnesis(idAtencion),
-          consultarEspecialidad('listarGinecologia', idAtencion),
-          consultarEspecialidad('listarObstetricia', idAtencion),
-          consultarEspecialidad('listarEstetica', idAtencion)
-        ]);
-
         const dxServidor = await promesaDiagnosticos;
         if(!cargaSigueVigente()) return null;
 
@@ -5917,6 +5786,29 @@
           (numeroInicial ? 'Consulta #' + numeroInicial + ' · ' : '') +
           'Diagnóstico cargado · completando integración clínica…'
         );
+
+        /*
+          El catálogo maestro CIE-10 se precarga recién DESPUÉS de mostrar el
+          diagnóstico. No bloquea la atención y la búsqueda seguirá cargándolo
+          por demanda si el médico empieza a escribir antes.
+        */
+        try{
+          Promise.resolve(auroDxCargarCatalogoMaestro()).catch(() => {});
+        }catch(_e){}
+
+        /*
+          FASE 2 — INTEGRACIÓN CLÍNICA EN SEGUNDO PLANO
+          Examen, historia, anamnesis y especialidades empiezan ahora, cuando
+          el diagnóstico principal ya está visible.
+        */
+        const promesaIntegracion = Promise.all([
+          consultarDetalleExamen(idAtencion),
+          consultarHistoria(idPaciente, idAtencion),
+          consultarAnamnesis(idAtencion),
+          consultarEspecialidad('listarGinecologia', idAtencion),
+          consultarEspecialidad('listarObstetricia', idAtencion),
+          consultarEspecialidad('listarEstetica', idAtencion)
+        ]);
 
         const [
           detalle,
@@ -5980,9 +5872,22 @@
           state.protocoloSeleccionado = 0;
         }
 
-        renderDiagnosticos();
-        sincronizarEditorCie10DesdeDiagnosticos();
-        renderProtocolos();
+        /*
+          IASYN 2 — PROTECCIÓN DEL EDITOR ABIERTO
+          ---------------------------------------
+          Si el médico empezó a editar después de que apareció el CIE-10 pero
+          antes de terminar la integración, una respuesta tardía NO debe volver
+          a sincronizar el editor ni reconstruir sus botones.
+        */
+        const editandoDiagnosticoAbierto =
+          state.edicionDiagnosticoAbierto === true;
+
+        if(!editandoDiagnosticoAbierto){
+          renderDiagnosticos();
+          sincronizarEditorCie10DesdeDiagnosticos();
+          renderProtocolos();
+        }
+
         renderFuentes();
         restaurarEstadoTemporal(idAtencion);
         actualizarEstadoEdicion();
@@ -6003,19 +5908,21 @@
           state.diagnosticos.length + ' diagnóstico(s)'
         );
 
-        renderContextoSuperior();
-        optimizarTitulosResumenExistente();
+        if(!editandoDiagnosticoAbierto){
+          renderContextoSuperior();
+          optimizarTitulosResumenExistente();
 
-        if(!state.diagnosticos.length){
-          mensaje(
-            'aviso',
-            'Aún no se han registrado diagnósticos. Puede generar el resumen clínico con la anamnesis y los datos disponibles.'
-          );
-        }else{
-          mensaje(
-            'ok',
-            'Información clínica sincronizada correctamente. La integración puede actualizarse con los diagnósticos registrados.'
-          );
+          if(!state.diagnosticos.length){
+            mensaje(
+              'aviso',
+              'Aún no se han registrado diagnósticos. Puede generar el resumen clínico con la anamnesis y los datos disponibles.'
+            );
+          }else{
+            mensaje(
+              'ok',
+              'Información clínica sincronizada correctamente. La integración puede actualizarse con los diagnósticos registrados.'
+            );
+          }
         }
 
         return state;
@@ -6247,16 +6154,55 @@
 
   function cambiarPorAtencion(idAtencion){
     idAtencion = texto(idAtencion);
+    const idAnterior = texto(state.atencionActual);
+    const mismaAtencion = !!idAtencion && idAnterior === idAtencion;
 
     if(
       state.correccionClinicaActiva &&
-      state.atencionActual &&
+      idAnterior &&
       idAtencion &&
-      texto(state.atencionActual) !== idAtencion
+      idAnterior !== idAtencion
     ){
       auroDxRestaurarPuenteGuardadoCorreccion();
       state.correccionClinicaActiva = false;
       state.correccionClinicaMeta = null;
+    }
+
+    /*
+      IASYN 2 — EVENTOS REPETIDOS DE LA MISMA ATENCIÓN
+      ------------------------------------------------
+      Atenciones puede emitir varias señales mientras una consulta abierta sigue
+      siendo la misma. Esas señales NO justifican limpiar ni releer Diagnóstico.
+
+      - Si ya existe una carga de esa atención, se reutiliza.
+      - Si el médico está editando, no se reconstruye su editor ni su botón.
+      - Si la atención cambió de estado (p. ej. fue cerrada), se refresca solo
+        la cabecera/bloqueo usando el estado maestro, sin tocar los diagnósticos.
+      - Una nueva id_atencion sí ejecuta la carga clínica normal.
+      - El evento específico aurosanax:diagnosticos-actualizados y el botón
+        “Sincronizar datos” conservan la capacidad de forzar una lectura real.
+    */
+    if(mismaAtencion){
+      if(state.cargando && state.idCargaEnCurso === idAtencion && state.promesaCarga){
+        return state.promesaCarga;
+      }
+
+      const ctx = contextoAtencionSeleccionada();
+
+      if(state.edicionDiagnosticoAbierto === true && ctx.editable === true){
+        return state;
+      }
+
+      if(state.edicionDiagnosticoAbierto === true && ctx.editable !== true){
+        state.edicionDiagnosticoAbierto = false;
+      }
+
+      if(state.ultimaActualizacion || state.diagnosticos.length){
+        renderContextoSuperior();
+        auroDxAplicarEstadoEditorHistorico();
+        configurarModoProtocoloMaestro();
+        return state;
+      }
     }
 
     /*
@@ -6275,7 +6221,13 @@
     }
 
     if(!idAtencion) return;
-    return cargarAtencion(idAtencion, true);
+
+    /*
+      Solo una atención realmente nueva fuerza una carga completa. Para la misma
+      atención sin datos aún, cargarAtencion(false) reutiliza cualquier promesa
+      en curso o inicia la primera lectura si todavía no existe.
+    */
+    return cargarAtencion(idAtencion, !mismaAtencion);
   }
 
   function instalarEventos(){
