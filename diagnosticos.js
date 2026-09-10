@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: diagnosticos.js
  Módulo: Diagnósticos e integración clínica por atención
- Versión: 1.5.15-IASYN2 - flujo abierto estable + persistencia verificada + CIE-10 profesional
+ Versión: 1.5.16-IASYN2 - guardado abierto antirregresivo + persistencia verificada + CIE-10 profesional
  Fecha: 2026-07-24
  -----------------------------------------------------------------------
  OBJETIVO
@@ -43,7 +43,7 @@
   window.auroDiagnosticosModuloCargado = false;
 
   const MODULO = 'IASYN DIAGNÓSTICOS';
-  const VERSION = '1.5.15-IASYN2';
+  const VERSION = '1.5.16-IASYN2';
   /*
     COMPATIBILIDAD TEMPORAL IASYN:
     Las claves de sessionStorage/localStorage, eventos aurosanax:* y nombres
@@ -54,7 +54,7 @@
     de forma aislada.
   */
   const APOYO_IA_SESSION_KEY = 'aurosanax_apoyoIA_contexto';
-  const RELEASE = '20260909_dx_flujo_abierto_estable_persistencia_cie10_v3';
+  const RELEASE = '20260909_dx_guardado_abierto_antirregresivo_v4';
 
   const state = window.auroDiagnosticosState = window.auroDiagnosticosState || {
     atencionActual: '',
@@ -865,7 +865,23 @@
       ctx.historica !== true &&
       state.edicionDiagnosticoAbierto !== true;
 
-    const bloquear = bloquearHistorico || bloquearAbiertoProtegido;
+    /*
+      IASYN 1.5.16 — BARRERA ANTIRREGRESIVA DURANTE GUARDADO
+      ------------------------------------------------------
+      Mientras el diagnóstico abierto está persistiendo, el editor CIE-10
+      queda temporalmente bloqueado. Esto evita que el usuario modifique el
+      snapshot después de iniciar el POST y que una respuesta confirmada
+      termine sobrescribiendo cambios locales posteriores.
+    */
+    const bloquearGuardadoAbierto =
+      ctx.editable === true &&
+      ctx.historica !== true &&
+      auroDxGuardandoCambiosAbiertos === true;
+
+    const bloquear =
+      bloquearHistorico ||
+      bloquearAbiertoProtegido ||
+      bloquearGuardadoAbierto;
 
     auroDxElementosEditorCie().forEach(el => {
       if(el.dataset.auroDxDisabledOriginal === undefined){
@@ -1388,7 +1404,9 @@
           <span class="auro-dx-correccion-note ${state.edicionDiagnosticoAbierto ? 'auro-dx-note-edicion' : 'auro-dx-note-protegido'}">
             <i class="bi ${state.edicionDiagnosticoAbierto ? 'bi-pencil-square' : 'bi-shield-lock'}"></i>
             ${state.edicionDiagnosticoAbierto
-              ? 'Edición activa. Modifique los CIE-10 y luego presione “Guardar cambios del diagnóstico”.'
+              ? (auroDxGuardandoCambiosAbiertos
+                  ? 'Guardado en curso. Espere la confirmación antes de continuar.'
+                  : 'Edición activa. Modifique los CIE-10 y luego presione “Guardar cambios del diagnóstico”.')
               : (state.diagnosticos.length
                   ? 'Diagnóstico protegido. Presione “Editar diagnóstico” para habilitar los campos CIE-10.'
                   : 'Diagnóstico protegido. Presione “Agregar diagnóstico” para habilitar los campos CIE-10.')}
@@ -1397,15 +1415,19 @@
           ${state.edicionDiagnosticoAbierto ? `
             <button
               type="button"
-              class="auro-dx-btn auro-dx-save-ready"
+              class="auro-dx-btn ${auroDxGuardandoCambiosAbiertos ? 'auro-dx-saving' : 'auro-dx-save-ready'}"
               id="auroDxGuardarCambiosAbiertosBtn"
+              ${auroDxGuardandoCambiosAbiertos ? 'disabled aria-busy="true"' : ''}
               onclick="window.auroDxGuardarCambiosAtencionAbierta()"
             >
-              <i class="bi bi-save"></i> Guardar cambios del diagnóstico
+              ${auroDxGuardandoCambiosAbiertos
+                ? '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Guardando diagnóstico…'
+                : '<i class="bi bi-save"></i> Guardar cambios del diagnóstico'}
             </button>
             <button
               type="button"
               class="auro-dx-btn ghost"
+              ${auroDxGuardandoCambiosAbiertos ? 'disabled' : ''}
               onclick="window.auroDxCancelarEdicionDiagnosticoAbierto()"
             >
               Cancelar
@@ -1523,6 +1545,14 @@
   }
 
   function auroDxCancelarEdicionDiagnosticoAbierto(){
+    if(auroDxGuardandoCambiosAbiertos){
+      mensaje(
+        'aviso',
+        'El diagnóstico se está guardando. Espere la confirmación antes de cancelar la edición.'
+      );
+      return false;
+    }
+
     sincronizarEditorCie10DesdeDiagnosticos();
     try{
       if(typeof window.auroLimpiarBusquedaDiagnosticoCie10 === 'function'){
@@ -1854,6 +1884,18 @@
     const btn = document.getElementById('auroDxGuardarCambiosAbiertosBtn');
     const htmlOriginal = btn ? btn.innerHTML : '';
 
+    /*
+      Token de esta operación. Si cambia la atención antes de que termine,
+      cualquier respuesta tardía queda invalidada y no puede tocar la nueva
+      atención seleccionada.
+    */
+    const tokenGuardado = ++auroDxGuardadoAbiertoToken;
+    const idAtencionGuardado = texto(ctx.id);
+    const guardadoSigueVigente = () =>
+      tokenGuardado === auroDxGuardadoAbiertoToken &&
+      texto(state.atencionActual) === idAtencionGuardado &&
+      texto(contextoAtencionSeleccionada().id) === idAtencionGuardado;
+
     auroDxGuardandoCambiosAbiertos = true;
 
     if(btn){
@@ -1863,6 +1905,10 @@
       btn.classList.add('auro-dx-saving');
       btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span> Guardando diagnóstico…';
     }
+
+    /* Bloquea también los controles CIE-10 durante el snapshot persistente. */
+    auroDxAplicarEstadoEditorHistorico();
+    configurarModoProtocoloMaestro();
 
     mensaje('aviso','Guardando diagnóstico. Espere la confirmación antes de continuar.');
 
@@ -1895,6 +1941,19 @@
       }
 
       /*
+        Si la atención cambió mientras el backend respondía, el resultado de
+        la atención anterior se descarta visualmente. Nunca se aplica sobre
+        el nuevo contexto clínico.
+      */
+      if(!guardadoSigueVigente()){
+        console.warn(
+          MODULO + ': respuesta de guardado descartada por cambio de atención.',
+          {id_atencion:idAtencionGuardado}
+        );
+        return resultado;
+      }
+
+      /*
         IASYN 2 — CONFIRMACIÓN AUTORITATIVA ANTES DEL VERDE
         El backend debe responder success:true Y la misma id_atencion debe
         devolver exactamente el diagnóstico esperado desde la fuente persistida.
@@ -1902,6 +1961,14 @@
       */
       const verificacionPersistencia =
         await auroDxConfirmarPersistenciaGuardadoAbierto(ctx.id, snapshotEditor);
+
+      if(!guardadoSigueVigente()){
+        console.warn(
+          MODULO + ': verificación de guardado descartada por cambio de atención.',
+          {id_atencion:idAtencionGuardado}
+        );
+        return resultado;
+      }
 
       if(!verificacionPersistencia.ok){
         console.error(
@@ -2071,24 +2138,47 @@
       return null;
 
     }finally{
-      auroDxGuardandoCambiosAbiertos = false;
-
-      const botonActual = document.getElementById('auroDxGuardarCambiosAbiertosBtn');
+      const tokenSigueVigente =
+        tokenGuardado === auroDxGuardadoAbiertoToken;
+      const operacionSigueEnContexto =
+        tokenSigueVigente &&
+        texto(state.atencionActual) === idAtencionGuardado &&
+        texto(contextoAtencionSeleccionada().id) === idAtencionGuardado;
 
       /*
-        En éxito, state.edicionDiagnosticoAbierto ya es false y el botón se
-        mantiene verde hasta el redraw programado. En error permanece activo.
+        Solo la operación que todavía posee el token puede liberar el flag.
+        Una respuesta antigua nunca puede apagar un guardado más reciente.
       */
-      if(botonActual && state.edicionDiagnosticoAbierto === true){
-        botonActual.disabled = false;
-        botonActual.removeAttribute('aria-busy');
+      if(tokenSigueVigente){
+        auroDxGuardandoCambiosAbiertos = false;
+      }
 
-        if(!botonActual.classList.contains('auro-dx-error')){
-          botonActual.classList.remove('auro-dx-saving','auro-dx-saved');
-          botonActual.classList.add('auro-dx-save-ready');
-          botonActual.innerHTML =
-            htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
+      /*
+        Una operación invalidada por cambio de atención no puede modificar
+        botones ni controles pertenecientes al nuevo contexto.
+      */
+      if(operacionSigueEnContexto){
+        const botonActual = document.getElementById('auroDxGuardarCambiosAbiertosBtn');
+
+        /*
+          En éxito, state.edicionDiagnosticoAbierto ya es false y el botón se
+          mantiene verde hasta el redraw programado. En error permanece activo.
+        */
+        if(botonActual && state.edicionDiagnosticoAbierto === true){
+          botonActual.disabled = false;
+          botonActual.removeAttribute('aria-busy');
+
+          if(!botonActual.classList.contains('auro-dx-error')){
+            botonActual.classList.remove('auro-dx-saving','auro-dx-saved');
+            botonActual.classList.add('auro-dx-save-ready');
+            botonActual.innerHTML =
+              htmlOriginal || '<i class="bi bi-save"></i> Guardar cambios del diagnóstico';
+          }
         }
+
+        /* Restaura el editor únicamente si sigue siendo la misma atención. */
+        auroDxAplicarEstadoEditorHistorico();
+        configurarModoProtocoloMaestro();
       }
     }
   }
@@ -5609,6 +5699,11 @@
     state.correccionClinicaActiva = false;
     state.correccionClinicaMeta = null;
 
+    /* Invalida cualquier guardado tardío perteneciente a la atención anterior. */
+    auroDxGuardadoAbiertoToken += 1;
+    auroDxGuardandoCambiosAbiertos = false;
+    state.edicionDiagnosticoAbierto = false;
+
     /*
       Limpieza exclusivamente en memoria y visual.
       No elimina cache histórico de otras atenciones, no llama Apps Script
@@ -5657,6 +5752,26 @@
     }
 
     idAtencion = texto(idAtencion || idAtencionActiva());
+
+    /*
+      IASYN 1.5.16 — NO REPINTAR LA MISMA ATENCIÓN DURANTE EDICIÓN/GUARDADO
+      ----------------------------------------------------------------------
+      Una recarga forzada de la misma id_atencion no puede limpiar ni volver
+      a hidratar el editor mientras existen cambios locales o un POST activo.
+      Cambiar a otra id_atencion continúa permitido y usa el flujo normal.
+    */
+    if(
+      idAtencion &&
+      texto(state.atencionActual) === idAtencion &&
+      (state.edicionDiagnosticoAbierto === true || auroDxGuardandoCambiosAbiertos === true) &&
+      forzar === true
+    ){
+      console.log(
+        MODULO + ': recarga forzada omitida durante edición/guardado de la misma atención.',
+        idAtencion
+      );
+      return state;
+    }
 
     if(state.atencionActual && state.atencionActual !== idAtencion){
       state.edicionDiagnosticoAbierto = false;
@@ -6168,6 +6283,17 @@
       state.correccionClinicaMeta = null;
     }
 
+    if(idAnterior && idAtencion && idAnterior !== idAtencion){
+      /*
+        El contexto nuevo invalida cualquier edición/guardado visual anterior.
+        La petición ya enviada puede terminar en backend, pero su respuesta no
+        podrá reconstruir ni modificar la nueva atención.
+      */
+      auroDxGuardadoAbiertoToken += 1;
+      auroDxGuardandoCambiosAbiertos = false;
+      state.edicionDiagnosticoAbierto = false;
+    }
+
     /*
       IASYN 2 — EVENTOS REPETIDOS DE LA MISMA ATENCIÓN
       ------------------------------------------------
@@ -6253,11 +6379,38 @@
       document.addEventListener(nombre, receptor);
     });
 
-    document.addEventListener('aurosanax:diagnosticos-actualizados', () => {
+    document.addEventListener('aurosanax:diagnosticos-actualizados', e => {
       if(historiaNuevaSinAtencion()){
         limpiarContextoHistoriaNueva();
         return;
       }
+
+      const idEvento = texto(
+        e?.detail?.id_atencion ||
+        e?.detail?.atencion?.id_atencion ||
+        ''
+      );
+      const idActual = texto(state.atencionActual || idAtencionActiva());
+
+      /* Una señal de otra atención nunca puede refrescar la atención visible. */
+      if(idEvento && idActual && idEvento !== idActual) return;
+
+      /*
+        Durante edición o guardado, la propia verificación autoritativa del
+        módulo resolverá el estado persistido. Forzar una carga completa aquí
+        podría destruir el snapshot local y el estado visual del botón.
+      */
+      if(
+        state.edicionDiagnosticoAbierto === true ||
+        auroDxGuardandoCambiosAbiertos === true
+      ){
+        console.log(
+          MODULO + ': evento diagnosticos-actualizados diferido/omitido durante edición o guardado.',
+          idActual
+        );
+        return;
+      }
+
       cargarAtencionActual(true);
     });
 
