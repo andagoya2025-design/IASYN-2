@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.2.6
+ Versión: 1.2.1
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.2.6';
+  const VERSION = '1.2.1';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20260910_recomendaciones_plan_control_fecha_y_evento_v7';
+  const RELEASE = '20260910_rebase_estable_dx_linea_codigo_punto_nombre_v2';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -363,79 +363,21 @@
     }
   }
 
-  /*
-    IASYN RECOMENDACIONES 1.2.3 — FECHA CLÍNICA SEGURA
-    ----------------------------------------------------
-    - Rechaza residuos heredados como 0,00.
-    - Usa únicamente una fecha real disponible de la misma atención.
-    - Nunca fabrica una fecha clínica.
-  */
-  function fechaResidualInvalida(valor){
-    const raw=txt(valor);
-    if(!raw) return true;
-
-    const compacta=raw.toLowerCase().replace(/\s+/g,'');
-    return [
-      '0','0.0','0.00','0,0','0,00',
-      '00/00/0000','00-00-0000','0000-00-00'
-    ].includes(compacta);
-  }
-
-  function fechaClinicaValida(valor){
-    const raw=txt(valor);
-    if(fechaResidualInvalida(raw)) return false;
-
-    const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if(iso){
-      const y=Number(iso[1]), m=Number(iso[2]), d=Number(iso[3]);
-      const test=new Date(Date.UTC(y,m-1,d));
-      return test.getUTCFullYear()===y &&
-             test.getUTCMonth()===m-1 &&
-             test.getUTCDate()===d;
-    }
-
-    const dmy=raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
-    if(dmy){
-      const d=Number(dmy[1]), m=Number(dmy[2]), y=Number(dmy[3]);
-      const test=new Date(Date.UTC(y,m-1,d));
-      return test.getUTCFullYear()===y &&
-             test.getUTCMonth()===m-1 &&
-             test.getUTCDate()===d;
-    }
-
-    const parsed=new Date(raw);
-    return !Number.isNaN(parsed.getTime());
-  }
-
-  function primeraFechaClinicaValida(){
-    for(let i=0;i<arguments.length;i++){
-      const raw=txt(arguments[i]);
-      if(fechaClinicaValida(raw)) return raw;
-    }
-    return '';
-  }
-
   function fechaVisual(valor){
-    const raw=primeraFechaClinicaValida(valor);
+    const raw = txt(valor);
     if(!raw) return '—';
-
-    const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);
+    const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);
     if(m){
       return `${m[3]}/${m[2]}/${m[1]}${m[4] ? ' · '+m[4]+':'+m[5] : ''}`;
     }
-
-    const dmy=raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
-    if(dmy) return `${dmy[1]}/${dmy[2]}/${dmy[3]}`;
-
-    const d=new Date(raw);
+    const d = new Date(raw);
     if(!Number.isNaN(d.getTime())){
       return d.toLocaleString('es-EC',{
         day:'2-digit',month:'2-digit',year:'numeric',
         hour:'2-digit',minute:'2-digit',hour12:false
       });
     }
-
-    return '—';
+    return raw;
   }
 
   function setMsg(texto, tipo){
@@ -483,10 +425,11 @@
       .auro-rec-check{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid #edf0f3;border-radius:13px;background:#fff;min-height:44px;font-size:13px;font-weight:650;line-height:1.3}
       .auro-rec-check input{width:17px;height:17px;accent-color:#8b1e5a;flex:0 0 auto;margin-top:1px}
       .auro-rec-dx-list{display:grid;gap:8px}
-      .auro-rec-dx{display:grid;grid-template-columns:86px minmax(0,1fr) 96px;gap:10px;align-items:center;padding:10px 11px;border:1px solid #e8edf1;border-radius:13px;background:#f8fafc}
+      .auro-rec-dx{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:10px;align-items:center;padding:10px 11px;border:1px solid #e8edf1;border-radius:13px;background:#f8fafc}
+      .auro-rec-dx-main{min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
       .auro-rec-dx-code{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:5px 8px;border-radius:10px;background:#fff0f7;border:1px solid #f3c7df;font-size:12px;font-weight:950;color:#8b1e5a;text-align:center;white-space:nowrap}
-      .auro-rec-dx-name{min-width:0;display:flex;align-items:center;gap:9px;font-size:13px;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
-      .auro-rec-dx-dot{width:10px;height:10px;min-width:10px;min-height:10px;flex:0 0 10px;border-radius:50%;background:#8b1e5a;box-shadow:0 0 0 2px #f3c7df}
+      .auro-rec-dx-sep{flex:0 0 auto;color:#8b1e5a;font-size:16px;font-weight:950;line-height:1}
+      .auro-rec-dx-name{min-width:0;flex:1 1 180px;font-size:13px;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
       .auro-rec-dx-tag{display:inline-flex;align-items:center;justify-content:center;min-height:28px;font-size:10px;font-weight:900;padding:4px 7px;border-radius:999px;background:#fff;border:1px solid #dbe1e8;color:#475569;text-align:center}
       .auro-rec-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:13px;color:#64748b;font-size:12px;text-align:center}
       .auro-rec-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;position:sticky;bottom:10px;z-index:3;padding:12px;border:1px solid #ead7e2;border-radius:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(15,23,42,.08)}
@@ -523,9 +466,11 @@
         .auro-rec-check{min-height:48px;font-size:13px;padding:10px}
         .auro-rec-actions{display:grid;grid-template-columns:1fr;bottom:6px;padding:9px}
         .auro-rec-btn{width:100%;min-height:46px;font-size:14px}
-        .auro-rec-dx{grid-template-columns:78px minmax(0,1fr);align-items:start}
-        .auro-rec-dx-code{width:78px}
-        .auro-rec-dx-tag{grid-column:2;width:max-content;max-width:100%;margin-top:-2px}
+        .auro-rec-dx{grid-template-columns:1fr;align-items:start}
+        .auro-rec-dx-main{width:100%;gap:7px}
+        .auro-rec-dx-code{width:auto;min-width:72px}
+        .auro-rec-dx-name{flex:1 1 150px}
+        .auro-rec-dx-tag{grid-column:1;width:max-content;max-width:100%;margin-top:2px}
       }
     `;
     document.head.appendChild(style);
@@ -722,37 +667,39 @@
       const nombre=txt(d.descripcion || d.nombre || d.diagnostico);
       const principal = d.principal === true || ['si','sí','true','1'].includes(norm(d.principal)) || i===0;
       return `<div class="auro-rec-dx">
-        <div class="auro-rec-dx-code">${esc(codigo || '—')}</div>
-        <div class="auro-rec-dx-name"><span class="auro-rec-dx-dot" aria-hidden="true"></span><span>${esc(nombre || 'Diagnóstico sin descripción')}</span></div>
+        <div class="auro-rec-dx-main">
+          <span class="auro-rec-dx-code">${esc(codigo || '—')}</span>
+          <span class="auro-rec-dx-sep" aria-hidden="true">•</span>
+          <span class="auro-rec-dx-name">${esc(nombre || 'Diagnóstico sin descripción')}</span>
+        </div>
         <div class="auro-rec-dx-tag">${principal ? 'Principal' : esc(txt(d.tipo_diagnostico || d.tipo || 'Asociado'))}</div>
       </div>`;
     }).join('');
   }
 
+  function precargarSeguimientoDesdePlanSiVacio(){
+    if(state.idRecomendacion) return false;
+    if(getValue('auroRecMotivoControl')) return false;
+
+    const candidatos = [
+      'hcProximoControl',
+      'hcControl',
+      'hcSeguimiento'
+    ];
+
+    for(const id of candidatos){
+      const el=document.getElementById(id);
+      const valor=txt(el?.value || el?.textContent);
+      if(!valor) continue;
+
+      setValue('auroRecMotivoControl',valor);
+      return true;
+    }
+
+    return false;
+  }
+
   /*
-    IASYN RECOMENDACIONES 1.2.6 — CORRECCIÓN DE CONTRATO PLAN
-    -------------------------------------------------------------
-    - proximo_control es FECHA y va a Próxima cita/control.
-    - Nunca se coloca proximo_control dentro de Motivo de próxima cita.
-    - El evento plan-cargado completa únicamente campos vacíos.
-    - El Plan visible de la misma atención puede aportar el borrador actual.
-    - No se sobrescribe contenido clínico ya escrito.
-
-    IASYN RECOMENDACIONES 1.2.5 — INTEGRACIÓN PLAN VERIFICABLE
-    --------------------------------------------------------------
-    - Seguimiento e indicaciones se leen desde una única fuente validada.
-    - El mensaje indica exactamente qué información fue precargada.
-    - No se considera “indicaciones precargadas” cuando solo llegó seguimiento.
-    - Se conserva el punto gráfico del diagnóstico y todas las barreras previas.
-
-    IASYN RECOMENDACIONES 1.2.3 — CORRECCIÓN ANTIRREGRESIVA
-    ----------------------------------------------------------
-    - Conserva íntegra la base funcional 1.2.0.
-    - Restaura viñetas uniformes al cargar recomendaciones persistidas.
-    - Mantiene no-op ignorando únicamente el marcador visual de viñeta.
-    - Diagnóstico lleva la viñeta dentro de la misma cadena visible.
-    - Fecha clínica segura en pantalla y A4.
-
     IASYN RECOMENDACIONES 1.2.0 — PLAN → RECOMENDACIONES
     ------------------------------------------------------
     Integración quirúrgica y antirregresiva.
@@ -854,78 +801,19 @@
     return salida;
   }
 
-  function recomendacionesAEditorConVinetas(valor){
-    const lineas=String(valor || '')
-      .split(/\r?\n+/)
-      .map(limpiarMarcadorClinico)
-      .filter(Boolean);
-
-    return lineas.map(linea=>'• '+linea).join('\n');
-  }
-
-  function recomendacionesCanonicasParaFirma(valor){
-    return String(valor || '')
-      .split(/\r?\n+/)
-      .map(limpiarMarcadorClinico)
-      .filter(Boolean)
-      .join('\n');
-  }
-
   function indicacionesPlanAEditor(valor){
     return lineasClinicasUnicas(indicacionesPlanALista(valor))
       .map(linea=>'• '+linea)
       .join('\n');
   }
 
-  /*
-    IASYN RECOMENDACIONES 1.2.6 — PLAN → RECOMENDACIONES CORREGIDO
-    ----------------------------------------------------------------
-    Contrato real verificado:
-    - Plan.hcControl / proximo_control = FECHA de próximo control.
-    - Recomendaciones.auroRecProximaCita = FECHA de próxima cita/control.
-    - Recomendaciones.auroRecMotivoControl = TEXTO clínico libre.
-    - Plan.hcIndicacionesPaciente / indicaciones_paciente = recomendaciones al paciente.
-
-    Reglas:
-    - Nunca escribir una fecha de Plan dentro de "Motivo de próxima cita".
-    - Preferir el Plan visible solo si pertenece exactamente a la misma id_atencion.
-    - Si el Plan visible está vacío, usar el Plan persistido de la misma atención.
-    - Solo completar campos vacíos; nunca sobrescribir texto escrito por el médico.
-    - No guardar automáticamente ni modificar Plan.
-  */
-
-  function fechaPlanAInput(valor){
-    const raw=txt(valor);
-    if(!raw) return '';
-
-    const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if(iso){
-      const candidata=`${iso[1]}-${iso[2]}-${iso[3]}`;
-      return fechaClinicaValida(candidata) ? candidata : '';
-    }
-
-    const dmy=raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
-    if(dmy){
-      const candidata=`${dmy[3]}-${dmy[2]}-${dmy[1]}`;
-      return fechaClinicaValida(candidata) ? candidata : '';
-    }
-
-    return '';
-  }
-
-  async function obtenerDatosPlanMismaAtencion(idAtencionEsperada){
-    const vacio={
-      indicaciones:'',
-      proximaCita:'',
-      planEncontrado:false
-    };
-
+  async function obtenerIndicacionesPlanMismaAtencion(idAtencionEsperada){
     const idEsperada=txt(idAtencionEsperada);
-    if(!idEsperada) return vacio;
+    if(!idEsperada) return '';
 
-    const ctxInicial=contextoAtencion();
+    const ctxInicial=state.contexto || contextoAtencion();
     const idInicial=txt(ctxInicial?.id || state.idAtencion);
-    if(!idInicial || idInicial !== idEsperada) return vacio;
+    if(!idInicial || idInicial !== idEsperada) return '';
 
     let plan=null;
 
@@ -936,119 +824,55 @@
         plan=await apiGet('buscarPlanPorAtencion',{id_atencion:idEsperada});
       }
     }catch(error){
-      console.warn(MODULO+': no se pudo leer el Plan persistido de esta atención.',error);
-      plan=null;
+      console.warn(MODULO+': no se pudieron leer indicaciones del Plan.',error);
+      return '';
     }
 
-    const ctxActual=contextoAtencion();
+    const ctxActual=state.contexto || contextoAtencion();
     const idActual=txt(ctxActual?.id || state.idAtencion);
-    if(!idActual || idActual !== idEsperada) return vacio;
+    if(!idActual || idActual !== idEsperada) return '';
 
-    const indicacionesPersistidas=indicacionesPlanAEditor(
+    const valor =
       plan?.indicaciones_paciente ??
       plan?.indicaciones ??
       plan?.indicacionesPaciente ??
-      ''
-    );
+      '';
 
-    const proximaCitaPersistida=fechaPlanAInput(
-      plan?.proximo_control ??
-      plan?.control ??
-      plan?.proximoControl ??
-      ''
-    );
-
-    let indicaciones=indicacionesPersistidas;
-    let proximaCita=proximaCitaPersistida;
+    const desdePersistido=indicacionesPlanAEditor(valor);
+    if(desdePersistido) return desdePersistido;
 
     /*
-      Si el Plan visible corresponde EXACTAMENTE a esta atención, sus valores
-      actuales tienen prioridad porque representan lo que el médico está viendo
-      y editando en este momento. Nunca se usa el DOM de otra atención.
+      Respaldo visual permitido únicamente cuando el Plan visible declara
+      exactamente la misma id_atencion. Nunca se toma un campo de otra atención.
     */
     const idPlanVisible=txt(window.planState?.atencionActual);
+    if(idPlanVisible !== idEsperada) return '';
 
-    if(idPlanVisible === idEsperada){
-      const campoIndicaciones=document.getElementById('hcIndicacionesPaciente');
-      const indicacionesVisibles=indicacionesPlanAEditor(
-        campoIndicaciones?.value || campoIndicaciones?.textContent || ''
-      );
-
-      const campoControl=document.getElementById('hcControl');
-      const proximaCitaVisible=fechaPlanAInput(
-        campoControl?.value || campoControl?.textContent || ''
-      );
-
-      if(indicacionesVisibles) indicaciones=indicacionesVisibles;
-      if(proximaCitaVisible) proximaCita=proximaCitaVisible;
-    }
-
-    const ctxFinal=contextoAtencion();
-    const idFinal=txt(ctxFinal?.id || state.idAtencion);
-    if(!idFinal || idFinal !== idEsperada) return vacio;
-
-    return {
-      indicaciones:indicaciones,
-      proximaCita:proximaCita,
-      planEncontrado:!!plan
-    };
-  }
-
-  async function precargarDatosPlanSiVacio(idAtencionEsperada, opciones){
-    const resultado={
-      indicaciones:false,
-      proximaCita:false
-    };
-
-    if(state.guardando) return resultado;
-
-    const idEsperada=txt(idAtencionEsperada);
-    const ctx=contextoAtencion();
-    const idRec=txt(ctx?.id || state.idAtencion);
-
-    if(!idEsperada || !idRec || idEsperada !== idRec) return resultado;
-
-    const datos=await obtenerDatosPlanMismaAtencion(idEsperada);
-
-    const ctxFinal=contextoAtencion();
-    const idFinal=txt(ctxFinal?.id || state.idAtencion);
-
-    if(state.guardando || idFinal !== idEsperada) return resultado;
-
-    const opts=opciones || {};
-
-    /*
-      CORRECCIÓN REAL:
-      proximo_control de Plan es una fecha y se coloca exclusivamente
-      en auroRecProximaCita. Motivo de próxima cita queda intacto.
-    */
-    if(
-      opts.proximaCita !== false &&
-      !getValue('auroRecProximaCita') &&
-      datos.proximaCita
-    ){
-      setValue('auroRecProximaCita',datos.proximaCita);
-      resultado.proximaCita=true;
-    }
-
-    if(
-      opts.indicaciones !== false &&
-      !getValue('auroRecGenerales') &&
-      datos.indicaciones
-    ){
-      setValue('auroRecGenerales',datos.indicaciones);
-      resultado.indicaciones=true;
-    }
-
-    return resultado;
+    const campoPlan=document.getElementById('hcIndicacionesPaciente');
+    return indicacionesPlanAEditor(campoPlan?.value || campoPlan?.textContent || '');
   }
 
   async function precargarIndicacionesDesdePlanSiVacio(idAtencionEsperada){
-    const resultado=await precargarDatosPlanSiVacio(
-      idAtencionEsperada,
-      {proximaCita:false,indicaciones:true}
-    );
-    return resultado.indicaciones === true;
+    if(state.guardando) return false;
+    if(getValue('auroRecGenerales')) return false;
+
+    const idEsperada=txt(idAtencionEsperada);
+    const ctx=state.contexto || contextoAtencion();
+    const idRec=txt(ctx?.id || state.idAtencion);
+    if(!idEsperada || !idRec || idEsperada !== idRec) return false;
+
+    const valor=await obtenerIndicacionesPlanMismaAtencion(idEsperada);
+
+    const ctxFinal=state.contexto || contextoAtencion();
+    const idFinal=txt(ctxFinal?.id || state.idAtencion);
+
+    if(state.guardando) return false;
+    if(idFinal !== idEsperada) return false;
+    if(getValue('auroRecGenerales')) return false;
+    if(!valor) return false;
+
+    setValue('auroRecGenerales',valor);
+    return true;
   }
 
   async function agregarIndicacionesPlanManualmente(){
@@ -1070,10 +894,9 @@
     }
 
     const idEsperada=txt(ctx.id);
-    const datosPlan=await obtenerDatosPlanMismaAtencion(idEsperada);
-    const valorPlan=datosPlan.indicaciones;
+    const valorPlan=await obtenerIndicacionesPlanMismaAtencion(idEsperada);
 
-    const ctxActual=contextoAtencion();
+    const ctxActual=state.contexto || contextoAtencion();
     if(state.guardando || txt(ctxActual?.id) !== idEsperada) return false;
 
     if(!valorPlan){
@@ -1127,7 +950,7 @@
         otros:txt(d?.signos_infeccion?.otros)
       },
       dieta_cuidados:txt(d?.dieta_cuidados),
-      recomendaciones_generales:recomendacionesCanonicasParaFirma(d?.recomendaciones_generales)
+      recomendaciones_generales:txt(d?.recomendaciones_generales)
     };
     return JSON.stringify(normalizado);
   }
@@ -1183,14 +1006,11 @@
     aplicarChecks('infeccion',d?.signos_infeccion?.seleccionados);
     setValue('auroRecInfeccionOtros',d?.signos_infeccion?.otros);
     setValue('auroRecDieta',d?.dieta_cuidados);
-    setValue('auroRecGenerales',recomendacionesAEditorConVinetas(d?.recomendaciones_generales));
+    setValue('auroRecGenerales',d?.recomendaciones_generales);
 
     setText(
       'auroRecActualizado',
-      fechaVisual(primeraFechaClinicaValida(
-        registro?.actualizado_en,
-        registro?.creado_en
-      ))
+      fechaVisual(registro?.actualizado_en || registro?.creado_en)
     );
   }
 
@@ -1249,14 +1069,7 @@
     setText('auroRecAtencion',ctx.id ? 'Atención: '+ctx.id : 'Sin atención seleccionada');
     setText('auroRecConsulta',ctx.numeroConsulta ? 'Consulta #'+ctx.numeroConsulta : '—');
     setText('auroRecMedico',nombreMedicoDesdeContexto(a) || '—');
-    setText('auroRecFecha',fechaVisual(primeraFechaClinicaValida(
-      a.fecha_atencion,
-      a.fecha_consulta,
-      a.fecha,
-      a.creado_en,
-      a.fecha_creacion,
-      a.actualizado_en
-    )));
+    setText('auroRecFecha',fechaVisual(a.fecha_atencion || a.fecha_consulta || a.creado_en));
 
     aplicarModo();
   }
@@ -1343,63 +1156,39 @@
         aplicarRegistro(registro);
         fijarFirmaPersistida(idSolicitada);
 
-        let precargaPlan={indicaciones:false,proximaCita:false};
-
-        if(
-          ctx.editable &&
-          (!getValue('auroRecGenerales') || !getValue('auroRecProximaCita'))
-        ){
-          precargaPlan=await precargarDatosPlanSiVacio(
-            idSolicitada,
-            {proximaCita:true,indicaciones:true}
-          );
-
+        let precargadasIndicaciones=false;
+        if(ctx.editable && !getValue('auroRecGenerales')){
+          precargadasIndicaciones=await precargarIndicacionesDesdePlanSiVacio(idSolicitada);
           if(token !== state.tokenCarga || txt(contextoAtencion()?.id) !== idSolicitada) return null;
-        }
-
-        let mensajeRegistro='Recomendaciones cargadas. Puede revisarlas y actualizarlas.';
-        let tipoRegistro='ok';
-
-        if(ctx.editable && (precargaPlan.indicaciones || precargaPlan.proximaCita)){
-          const partes=[];
-          if(precargaPlan.proximaCita) partes.push('la fecha de próximo control');
-          if(precargaPlan.indicaciones) partes.push('las indicaciones para paciente');
-
-          mensajeRegistro='Recomendaciones cargadas. Se completaron desde Plan '+partes.join(' y ')+' porque esos campos estaban vacíos.';
-          tipoRegistro='info';
         }
 
         setMsg(
           ctx.editable
-            ? mensajeRegistro
+            ? (precargadasIndicaciones
+                ? 'Recomendaciones cargadas. El campo general estaba vacío y se precargaron indicaciones del Plan para revisión.'
+                : 'Recomendaciones cargadas. Puede revisarlas y actualizarlas.')
             : 'Recomendaciones históricas cargadas en modo solo lectura.',
-          ctx.editable ? tipoRegistro : 'ok'
+          precargadasIndicaciones ? 'info' : 'ok'
         );
       }else{
-        const precargaPlan = ctx.editable
-          ? await precargarDatosPlanSiVacio(
-              idSolicitada,
-              {proximaCita:true,indicaciones:true}
-            )
-          : {proximaCita:false,indicaciones:false};
+        const precargadoSeguimiento = ctx.editable
+          ? precargarSeguimientoDesdePlanSiVacio()
+          : false;
+
+        const precargadasIndicaciones = ctx.editable
+          ? await precargarIndicacionesDesdePlanSiVacio(idSolicitada)
+          : false;
 
         if(token !== state.tokenCarga || txt(contextoAtencion()?.id) !== idSolicitada) return null;
 
-        let mensajeSinRegistro='Esta atención todavía no tiene recomendaciones guardadas.';
-
-        if(ctx.editable){
-          if(precargaPlan.proximaCita && precargaPlan.indicaciones){
-            mensajeSinRegistro+=' Se precargaron desde Plan la fecha de próximo control y las indicaciones para paciente.';
-          }else if(precargaPlan.indicaciones){
-            mensajeSinRegistro+=' Se precargaron desde Plan las indicaciones para paciente.';
-          }else if(precargaPlan.proximaCita){
-            mensajeSinRegistro+=' Se precargó desde Plan únicamente la fecha de próximo control. No existen indicaciones para paciente disponibles.';
-          }
-        }else{
-          mensajeSinRegistro='Esta atención está bloqueada y no tiene recomendaciones registradas.';
-        }
-
-        setMsg(mensajeSinRegistro,'info');
+        setMsg(
+          ctx.editable
+            ? ((precargadoSeguimiento || precargadasIndicaciones)
+                ? 'Esta atención todavía no tiene recomendaciones guardadas. Se precargó información disponible en Plan para revisión y edición.'
+                : 'Esta atención todavía no tiene recomendaciones guardadas.')
+            : 'Esta atención está bloqueada y no tiene recomendaciones registradas.',
+          'info'
+        );
       }
 
       state.idAtencion=idSolicitada;
@@ -1637,23 +1426,9 @@
   }
 
   function recFechaDocumento(v){
-    const raw=primeraFechaClinicaValida(v);
-    if(!raw) return '—';
-
-    const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if(iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
-
-    const dmy=raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
-    if(dmy) return `${dmy[1]}/${dmy[2]}/${dmy[3]}`;
-
-    const d=new Date(raw);
-    if(!Number.isNaN(d.getTime())){
-      return d.toLocaleDateString('es-EC',{
-        day:'2-digit',month:'2-digit',year:'numeric'
-      });
-    }
-
-    return '—';
+    const raw=txt(v);
+    const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m?`${m[3]}/${m[2]}/${m[1]}`:(raw||'—');
   }
 
   function recListaHTML(items){
@@ -1699,14 +1474,9 @@
       nombre:txt(x.descripcion||x.nombre||x.diagnostico)
     })).filter(x=>x.codigo||x.nombre);
 
-    const fecha=recFechaDocumento(primeraFechaClinicaValida(
-      a.fecha_atencion,
-      a.fecha_consulta,
-      a.fecha,
-      a.creado_en,
-      a.fecha_creacion,
-      a.actualizado_en
-    ));
+    const fecha=recFechaDocumento(
+      a.fecha_atencion||a.fecha_consulta||a.creado_en||new Date().toISOString().slice(0,10)
+    );
 
     const ubicacion=[cfg.direccion,[cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(', ')]
       .filter(Boolean).join(' · ');
@@ -1772,7 +1542,7 @@
       ${dx.length?`
         <section class="ar-dx">
           <h3>DIAGNÓSTICO(S) CIE-10:</h3>
-          ${dx.map(x=>`<div class="ar-dx-row">• ${x.codigo?`<b>${esc(x.codigo)}</b>${x.nombre?' · ':''}`:''}${esc(x.nombre)}</div>`).join('')}
+          ${dx.map(x=>`<div class="ar-dx-row">${x.codigo?`<b>${esc(x.codigo)}</b>${x.nombre?' · ':''}`:''}${esc(x.nombre)}</div>`).join('')}
         </section>`:''}
 
       ${bloques||'<p>No se registraron recomendaciones clínicas para imprimir.</p>'}
@@ -2027,30 +1797,16 @@ html,body{background:#dfe3e8}
   */
   window.addEventListener('aurosanax:plan-cargado',async (evento)=>{
     const idEvento=txt(evento?.detail?.id_atencion || evento?.detail?.idAtencion);
-    const ctx=contextoAtencion();
+    const ctx=state.contexto || contextoAtencion();
 
     if(state.guardando) return;
     if(!idEvento || !ctx?.id || idEvento !== txt(ctx.id)) return;
+    if(getValue('auroRecGenerales')) return;
 
-    const faltaIndicaciones=!getValue('auroRecGenerales');
-    const faltaProximaCita=!getValue('auroRecProximaCita');
-
-    if(!faltaIndicaciones && !faltaProximaCita) return;
-
-    const precarga=await precargarDatosPlanSiVacio(
-      idEvento,
-      {proximaCita:faltaProximaCita,indicaciones:faltaIndicaciones}
-    );
-
-    if(txt(contextoAtencion()?.id) !== idEvento) return;
-
-    if(precarga.indicaciones || precarga.proximaCita){
-      const partes=[];
-      if(precarga.proximaCita) partes.push('fecha de próximo control');
-      if(precarga.indicaciones) partes.push('indicaciones para paciente');
-
+    if(await precargarIndicacionesDesdePlanSiVacio(idEvento)){
+      if(txt(contextoAtencion()?.id) !== idEvento) return;
       setMsg(
-        'Plan cargado para esta atención. Se completó en Recomendaciones: '+partes.join(' e ')+'.',
+        'Se precargaron las indicaciones para paciente del Plan en Recomendaciones generales. Puede revisarlas y editarlas antes de guardar.',
         'info'
       );
     }
