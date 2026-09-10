@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.2.1
+ Versión: 1.2.2
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.2.1';
+  const VERSION = '1.2.2';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20260910_recomendaciones_vinetas_dx_fecha_segura_v2';
+  const RELEASE = '20260910_recomendaciones_dx_bullet_fecha_segura_v3';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -364,12 +364,11 @@
   }
 
   /*
-    IASYN 1.2.1 — FECHA CLÍNICA SEGURA
-    ------------------------------------
-    Algunos contextos heredados pueden traer residuos numéricos como 0,00
-    en campos de fecha. Nunca se muestran como fecha ni se reemplazan por
-    una fecha inventada. Se usa únicamente la primera fecha real disponible
-    de la misma atención; si no existe, se representa con —.
+    IASYN RECOMENDACIONES 1.2.2 — FECHA CLÍNICA SEGURA
+    ----------------------------------------------------
+    Rechaza residuos numéricos heredados como 0,00 y utiliza únicamente
+    una fecha real disponible dentro del contexto de la misma atención.
+    No fabrica fechas cuando no existe una fuente válida.
   */
   function fechaResidualInvalida(valor){
     const raw=txt(valor);
@@ -390,14 +389,18 @@
     if(iso){
       const y=Number(iso[1]), m=Number(iso[2]), d=Number(iso[3]);
       const test=new Date(Date.UTC(y,m-1,d));
-      return test.getUTCFullYear()===y && test.getUTCMonth()===m-1 && test.getUTCDate()===d;
+      return test.getUTCFullYear()===y &&
+             test.getUTCMonth()===m-1 &&
+             test.getUTCDate()===d;
     }
 
     const dmy=raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
     if(dmy){
       const d=Number(dmy[1]), m=Number(dmy[2]), y=Number(dmy[3]);
       const test=new Date(Date.UTC(y,m-1,d));
-      return test.getUTCFullYear()===y && test.getUTCMonth()===m-1 && test.getUTCDate()===d;
+      return test.getUTCFullYear()===y &&
+             test.getUTCMonth()===m-1 &&
+             test.getUTCDate()===d;
     }
 
     const parsed=new Date(raw);
@@ -412,8 +415,8 @@
     return '';
   }
 
-  function fechaVisual(valor){
-    const raw=primeraFechaClinicaValida(valor);
+  function fechaVisual(){
+    const raw=primeraFechaClinicaValida.apply(null,arguments);
     if(!raw) return '—';
 
     const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/);
@@ -482,8 +485,7 @@
       .auro-rec-dx-list{display:grid;gap:8px}
       .auro-rec-dx{display:grid;grid-template-columns:86px minmax(0,1fr) 96px;gap:10px;align-items:center;padding:10px 11px;border:1px solid #e8edf1;border-radius:13px;background:#f8fafc}
       .auro-rec-dx-code{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:5px 8px;border-radius:10px;background:#fff0f7;border:1px solid #f3c7df;font-size:12px;font-weight:950;color:#8b1e5a;text-align:center;white-space:nowrap}
-      .auro-rec-dx-name{min-width:0;display:flex;align-items:flex-start;gap:7px;font-size:13px;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
-      .auro-rec-dx-bullet{flex:0 0 auto;color:#8b1e5a;font-weight:950;line-height:1.35}
+      .auro-rec-dx-name{min-width:0;font-size:13px;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
       .auro-rec-dx-tag{display:inline-flex;align-items:center;justify-content:center;min-height:28px;font-size:10px;font-weight:900;padding:4px 7px;border-radius:999px;background:#fff;border:1px solid #dbe1e8;color:#475569;text-align:center}
       .auro-rec-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:13px;color:#64748b;font-size:12px;text-align:center}
       .auro-rec-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;position:sticky;bottom:10px;z-index:3;padding:12px;border:1px solid #ead7e2;border-radius:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(15,23,42,.08)}
@@ -720,7 +722,7 @@
       const principal = d.principal === true || ['si','sí','true','1'].includes(norm(d.principal)) || i===0;
       return `<div class="auro-rec-dx">
         <div class="auro-rec-dx-code">${esc(codigo || '—')}</div>
-        <div class="auro-rec-dx-name"><span class="auro-rec-dx-bullet" aria-hidden="true">•</span><span>${esc(nombre || 'Diagnóstico sin descripción')}</span></div>
+        <div class="auro-rec-dx-name">• ${esc(nombre || 'Diagnóstico sin descripción')}</div>
         <div class="auro-rec-dx-tag">${principal ? 'Principal' : esc(txt(d.tipo_diagnostico || d.tipo || 'Asociado'))}</div>
       </div>`;
     }).join('');
@@ -749,14 +751,6 @@
   }
 
   /*
-    IASYN RECOMENDACIONES 1.2.1 — AJUSTE VISUAL ANTIRREGRESIVO
-    ----------------------------------------------------------
-    - Diagnósticos muestran viñeta en pantalla y A4 sin modificar sus datos.
-    - Recomendaciones persistidas se presentan con viñetas uniformes.
-    - La firma no-op ignora únicamente el marcador visual de viñeta.
-    - Valores residuales como 0,00 nunca se aceptan como fecha clínica.
-    - No se fabrica una fecha si la atención no aporta una fecha válida.
-
     IASYN RECOMENDACIONES 1.2.0 — PLAN → RECOMENDACIONES
     ------------------------------------------------------
     Integración quirúrgica y antirregresiva.
@@ -856,23 +850,6 @@
     });
 
     return salida;
-  }
-
-  function recomendacionesAEditorConVinetas(valor){
-    const lineas=String(valor || '')
-      .split(/\r?\n+/)
-      .map(limpiarMarcadorClinico)
-      .filter(Boolean);
-
-    return lineas.map(linea=>'• '+linea).join('\n');
-  }
-
-  function recomendacionesCanonicasParaFirma(valor){
-    return String(valor || '')
-      .split(/\r?\n+/)
-      .map(limpiarMarcadorClinico)
-      .filter(Boolean)
-      .join('\n');
   }
 
   function indicacionesPlanAEditor(valor){
@@ -1024,7 +1001,7 @@
         otros:txt(d?.signos_infeccion?.otros)
       },
       dieta_cuidados:txt(d?.dieta_cuidados),
-      recomendaciones_generales:recomendacionesCanonicasParaFirma(d?.recomendaciones_generales)
+      recomendaciones_generales:txt(d?.recomendaciones_generales)
     };
     return JSON.stringify(normalizado);
   }
@@ -1080,7 +1057,7 @@
     aplicarChecks('infeccion',d?.signos_infeccion?.seleccionados);
     setValue('auroRecInfeccionOtros',d?.signos_infeccion?.otros);
     setValue('auroRecDieta',d?.dieta_cuidados);
-    setValue('auroRecGenerales',recomendacionesAEditorConVinetas(d?.recomendaciones_generales));
+    setValue('auroRecGenerales',d?.recomendaciones_generales);
 
     setText(
       'auroRecActualizado',
@@ -1143,14 +1120,14 @@
     setText('auroRecAtencion',ctx.id ? 'Atención: '+ctx.id : 'Sin atención seleccionada');
     setText('auroRecConsulta',ctx.numeroConsulta ? 'Consulta #'+ctx.numeroConsulta : '—');
     setText('auroRecMedico',nombreMedicoDesdeContexto(a) || '—');
-    setText('auroRecFecha',fechaVisual(primeraFechaClinicaValida(
+    setText('auroRecFecha',fechaVisual(
       a.fecha_atencion,
       a.fecha_consulta,
       a.fecha,
       a.creado_en,
       a.fecha_creacion,
       a.actualizado_en
-    )));
+    ));
 
     aplicarModo();
   }
@@ -1507,21 +1484,9 @@
   }
 
   function recFechaDocumento(v){
-    const raw=primeraFechaClinicaValida(v);
-    if(!raw) return '—';
-
-    const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if(iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
-
-    const dmy=raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
-    if(dmy) return `${dmy[1]}/${dmy[2]}/${dmy[3]}`;
-
-    const d=new Date(raw);
-    if(!Number.isNaN(d.getTime())){
-      return d.toLocaleDateString('es-EC',{day:'2-digit',month:'2-digit',year:'numeric'});
-    }
-
-    return '—';
+    const raw=txt(v);
+    const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m?`${m[3]}/${m[2]}/${m[1]}`:(raw||'—');
   }
 
   function recListaHTML(items){
@@ -1567,14 +1532,16 @@
       nombre:txt(x.descripcion||x.nombre||x.diagnostico)
     })).filter(x=>x.codigo||x.nombre);
 
-    const fecha=recFechaDocumento(primeraFechaClinicaValida(
-      a.fecha_atencion,
-      a.fecha_consulta,
-      a.fecha,
-      a.creado_en,
-      a.fecha_creacion,
-      a.actualizado_en
-    ));
+    const fecha=recFechaDocumento(
+      primeraFechaClinicaValida(
+        a.fecha_atencion,
+        a.fecha_consulta,
+        a.fecha,
+        a.creado_en,
+        a.fecha_creacion,
+        a.actualizado_en
+      )
+    );
 
     const ubicacion=[cfg.direccion,[cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(', ')]
       .filter(Boolean).join(' · ');
@@ -1640,7 +1607,7 @@
       ${dx.length?`
         <section class="ar-dx">
           <h3>DIAGNÓSTICO(S) CIE-10:</h3>
-          ${dx.map(x=>`<div class="ar-dx-row"><span class="ar-dx-bullet" aria-hidden="true">•</span><span>${x.codigo?`<b>${esc(x.codigo)}</b>${x.nombre?' · ':''}`:''}${esc(x.nombre)}</span></div>`).join('')}
+          ${dx.map(x=>`<div class="ar-dx-row">• ${x.codigo?`<b>${esc(x.codigo)}</b>${x.nombre?' · ':''}`:''}${esc(x.nombre)}</div>`).join('')}
         </section>`:''}
 
       ${bloques||'<p>No se registraron recomendaciones clínicas para imprimir.</p>'}
@@ -1686,8 +1653,7 @@ body{overflow-x:hidden}
 .ar-line b{display:inline-block;min-width:120px}
 .ar-section,.ar-dx{margin:14px 0;break-inside:avoid;page-break-inside:avoid}
 .ar-section h3,.ar-dx h3{font-size:12px;margin:0 0 6px;font-weight:900}
-.ar-dx-row{display:flex;align-items:flex-start;gap:7px;font-size:12px;line-height:1.45;margin:2px 0}
-.ar-dx-bullet{flex:0 0 auto;color:var(--ar-color,#8b1e5a);font-weight:900}
+.ar-dx-row{font-size:12px;line-height:1.45;margin:2px 0}
 .ar-doc-list{margin:4px 0 7px 18px;padding:0}
 .ar-doc-list li{font-size:12px;line-height:1.48;margin:2px 0}
 .ar-rec-list{margin-top:6px}
