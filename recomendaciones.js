@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.2.1-CIE10
+ Versión: 1.2.2-CIE10-HORA
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.2.1-CIE10';
+  const VERSION = '1.2.2-CIE10-HORA';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20260910_recomendaciones_cie10_punto_visual_real_v2';
+  const RELEASE = '20260910_recomendaciones_fecha_hora_atencion_real_v3';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -378,6 +378,70 @@
       });
     }
     return raw;
+  }
+
+  /*
+    IASYN RECOMENDACIONES 1.2.2-CIE10-HORA
+    Fecha/hora REAL de la atención:
+    - fecha_atencion aporta únicamente la FECHA.
+    - hora_atencion aporta únicamente la HORA.
+    - Nunca se toma 00:00 del componente horario artificial de fecha_atencion.
+    - Si hora_atencion no existe, se muestra solo la fecha.
+    - No modifica Atenciones, backend ni persistencia.
+  */
+  function fechaAtencionSoloFecha(valor){
+    const raw=txt(valor);
+    if(!raw) return '';
+
+    const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
+
+    const dmy=raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
+    if(dmy) return `${dmy[1]}/${dmy[2]}/${dmy[3]}`;
+
+    const d=new Date(raw);
+    if(!Number.isNaN(d.getTime())){
+      return d.toLocaleDateString('es-EC',{
+        day:'2-digit',month:'2-digit',year:'numeric'
+      });
+    }
+
+    return raw;
+  }
+
+  function horaAtencionVisual(valor){
+    const raw=txt(valor);
+    if(!raw) return '';
+
+    if(raw.includes('T')){
+      const m=raw.match(/T(\d{1,2}):(\d{2})/);
+      if(m) return `${String(m[1]).padStart(2,'0')}:${m[2]}`;
+    }
+
+    const m=raw.match(/^(\d{1,2}):(\d{2})/);
+    if(m) return `${String(m[1]).padStart(2,'0')}:${m[2]}`;
+
+    return '';
+  }
+
+  function fechaHoraAtencionVisual(atencion){
+    const a=atencion || {};
+
+    const fecha=fechaAtencionSoloFecha(
+      a.fecha_atencion ||
+      a.fecha_consulta ||
+      a.fecha ||
+      a.creado_en
+    );
+
+    const hora=horaAtencionVisual(
+      a.hora_atencion ||
+      a.hora_consulta ||
+      ''
+    );
+
+    if(!fecha) return '—';
+    return hora ? `${fecha} · ${hora}` : fecha;
   }
 
   function setMsg(texto, tipo){
@@ -1095,7 +1159,7 @@
     setText('auroRecAtencion',ctx.id ? 'Atención: '+ctx.id : 'Sin atención seleccionada');
     setText('auroRecConsulta',ctx.numeroConsulta ? 'Consulta #'+ctx.numeroConsulta : '—');
     setText('auroRecMedico',nombreMedicoDesdeContexto(a) || '—');
-    setText('auroRecFecha',fechaVisual(a.fecha_atencion || a.fecha_consulta || a.creado_en));
+    setText('auroRecFecha',fechaHoraAtencionVisual(a));
 
     aplicarModo();
   }
