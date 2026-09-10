@@ -2,8 +2,8 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.1.0
- Fecha: 2026-08-12
+ Versión: 1.2.0
+ Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
  - Módulo funcional independiente.
@@ -26,8 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.1.0';
+  const VERSION = '1.2.0';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
+  const RELEASE = '20260910_recomendaciones_plan_vinetas_aislamiento_noop_v1';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -48,7 +49,10 @@
     cargando: false,
     guardando: false,
     inicializado: false,
-    tokenCarga: 0
+    tokenCarga: 0,
+    tokenGuardado: 0,
+    firmaPersistida: '',
+    firmaPersistidaAtencion: ''
   };
 
   const ALERTAS = [
@@ -576,6 +580,11 @@
               <div class="auro-rec-field">
                 <label for="auroRecGenerales">Recomendaciones para el paciente</label>
                 <textarea id="auroRecGenerales" style="min-height:180px" placeholder="Escriba las recomendaciones finales de esta atención."></textarea>
+                <div style="margin-top:10px;display:flex;justify-content:flex-end">
+                  <button type="button" class="auro-rec-btn" id="auroRecBtnAgregarPlan">
+                    <i class="bi bi-plus-circle me-1"></i> Añadir indicaciones del Plan
+                  </button>
+                </div>
               </div>
             </div>
           </section>
@@ -683,6 +692,267 @@
     return false;
   }
 
+  /*
+    IASYN RECOMENDACIONES 1.2.0 — PLAN → RECOMENDACIONES
+    ------------------------------------------------------
+    Integración quirúrgica y antirregresiva.
+
+    REGLAS:
+    - La autoridad clínica es siempre la MISMA id_atencion.
+    - Recomendaciones nunca escribe ni modifica Plan.
+    - Si el campo general ya contiene texto, nunca se sobrescribe automáticamente.
+    - Si está vacío, puede precargarse con las indicaciones persistidas del Plan.
+    - El botón manual agrega únicamente indicaciones que todavía no están presentes.
+    - Las indicaciones importadas se muestran con viñeta para lectura clínica clara.
+    - Si una versión futura entrega categoría explícita, se conserva; nunca se inventa.
+    - Nada se persiste hasta pulsar Guardar recomendaciones.
+  */
+
+  function limpiarMarcadorClinico(linea){
+    return txt(linea)
+      .replace(/^\s*(?:[•●▪◦\-–—*]|\d+[.)])\s+/, '')
+      .trim();
+  }
+
+  function claveLineaClinica(linea){
+    return norm(limpiarMarcadorClinico(linea));
+  }
+
+  function lineaPlanDesdeItem(item){
+    if(typeof item === 'string') return limpiarMarcadorClinico(item);
+    if(!item || typeof item !== 'object') return '';
+
+    const texto=txt(
+      item.texto ||
+      item.descripcion ||
+      item.indicacion ||
+      item.recomendacion ||
+      ''
+    );
+
+    if(!texto) return '';
+
+    const categoria=txt(
+      item.categoria ||
+      item.category ||
+      item.grupo ||
+      item.seccion ||
+      item.tipo ||
+      ''
+    );
+
+    return categoria ? `${categoria}: ${limpiarMarcadorClinico(texto)}` : limpiarMarcadorClinico(texto);
+  }
+
+  function indicacionesPlanALista(valor){
+    if(valor === null || valor === undefined) return [];
+
+    if(Array.isArray(valor)){
+      return valor.map(lineaPlanDesdeItem).filter(Boolean);
+    }
+
+    if(typeof valor === 'object'){
+      const coleccion = valor.indicaciones || valor.items || valor.registros || valor.lista;
+      if(Array.isArray(coleccion)) return indicacionesPlanALista(coleccion);
+      const unica=lineaPlanDesdeItem(valor);
+      return unica ? [unica] : [];
+    }
+
+    const raw=txt(valor);
+    if(!raw) return [];
+
+    if(raw.startsWith('[') || raw.startsWith('{')){
+      try{
+        return indicacionesPlanALista(JSON.parse(raw));
+      }catch(e){
+        /* Compatibilidad histórica: continuar como texto si no es JSON válido. */
+      }
+    }
+
+    return raw
+      .split(/\r?\n+/)
+      .map(limpiarMarcadorClinico)
+      .filter(Boolean);
+  }
+
+  function lineasClinicasUnicas(valor){
+    const vistas=new Set();
+    const salida=[];
+
+    const base=Array.isArray(valor)
+      ? valor
+      : String(valor || '').split(/\r?\n+/);
+
+    base.forEach(linea=>{
+      const limpia=limpiarMarcadorClinico(linea);
+      const clave=claveLineaClinica(limpia);
+      if(!limpia || !clave || vistas.has(clave)) return;
+      vistas.add(clave);
+      salida.push(limpia);
+    });
+
+    return salida;
+  }
+
+  function indicacionesPlanAEditor(valor){
+    return lineasClinicasUnicas(indicacionesPlanALista(valor))
+      .map(linea=>'• '+linea)
+      .join('\n');
+  }
+
+  async function obtenerIndicacionesPlanMismaAtencion(idAtencionEsperada){
+    const idEsperada=txt(idAtencionEsperada);
+    if(!idEsperada) return '';
+
+    const ctxInicial=state.contexto || contextoAtencion();
+    const idInicial=txt(ctxInicial?.id || state.idAtencion);
+    if(!idInicial || idInicial !== idEsperada) return '';
+
+    let plan=null;
+
+    try{
+      if(typeof window.buscarPlanClinicoPorAtencionDesdeSheets === 'function'){
+        plan=await window.buscarPlanClinicoPorAtencionDesdeSheets(idEsperada);
+      }else{
+        plan=await apiGet('buscarPlanPorAtencion',{id_atencion:idEsperada});
+      }
+    }catch(error){
+      console.warn(MODULO+': no se pudieron leer indicaciones del Plan.',error);
+      return '';
+    }
+
+    const ctxActual=state.contexto || contextoAtencion();
+    const idActual=txt(ctxActual?.id || state.idAtencion);
+    if(!idActual || idActual !== idEsperada) return '';
+
+    const valor =
+      plan?.indicaciones_paciente ??
+      plan?.indicaciones ??
+      plan?.indicacionesPaciente ??
+      '';
+
+    const desdePersistido=indicacionesPlanAEditor(valor);
+    if(desdePersistido) return desdePersistido;
+
+    /*
+      Respaldo visual permitido únicamente cuando el Plan visible declara
+      exactamente la misma id_atencion. Nunca se toma un campo de otra atención.
+    */
+    const idPlanVisible=txt(window.planState?.atencionActual);
+    if(idPlanVisible !== idEsperada) return '';
+
+    const campoPlan=document.getElementById('hcIndicacionesPaciente');
+    return indicacionesPlanAEditor(campoPlan?.value || campoPlan?.textContent || '');
+  }
+
+  async function precargarIndicacionesDesdePlanSiVacio(idAtencionEsperada){
+    if(state.guardando) return false;
+    if(getValue('auroRecGenerales')) return false;
+
+    const idEsperada=txt(idAtencionEsperada);
+    const ctx=state.contexto || contextoAtencion();
+    const idRec=txt(ctx?.id || state.idAtencion);
+    if(!idEsperada || !idRec || idEsperada !== idRec) return false;
+
+    const valor=await obtenerIndicacionesPlanMismaAtencion(idEsperada);
+
+    const ctxFinal=state.contexto || contextoAtencion();
+    const idFinal=txt(ctxFinal?.id || state.idAtencion);
+
+    if(state.guardando) return false;
+    if(idFinal !== idEsperada) return false;
+    if(getValue('auroRecGenerales')) return false;
+    if(!valor) return false;
+
+    setValue('auroRecGenerales',valor);
+    return true;
+  }
+
+  async function agregarIndicacionesPlanManualmente(){
+    const ctx=state.contexto || contextoAtencion();
+
+    if(state.guardando){
+      setMsg('Espere a que termine el guardado actual antes de añadir indicaciones del Plan.','info');
+      return false;
+    }
+
+    if(!ctx?.id){
+      setMsg('Seleccione una atención antes de añadir indicaciones del Plan.','error');
+      return false;
+    }
+
+    if(!ctx.editable){
+      setMsg('La atención seleccionada está protegida contra edición.','error');
+      return false;
+    }
+
+    const idEsperada=txt(ctx.id);
+    const valorPlan=await obtenerIndicacionesPlanMismaAtencion(idEsperada);
+
+    const ctxActual=state.contexto || contextoAtencion();
+    if(state.guardando || txt(ctxActual?.id) !== idEsperada) return false;
+
+    if(!valorPlan){
+      setMsg('El Plan de esta atención no tiene indicaciones para paciente disponibles.','info');
+      return false;
+    }
+
+    const actuales=getValue('auroRecGenerales');
+    const clavesActuales=new Set(
+      lineasClinicasUnicas(actuales).map(claveLineaClinica)
+    );
+
+    const nuevas=lineasClinicasUnicas(valorPlan)
+      .filter(linea=>!clavesActuales.has(claveLineaClinica(linea)));
+
+    if(!nuevas.length){
+      setMsg('Las indicaciones disponibles en Plan ya están incluidas en Recomendaciones generales.','info');
+      return false;
+    }
+
+    const bloqueNuevo=nuevas.map(linea=>'• '+linea).join('\n');
+    const combinado=actuales
+      ? actuales.replace(/\s+$/,'')+'\n'+bloqueNuevo
+      : bloqueNuevo;
+
+    setValue('auroRecGenerales',combinado);
+    setMsg(
+      'Se añadieron únicamente indicaciones nuevas del Plan. Revise el texto antes de guardar recomendaciones.',
+      'info'
+    );
+    return true;
+  }
+
+  function firmaDetalle(detalle){
+    const d=detalle || {};
+    const normalizado={
+      seguimiento:{
+        proxima_cita:txt(d?.seguimiento?.proxima_cita),
+        motivo:txt(d?.seguimiento?.motivo)
+      },
+      signos_alerta:{
+        seleccionados:Array.isArray(d?.signos_alerta?.seleccionados)
+          ? d.signos_alerta.seleccionados.map(txt).filter(Boolean).sort()
+          : [],
+        otros:txt(d?.signos_alerta?.otros)
+      },
+      signos_infeccion:{
+        seleccionados:Array.isArray(d?.signos_infeccion?.seleccionados)
+          ? d.signos_infeccion.seleccionados.map(txt).filter(Boolean).sort()
+          : [],
+        otros:txt(d?.signos_infeccion?.otros)
+      },
+      dieta_cuidados:txt(d?.dieta_cuidados),
+      recomendaciones_generales:txt(d?.recomendaciones_generales)
+    };
+    return JSON.stringify(normalizado);
+  }
+
+  function fijarFirmaPersistida(idAtencion){
+    state.firmaPersistida=firmaDetalle(detalleActual());
+    state.firmaPersistidaAtencion=txt(idAtencion);
+  }
+
   function detalleActual(){
     return {
       version:JSON_VERSION,
@@ -740,17 +1010,33 @@
   function aplicarModo(){
     const ctx=state.contexto || contextoAtencion();
     const editable=ctx.editable === true;
+    const bloqueadoPorGuardado=state.guardando === true;
     const app=document.getElementById('auroRecomendacionesApp');
     if(app) app.classList.toggle('auro-rec-readonly',!editable);
 
     document.querySelectorAll(
       '#auroRecomendacionesApp input,#auroRecomendacionesApp textarea,#auroRecomendacionesApp select'
     ).forEach(el=>{
-      el.disabled=!editable;
+      el.disabled=!editable || bloqueadoPorGuardado;
     });
 
     const guardar=document.getElementById('auroRecBtnGuardar');
-    if(guardar) guardar.disabled=!editable || !ctx.id;
+    if(guardar){
+      guardar.disabled=!editable || !ctx.id || bloqueadoPorGuardado;
+      if(bloqueadoPorGuardado){
+        guardar.setAttribute('aria-busy','true');
+        guardar.innerHTML='<i class="bi bi-hourglass-split me-1"></i> Guardando...';
+      }else{
+        guardar.removeAttribute('aria-busy');
+        guardar.innerHTML='<i class="bi bi-save2 me-1"></i> Guardar recomendaciones';
+      }
+    }
+
+    const agregarPlan=document.getElementById('auroRecBtnAgregarPlan');
+    if(agregarPlan) agregarPlan.disabled=!editable || !ctx.id || bloqueadoPorGuardado;
+
+    const recargar=document.getElementById('auroRecBtnRecargar');
+    if(recargar) recargar.disabled=bloqueadoPorGuardado;
 
     const estado=document.getElementById('auroRecEstado');
     if(estado){
@@ -781,86 +1067,143 @@
     aplicarModo();
   }
 
-  async function cargarDiagnosticos(id){
+  async function cargarDiagnosticos(id, tokenEsperado){
+    const idEsperada=txt(id);
+    if(!idEsperada) return [];
+
     try{
-      const data=await apiGet('listarDiagnosticosPorAtencion',{id_atencion:id});
-      state.diagnosticos=Array.isArray(data) ? data : (Array.isArray(data?.registros) ? data.registros : []);
+      const data=await apiGet('listarDiagnosticosPorAtencion',{id_atencion:idEsperada});
+      const lista=Array.isArray(data) ? data : (Array.isArray(data?.registros) ? data.registros : []);
+
+      const ctxActual=state.contexto || contextoAtencion();
+      const idActual=txt(ctxActual?.id || idAtencionActiva());
+      const tokenValido=tokenEsperado === undefined || tokenEsperado === state.tokenCarga;
+
+      if(!tokenValido || idActual !== idEsperada) return null;
+
+      state.diagnosticos=lista;
+      renderDiagnosticos();
+      return lista;
     }catch(e){
       console.warn(MODULO+': no se pudieron cargar diagnósticos.',e);
-      state.diagnosticos=[];
+
+      const ctxActual=state.contexto || contextoAtencion();
+      const idActual=txt(ctxActual?.id || idAtencionActiva());
+      const tokenValido=tokenEsperado === undefined || tokenEsperado === state.tokenCarga;
+
+      if(tokenValido && idActual === idEsperada){
+        state.diagnosticos=[];
+        renderDiagnosticos();
+      }
+      return null;
     }
-    renderDiagnosticos();
   }
 
   async function cargar(forzar){
-    if(state.cargando) return null;
     let ctx=contextoAtencion();
 
     state.contexto=ctx;
     renderContexto();
 
     if(!ctx.id){
+      state.tokenCarga++;
+      state.cargando=false;
       limpiar();
       state.diagnosticos=[];
+      state.firmaPersistida='';
+      state.firmaPersistidaAtencion='';
       renderDiagnosticos();
       setMsg('Seleccione una atención antes de trabajar Recomendaciones.','info');
       return null;
     }
 
+    const idSolicitada=txt(ctx.id);
     const token=++state.tokenCarga;
     state.cargando=true;
     setMsg('Cargando recomendaciones de esta atención...','info');
 
     try{
-      const [registro, contextoEnriquecido] = await Promise.all([
-        apiGet('buscarRecomendacionPorAtencion',{id_atencion:ctx.id}),
+      const resultados=await Promise.all([
+        apiGet('buscarRecomendacionPorAtencion',{id_atencion:idSolicitada}),
         enriquecerContextoDesdeServidor(ctx),
-        cargarDiagnosticos(ctx.id)
-      ]).then(resultados => [resultados[0], resultados[1]]);
+        cargarDiagnosticos(idSolicitada,token)
+      ]);
 
       if(token !== state.tokenCarga) return null;
 
-      ctx=contextoEnriquecido || ctx;
+      const ctxVigente=contextoAtencion();
+      if(txt(ctxVigente?.id) !== idSolicitada) return null;
+
+      const registro=resultados[0];
+      const contextoEnriquecido=resultados[1];
+
+      ctx=contextoEnriquecido || ctxVigente || ctx;
+      if(txt(ctx?.id) !== idSolicitada) return null;
       state.contexto=ctx;
 
       limpiar();
+      /* La firma persistida se fija ANTES de cualquier precarga desde Plan. */
+      fijarFirmaPersistida(idSolicitada);
 
       if(registro && registro.id_recomendacion){
         aplicarRegistro(registro);
-        setMsg(ctx.editable
-          ? 'Recomendaciones cargadas. Puede revisarlas y actualizarlas.'
-          : 'Recomendaciones históricas cargadas en modo solo lectura.','ok');
-      }else{
-        const precargado = ctx.editable
-          ? precargarSeguimientoDesdePlanSiVacio()
-          : false;
+        fijarFirmaPersistida(idSolicitada);
+
+        let precargadasIndicaciones=false;
+        if(ctx.editable && !getValue('auroRecGenerales')){
+          precargadasIndicaciones=await precargarIndicacionesDesdePlanSiVacio(idSolicitada);
+          if(token !== state.tokenCarga || txt(contextoAtencion()?.id) !== idSolicitada) return null;
+        }
 
         setMsg(
           ctx.editable
-            ? (precargado
-                ? 'Esta atención todavía no tiene recomendaciones guardadas. Se precargó el motivo de control disponible en Plan para revisión.'
+            ? (precargadasIndicaciones
+                ? 'Recomendaciones cargadas. El campo general estaba vacío y se precargaron indicaciones del Plan para revisión.'
+                : 'Recomendaciones cargadas. Puede revisarlas y actualizarlas.')
+            : 'Recomendaciones históricas cargadas en modo solo lectura.',
+          precargadasIndicaciones ? 'info' : 'ok'
+        );
+      }else{
+        const precargadoSeguimiento = ctx.editable
+          ? precargarSeguimientoDesdePlanSiVacio()
+          : false;
+
+        const precargadasIndicaciones = ctx.editable
+          ? await precargarIndicacionesDesdePlanSiVacio(idSolicitada)
+          : false;
+
+        if(token !== state.tokenCarga || txt(contextoAtencion()?.id) !== idSolicitada) return null;
+
+        setMsg(
+          ctx.editable
+            ? ((precargadoSeguimiento || precargadasIndicaciones)
+                ? 'Esta atención todavía no tiene recomendaciones guardadas. Se precargó información disponible en Plan para revisión y edición.'
                 : 'Esta atención todavía no tiene recomendaciones guardadas.')
             : 'Esta atención está bloqueada y no tiene recomendaciones registradas.',
           'info'
         );
       }
 
-      state.idAtencion=ctx.id;
+      state.idAtencion=idSolicitada;
       renderContexto();
       return registro || null;
     }catch(e){
+      if(token !== state.tokenCarga || txt(contextoAtencion()?.id) !== idSolicitada) return null;
       console.error(MODULO+':',e);
       setMsg('No se pudieron cargar las recomendaciones: '+txt(e.message || e),'error');
       return null;
     }finally{
-      state.cargando=false;
+      if(token === state.tokenCarga){
+        state.cargando=false;
+        aplicarModo();
+      }
     }
   }
 
-  function datosGuardar(){
-    const ctx=state.contexto || contextoAtencion();
+  function datosGuardar(ctxForzado, detalleForzado){
+    const ctx=ctxForzado || state.contexto || contextoAtencion();
     const a=ctx.atencion || {};
-    const detalle=detalleActual();
+    const detalle=detalleForzado || detalleActual();
 
     return {
       id_recomendacion:state.idRecomendacion || '',
@@ -891,50 +1234,83 @@
       return;
     }
 
+    const idGuardado=txt(ctx.id);
     const detalle=detalleActual();
+
     if(!tieneContenido(detalle)){
       setMsg('Ingrese al menos una recomendación, seguimiento, signo de alerta o cuidado antes de guardar.','error');
       return;
     }
 
+    /* Barrera no-op: mismo contenido clínico persistido = cero POST. */
+    if(
+      state.firmaPersistidaAtencion === idGuardado &&
+      state.firmaPersistida &&
+      firmaDetalle(detalle) === state.firmaPersistida
+    ){
+      setMsg('No hay cambios nuevos en Recomendaciones para guardar.','info');
+      return;
+    }
+
+    const tokenGuardado=++state.tokenGuardado;
     const btn=document.getElementById('auroRecBtnGuardar');
     state.guardando=true;
-    if(btn){
-      btn.disabled=true;
-      btn.innerHTML='<i class="bi bi-hourglass-split me-1"></i> Guardando...';
+    aplicarModo();
+
+    function guardadoSigueVigente(){
+      const ctxActual=contextoAtencion();
+      return tokenGuardado === state.tokenGuardado && txt(ctxActual?.id) === idGuardado;
     }
 
     try{
-      const data=datosGuardar();
+      const data=datosGuardar(ctx,detalle);
       const r=await apiPost('guardarRecomendacion',data);
+
+      if(!guardadoSigueVigente()) return;
 
       if(!r || r.success === false){
         throw new Error(txt(r?.message || 'No se pudo guardar Recomendaciones.'));
       }
 
       state.idRecomendacion=txt(r.id || r.id_recomendacion || data.id_recomendacion);
-      setMsg(r.actualizado ? 'Recomendaciones actualizadas correctamente.' : 'Recomendaciones guardadas correctamente.','ok');
+
+      /*
+        Recarga autoritativa de la MISMA atención. La carga fija la firma persistida
+        desde lo realmente devuelto por backend antes de cualquier precarga del Plan.
+      */
       await cargar(true);
 
+      if(!guardadoSigueVigente()) return;
+
+      setMsg(
+        r.actualizado ? 'Recomendaciones actualizadas correctamente.' : 'Recomendaciones guardadas correctamente.',
+        'ok'
+      );
+
       window.dispatchEvent(new CustomEvent('aurosanax:recomendaciones-guardadas',{
-        detail:{id_atencion:ctx.id,id_recomendacion:state.idRecomendacion}
+        detail:{id_atencion:idGuardado,id_recomendacion:state.idRecomendacion}
       }));
     }catch(e){
+      if(!guardadoSigueVigente()) return;
       console.error(MODULO+':',e);
       setMsg('No se pudo guardar: '+txt(e.message || e),'error');
     }finally{
-      state.guardando=false;
-      if(btn){
-        const ctxActual=contextoAtencion();
-        btn.disabled=!(ctxActual.editable && ctxActual.id);
-        btn.innerHTML='<i class="bi bi-save2 me-1"></i> Guardar recomendaciones';
+      if(tokenGuardado === state.tokenGuardado){
+        state.guardando=false;
+        aplicarModo();
+
+        if(btn && document.body.contains(btn)){
+          btn.removeAttribute('aria-busy');
+          btn.innerHTML='<i class="bi bi-save2 me-1"></i> Guardar recomendaciones';
+        }
       }
     }
   }
 
 
+
   /* ============================================================
-     IASYN RECOMENDACIONES 1.1.0
+     IASYN RECOMENDACIONES 1.2.0
      IMPRESIÓN A4 BASADA EN EL DOCUMENTO MAESTRO DE CERTIFICADOS
      ----------------------------------------------------------------
      ALCANCE QUIRÚRGICO / ANTIRREGRESIÓN
@@ -1058,10 +1434,16 @@
   function recRecomendacionesHTML(texto){
     const raw=txt(texto);
     if(!raw) return '';
-    const items=raw.split(/\r?\n+/).map(x=>x.trim()).filter(Boolean);
-    return items.length>1
-      ? `<ul class="ar-doc-list ar-rec-list">${items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`
-      : `<p class="ar-rec-text">${esc(raw)}</p>`;
+
+    const lineasRaw=raw.split(/\r?\n+/).map(x=>txt(x)).filter(Boolean);
+    const teniaVineta=lineasRaw.some(x=>/^\s*(?:[•●▪◦\-–—*]|\d+[.)])\s+/.test(x));
+    const items=lineasClinicasUnicas(lineasRaw);
+
+    if(items.length>1 || teniaVineta){
+      return `<ul class="ar-doc-list ar-rec-list">${items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+    }
+
+    return `<p class="ar-rec-text">${esc(items[0] || raw)}</p>`;
   }
 
   function recDocumentoHTML(){
@@ -1299,6 +1681,7 @@ html,body{background:#dfe3e8}
     const guardarBtn=document.getElementById('auroRecBtnGuardar');
     const recargarBtn=document.getElementById('auroRecBtnRecargar');
     const vistaBtn=document.getElementById('auroRecBtnVista');
+    const agregarPlanBtn=document.getElementById('auroRecBtnAgregarPlan');
 
     if(guardarBtn && guardarBtn.dataset.auroRec!=='1'){
       guardarBtn.dataset.auroRec='1';
@@ -1312,6 +1695,10 @@ html,body{background:#dfe3e8}
       vistaBtn.dataset.auroRec='1';
       vistaBtn.addEventListener('click',vistaPrevia);
     }
+    if(agregarPlanBtn && agregarPlanBtn.dataset.auroRec!=='1'){
+      agregarPlanBtn.dataset.auroRec='1';
+      agregarPlanBtn.addEventListener('click',agregarIndicacionesPlanManualmente);
+    }
   }
 
   async function inicializar(){
@@ -1324,12 +1711,68 @@ html,body{background:#dfe3e8}
     return true;
   }
 
+  /*
+    IASYN RECOMENDACIONES 1.2.0 — AISLAMIENTO POR ATENCIÓN
+    -------------------------------------------------------
+    La limpieza solo responde al evento canónico de Atenciones.
+    Cambiar/limpiar atención invalida cargas y guardados visuales anteriores,
+    pero nunca intenta revertir una escritura que ya llegó al backend.
+  */
+  function onAtencionLimpiada(){
+    state.tokenCarga++;
+    state.tokenGuardado++;
+    state.cargando=false;
+    state.guardando=false;
+    state.idAtencion='';
+    state.idRecomendacion='';
+    state.registro=null;
+    state.diagnosticos=[];
+    state.firmaPersistida='';
+    state.firmaPersistidaAtencion='';
+    state.contexto={
+      id:'',
+      atencion:{},
+      idPaciente:'',
+      numeroConsulta:'',
+      estadoAtencion:'',
+      finalizada:false,
+      bloqueada:false,
+      editable:false,
+      historica:false
+    };
+    limpiar();
+    renderDiagnosticos();
+    renderContexto();
+    setMsg('Seleccione una atención antes de trabajar Recomendaciones.','info');
+  }
+
   function onAtencionCambio(){
     const id=idAtencionActiva();
+
     if(id !== state.idAtencion){
       state.tokenCarga++;
+      state.tokenGuardado++;
+      state.cargando=false;
+      state.guardando=false;
       state.idAtencion=id;
-      setTimeout(()=>cargar(true),50);
+      state.idRecomendacion='';
+      state.registro=null;
+      state.diagnosticos=[];
+      state.firmaPersistida='';
+      state.firmaPersistidaAtencion='';
+      state.contexto=contextoAtencion();
+
+      /* Limpieza inmediata para no dejar datos visuales de la atención previa. */
+      limpiar();
+      renderDiagnosticos();
+      renderContexto();
+
+      if(id){
+        setMsg('Cargando recomendaciones de esta atención...','info');
+        setTimeout(()=>cargar(true),50);
+      }else{
+        setMsg('Seleccione una atención antes de trabajar Recomendaciones.','info');
+      }
     }else{
       state.contexto=contextoAtencion();
       renderContexto();
@@ -1339,9 +1782,37 @@ html,body{background:#dfe3e8}
   window.addEventListener('aurosanax:atencion-cambiada',onAtencionCambio);
   window.addEventListener('aurosanax:atencion-seleccionada',onAtencionCambio);
   window.addEventListener('aurosanax:atencion-actualizada',onAtencionCambio);
-  window.addEventListener('aurosanax:diagnosticos-actualizados',()=>{
-    if(state.idAtencion) cargarDiagnosticos(state.idAtencion);
+  window.addEventListener('aurosanax:atencion-limpiada',onAtencionLimpiada);
+
+  /*
+    Si Plan termina de cargar después de Recomendaciones, se intenta la misma
+    precarga segura. Solo actúa en la MISMA id_atencion y si el campo sigue vacío.
+  */
+  window.addEventListener('aurosanax:plan-cargado',async (evento)=>{
+    const idEvento=txt(evento?.detail?.id_atencion || evento?.detail?.idAtencion);
+    const ctx=state.contexto || contextoAtencion();
+
+    if(state.guardando) return;
+    if(!idEvento || !ctx?.id || idEvento !== txt(ctx.id)) return;
+    if(getValue('auroRecGenerales')) return;
+
+    if(await precargarIndicacionesDesdePlanSiVacio(idEvento)){
+      if(txt(contextoAtencion()?.id) !== idEvento) return;
+      setMsg(
+        'Se precargaron las indicaciones para paciente del Plan en Recomendaciones generales. Puede revisarlas y editarlas antes de guardar.',
+        'info'
+      );
+    }
   });
+
+  window.addEventListener('aurosanax:diagnosticos-actualizados',(evento)=>{
+    const idEvento=txt(evento?.detail?.id_atencion || evento?.detail?.idAtencion);
+    const idActual=txt((state.contexto || contextoAtencion())?.id || state.idAtencion);
+    if(!idActual) return;
+    if(idEvento && idEvento !== idActual) return;
+    cargarDiagnosticos(idActual);
+  });
+
 
   document.addEventListener('DOMContentLoaded',()=>{
     if(document.getElementById('auroRecomendacionesMount')) inicializar();
