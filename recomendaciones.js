@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.2.1
+ Versión: 1.2.1-CIE10
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.2.1';
+  const VERSION = '1.2.1-CIE10';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20260910_rebase_estable_dx_linea_codigo_punto_nombre_v2';
+  const RELEASE = '20260910_recomendaciones_cie10_punto_visual_real_v2';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -425,11 +425,9 @@
       .auro-rec-check{display:flex;align-items:flex-start;gap:8px;padding:9px 10px;border:1px solid #edf0f3;border-radius:13px;background:#fff;min-height:44px;font-size:13px;font-weight:650;line-height:1.3}
       .auro-rec-check input{width:17px;height:17px;accent-color:#8b1e5a;flex:0 0 auto;margin-top:1px}
       .auro-rec-dx-list{display:grid;gap:8px}
-      .auro-rec-dx{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:10px;align-items:center;padding:10px 11px;border:1px solid #e8edf1;border-radius:13px;background:#f8fafc}
-      .auro-rec-dx-main{min-width:0;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+      .auro-rec-dx{display:grid;grid-template-columns:86px minmax(0,1fr) 96px;gap:10px;align-items:center;padding:10px 11px;border:1px solid #e8edf1;border-radius:13px;background:#f8fafc}
       .auro-rec-dx-code{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:5px 8px;border-radius:10px;background:#fff0f7;border:1px solid #f3c7df;font-size:12px;font-weight:950;color:#8b1e5a;text-align:center;white-space:nowrap}
-      .auro-rec-dx-sep{flex:0 0 auto;color:#8b1e5a;font-size:16px;font-weight:950;line-height:1}
-      .auro-rec-dx-name{min-width:0;flex:1 1 180px;font-size:13px;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
+      .auro-rec-dx-name{min-width:0;font-size:13px;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
       .auro-rec-dx-tag{display:inline-flex;align-items:center;justify-content:center;min-height:28px;font-size:10px;font-weight:900;padding:4px 7px;border-radius:999px;background:#fff;border:1px solid #dbe1e8;color:#475569;text-align:center}
       .auro-rec-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:13px;color:#64748b;font-size:12px;text-align:center}
       .auro-rec-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;position:sticky;bottom:10px;z-index:3;padding:12px;border:1px solid #ead7e2;border-radius:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(15,23,42,.08)}
@@ -466,11 +464,9 @@
         .auro-rec-check{min-height:48px;font-size:13px;padding:10px}
         .auro-rec-actions{display:grid;grid-template-columns:1fr;bottom:6px;padding:9px}
         .auro-rec-btn{width:100%;min-height:46px;font-size:14px}
-        .auro-rec-dx{grid-template-columns:1fr;align-items:start}
-        .auro-rec-dx-main{width:100%;gap:7px}
-        .auro-rec-dx-code{width:auto;min-width:72px}
-        .auro-rec-dx-name{flex:1 1 150px}
-        .auro-rec-dx-tag{grid-column:1;width:max-content;max-width:100%;margin-top:2px}
+        .auro-rec-dx{grid-template-columns:78px minmax(0,1fr);align-items:start}
+        .auro-rec-dx-code{width:78px}
+        .auro-rec-dx-tag{grid-column:2;width:max-content;max-width:100%;margin-top:-2px}
       }
     `;
     document.head.appendChild(style);
@@ -653,6 +649,36 @@
     setText('auroRecActualizado','Sin guardar aún');
   }
 
+  /*
+    IASYN RECOMENDACIONES 1.2.1-CIE10
+    Presentación CIE-10 profesional:
+    - La persistencia/backend puede entregar códigos compactos (ej. N760).
+    - Diagnóstico ya expone auroFormatearCie10Visual() para mostrar N76.0.
+    - Recomendaciones reutiliza esa función SIN modificar el diagnóstico.
+    - Si por cualquier motivo el formateador no está disponible, aplica
+      un fallback visual equivalente únicamente para presentación.
+  */
+  function codigoCie10Visual(valor, registro){
+    const raw=txt(valor).toUpperCase();
+    if(!raw) return '';
+
+    try{
+      if(typeof window.auroFormatearCie10Visual === 'function'){
+        return txt(window.auroFormatearCie10Visual(raw, registro));
+      }
+      if(typeof window.iasynFormatearCie10Visual === 'function'){
+        return txt(window.iasynFormatearCie10Visual(raw, registro));
+      }
+    }catch(e){}
+
+    const compacto=raw.replace(/[^A-Z0-9]/g,'');
+    if(/^[A-Z][0-9]{2}$/.test(compacto)) return compacto;
+    if(/^[A-Z][0-9]{3,4}$/.test(compacto)){
+      return compacto.slice(0,3)+'.'+compacto.slice(3);
+    }
+    return raw;
+  }
+
   function renderDiagnosticos(){
     const box=document.getElementById('auroRecDiagnosticos');
     if(!box) return;
@@ -663,15 +689,15 @@
     }
 
     box.innerHTML=state.diagnosticos.map((d,i)=>{
-      const codigo=txt(d.codigo_cie10 || d.codigo || d.cie10);
+      const codigo=codigoCie10Visual(
+        d.codigo_cie10 || d.codigo || d.cie10,
+        d
+      );
       const nombre=txt(d.descripcion || d.nombre || d.diagnostico);
       const principal = d.principal === true || ['si','sí','true','1'].includes(norm(d.principal)) || i===0;
       return `<div class="auro-rec-dx">
-        <div class="auro-rec-dx-main">
-          <span class="auro-rec-dx-code">${esc(codigo || '—')}</span>
-          <span class="auro-rec-dx-sep" aria-hidden="true">•</span>
-          <span class="auro-rec-dx-name">${esc(nombre || 'Diagnóstico sin descripción')}</span>
-        </div>
+        <div class="auro-rec-dx-code">${esc(codigo || '—')}</div>
+        <div class="auro-rec-dx-name">${esc(nombre || 'Diagnóstico sin descripción')}</div>
         <div class="auro-rec-dx-tag">${principal ? 'Principal' : esc(txt(d.tipo_diagnostico || d.tipo || 'Asociado'))}</div>
       </div>`;
     }).join('');
@@ -1470,7 +1496,7 @@
       .map(([,l])=>l);
 
     const dx=state.diagnosticos.map(x=>({
-      codigo:txt(x.codigo_cie10||x.codigo||x.cie10),
+      codigo:codigoCie10Visual(x.codigo_cie10||x.codigo||x.cie10,x),
       nombre:txt(x.descripcion||x.nombre||x.diagnostico)
     })).filter(x=>x.codigo||x.nombre);
 
