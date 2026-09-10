@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.2.3
+ Versión: 1.2.4
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.2.3';
+  const VERSION = '1.2.4';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20260910_recomendaciones_vinetas_dx_fecha_segura_sin_regresion_v4';
+  const RELEASE = '20260910_recomendaciones_dx_punto_geometrico_visible_v5';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -485,7 +485,8 @@
       .auro-rec-dx-list{display:grid;gap:8px}
       .auro-rec-dx{display:grid;grid-template-columns:86px minmax(0,1fr) 96px;gap:10px;align-items:center;padding:10px 11px;border:1px solid #e8edf1;border-radius:13px;background:#f8fafc}
       .auro-rec-dx-code{display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:5px 8px;border-radius:10px;background:#fff0f7;border:1px solid #f3c7df;font-size:12px;font-weight:950;color:#8b1e5a;text-align:center;white-space:nowrap}
-      .auro-rec-dx-name{min-width:0;font-size:13px;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
+      .auro-rec-dx-name{min-width:0;display:flex;align-items:center;gap:9px;font-size:13px;font-weight:750;line-height:1.35;overflow-wrap:anywhere}
+      .auro-rec-dx-dot{width:10px;height:10px;min-width:10px;min-height:10px;flex:0 0 10px;border-radius:50%;background:#8b1e5a;box-shadow:0 0 0 2px #f3c7df}
       .auro-rec-dx-tag{display:inline-flex;align-items:center;justify-content:center;min-height:28px;font-size:10px;font-weight:900;padding:4px 7px;border-radius:999px;background:#fff;border:1px solid #dbe1e8;color:#475569;text-align:center}
       .auro-rec-empty{padding:12px;border:1px dashed #cbd5e1;border-radius:13px;color:#64748b;font-size:12px;text-align:center}
       .auro-rec-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;position:sticky;bottom:10px;z-index:3;padding:12px;border:1px solid #ead7e2;border-radius:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(15,23,42,.08)}
@@ -722,7 +723,7 @@
       const principal = d.principal === true || ['si','sí','true','1'].includes(norm(d.principal)) || i===0;
       return `<div class="auro-rec-dx">
         <div class="auro-rec-dx-code">${esc(codigo || '—')}</div>
-        <div class="auro-rec-dx-name">• ${esc(nombre || 'Diagnóstico sin descripción')}</div>
+        <div class="auro-rec-dx-name"><span class="auro-rec-dx-dot" aria-hidden="true"></span><span>${esc(nombre || 'Diagnóstico sin descripción')}</span></div>
         <div class="auro-rec-dx-tag">${principal ? 'Principal' : esc(txt(d.tipo_diagnostico || d.tipo || 'Asociado'))}</div>
       </div>`;
     }).join('');
