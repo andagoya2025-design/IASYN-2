@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.2.4
+ Versión: 1.2.5
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.2.4';
+  const VERSION = '1.2.5';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20260910_recomendaciones_dx_punto_geometrico_visible_v5';
+  const RELEASE = '20260910_recomendaciones_plan_fuente_unica_mensajes_exactos_v6';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -729,29 +729,14 @@
     }).join('');
   }
 
-  function precargarSeguimientoDesdePlanSiVacio(){
-    if(state.idRecomendacion) return false;
-    if(getValue('auroRecMotivoControl')) return false;
-
-    const candidatos = [
-      'hcProximoControl',
-      'hcControl',
-      'hcSeguimiento'
-    ];
-
-    for(const id of candidatos){
-      const el=document.getElementById(id);
-      const valor=txt(el?.value || el?.textContent);
-      if(!valor) continue;
-
-      setValue('auroRecMotivoControl',valor);
-      return true;
-    }
-
-    return false;
-  }
-
   /*
+    IASYN RECOMENDACIONES 1.2.5 — INTEGRACIÓN PLAN VERIFICABLE
+    --------------------------------------------------------------
+    - Seguimiento e indicaciones se leen desde una única fuente validada.
+    - El mensaje indica exactamente qué información fue precargada.
+    - No se considera “indicaciones precargadas” cuando solo llegó seguimiento.
+    - Se conserva el punto gráfico del diagnóstico y todas las barreras previas.
+
     IASYN RECOMENDACIONES 1.2.3 — CORRECCIÓN ANTIRREGRESIVA
     ----------------------------------------------------------
     - Conserva íntegra la base funcional 1.2.0.
@@ -884,13 +869,28 @@
       .join('\n');
   }
 
-  async function obtenerIndicacionesPlanMismaAtencion(idAtencionEsperada){
-    const idEsperada=txt(idAtencionEsperada);
-    if(!idEsperada) return '';
+  /*
+    IASYN RECOMENDACIONES 1.2.5 — FUENTE ÚNICA PLAN → RECOMENDACIONES
+    ------------------------------------------------------------------
+    - Lee una sola vez el Plan de la MISMA id_atencion.
+    - Separa claramente seguimiento e indicaciones para paciente.
+    - Usa primero el Plan persistido y, solo como respaldo seguro, el Plan visible.
+    - No modifica Plan ni guarda automáticamente.
+    - Nunca mezcla información entre atenciones.
+  */
+  async function obtenerDatosPlanMismaAtencion(idAtencionEsperada){
+    const vacio={
+      indicaciones:'',
+      seguimiento:'',
+      planEncontrado:false
+    };
 
-    const ctxInicial=state.contexto || contextoAtencion();
+    const idEsperada=txt(idAtencionEsperada);
+    if(!idEsperada) return vacio;
+
+    const ctxInicial=contextoAtencion();
     const idInicial=txt(ctxInicial?.id || state.idAtencion);
-    if(!idInicial || idInicial !== idEsperada) return '';
+    if(!idInicial || idInicial !== idEsperada) return vacio;
 
     let plan=null;
 
@@ -901,55 +901,122 @@
         plan=await apiGet('buscarPlanPorAtencion',{id_atencion:idEsperada});
       }
     }catch(error){
-      console.warn(MODULO+': no se pudieron leer indicaciones del Plan.',error);
-      return '';
+      /*
+        Si la lectura persistida falla, todavía puede existir un Plan visible
+        válido para la misma atención. No se usa información de otra consulta.
+      */
+      console.warn(MODULO+': no se pudo leer el Plan persistido de esta atención.',error);
+      plan=null;
     }
 
-    const ctxActual=state.contexto || contextoAtencion();
+    const ctxActual=contextoAtencion();
     const idActual=txt(ctxActual?.id || state.idAtencion);
-    if(!idActual || idActual !== idEsperada) return '';
+    if(!idActual || idActual !== idEsperada) return vacio;
 
-    const valor =
+    let indicaciones=indicacionesPlanAEditor(
       plan?.indicaciones_paciente ??
       plan?.indicaciones ??
       plan?.indicacionesPaciente ??
-      '';
+      ''
+    );
 
-    const desdePersistido=indicacionesPlanAEditor(valor);
-    if(desdePersistido) return desdePersistido;
+    let seguimiento=txt(
+      plan?.proximo_control ??
+      plan?.control ??
+      plan?.proximoControl ??
+      ''
+    );
 
     /*
-      Respaldo visual permitido únicamente cuando el Plan visible declara
-      exactamente la misma id_atencion. Nunca se toma un campo de otra atención.
+      Respaldo visual permitido SOLO cuando Plan declara exactamente
+      la misma id_atencion. Esto permite usar información visible aún no
+      reflejada en la respuesta persistida, sin contaminación cruzada.
     */
     const idPlanVisible=txt(window.planState?.atencionActual);
-    if(idPlanVisible !== idEsperada) return '';
 
-    const campoPlan=document.getElementById('hcIndicacionesPaciente');
-    return indicacionesPlanAEditor(campoPlan?.value || campoPlan?.textContent || '');
+    if(idPlanVisible === idEsperada){
+      if(!indicaciones){
+        const campoIndicaciones=document.getElementById('hcIndicacionesPaciente');
+        indicaciones=indicacionesPlanAEditor(
+          campoIndicaciones?.value || campoIndicaciones?.textContent || ''
+        );
+      }
+
+      if(!seguimiento){
+        const candidatosSeguimiento=['hcProximoControl','hcControl','hcSeguimiento'];
+
+        for(const id of candidatosSeguimiento){
+          const el=document.getElementById(id);
+          const valor=txt(el?.value || el?.textContent);
+          if(!valor) continue;
+          seguimiento=valor;
+          break;
+        }
+      }
+    }
+
+    const ctxFinal=contextoAtencion();
+    const idFinal=txt(ctxFinal?.id || state.idAtencion);
+    if(!idFinal || idFinal !== idEsperada) return vacio;
+
+    return {
+      indicaciones:indicaciones,
+      seguimiento:seguimiento,
+      planEncontrado:!!plan
+    };
+  }
+
+  async function precargarDatosPlanSiVacio(idAtencionEsperada, opciones){
+    const resultado={
+      indicaciones:false,
+      seguimiento:false
+    };
+
+    if(state.guardando) return resultado;
+
+    const idEsperada=txt(idAtencionEsperada);
+    const ctx=contextoAtencion();
+    const idRec=txt(ctx?.id || state.idAtencion);
+
+    if(!idEsperada || !idRec || idEsperada !== idRec) return resultado;
+
+    const datos=await obtenerDatosPlanMismaAtencion(idEsperada);
+
+    const ctxFinal=contextoAtencion();
+    const idFinal=txt(ctxFinal?.id || state.idAtencion);
+
+    if(state.guardando || idFinal !== idEsperada) return resultado;
+
+    const opts=opciones || {};
+
+    if(
+      opts.seguimiento !== false &&
+      !state.idRecomendacion &&
+      !getValue('auroRecMotivoControl') &&
+      datos.seguimiento
+    ){
+      setValue('auroRecMotivoControl',datos.seguimiento);
+      resultado.seguimiento=true;
+    }
+
+    if(
+      opts.indicaciones !== false &&
+      !getValue('auroRecGenerales') &&
+      datos.indicaciones
+    ){
+      setValue('auroRecGenerales',datos.indicaciones);
+      resultado.indicaciones=true;
+    }
+
+    return resultado;
   }
 
   async function precargarIndicacionesDesdePlanSiVacio(idAtencionEsperada){
-    if(state.guardando) return false;
-    if(getValue('auroRecGenerales')) return false;
-
-    const idEsperada=txt(idAtencionEsperada);
-    const ctx=state.contexto || contextoAtencion();
-    const idRec=txt(ctx?.id || state.idAtencion);
-    if(!idEsperada || !idRec || idEsperada !== idRec) return false;
-
-    const valor=await obtenerIndicacionesPlanMismaAtencion(idEsperada);
-
-    const ctxFinal=state.contexto || contextoAtencion();
-    const idFinal=txt(ctxFinal?.id || state.idAtencion);
-
-    if(state.guardando) return false;
-    if(idFinal !== idEsperada) return false;
-    if(getValue('auroRecGenerales')) return false;
-    if(!valor) return false;
-
-    setValue('auroRecGenerales',valor);
-    return true;
+    const resultado=await precargarDatosPlanSiVacio(
+      idAtencionEsperada,
+      {seguimiento:false,indicaciones:true}
+    );
+    return resultado.indicaciones === true;
   }
 
   async function agregarIndicacionesPlanManualmente(){
@@ -971,9 +1038,10 @@
     }
 
     const idEsperada=txt(ctx.id);
-    const valorPlan=await obtenerIndicacionesPlanMismaAtencion(idEsperada);
+    const datosPlan=await obtenerDatosPlanMismaAtencion(idEsperada);
+    const valorPlan=datosPlan.indicaciones;
 
-    const ctxActual=state.contexto || contextoAtencion();
+    const ctxActual=contextoAtencion();
     if(state.guardando || txt(ctxActual?.id) !== idEsperada) return false;
 
     if(!valorPlan){
@@ -1258,24 +1326,30 @@
           precargadasIndicaciones ? 'info' : 'ok'
         );
       }else{
-        const precargadoSeguimiento = ctx.editable
-          ? precargarSeguimientoDesdePlanSiVacio()
-          : false;
-
-        const precargadasIndicaciones = ctx.editable
-          ? await precargarIndicacionesDesdePlanSiVacio(idSolicitada)
-          : false;
+        const precargaPlan = ctx.editable
+          ? await precargarDatosPlanSiVacio(
+              idSolicitada,
+              {seguimiento:true,indicaciones:true}
+            )
+          : {seguimiento:false,indicaciones:false};
 
         if(token !== state.tokenCarga || txt(contextoAtencion()?.id) !== idSolicitada) return null;
 
-        setMsg(
-          ctx.editable
-            ? ((precargadoSeguimiento || precargadasIndicaciones)
-                ? 'Esta atención todavía no tiene recomendaciones guardadas. Se precargó información disponible en Plan para revisión y edición.'
-                : 'Esta atención todavía no tiene recomendaciones guardadas.')
-            : 'Esta atención está bloqueada y no tiene recomendaciones registradas.',
-          'info'
-        );
+        let mensajeSinRegistro='Esta atención todavía no tiene recomendaciones guardadas.';
+
+        if(ctx.editable){
+          if(precargaPlan.seguimiento && precargaPlan.indicaciones){
+            mensajeSinRegistro+=' Se precargaron el seguimiento y las indicaciones para paciente desde Plan para revisión y edición.';
+          }else if(precargaPlan.indicaciones){
+            mensajeSinRegistro+=' Se precargaron las indicaciones para paciente desde Plan para revisión y edición.';
+          }else if(precargaPlan.seguimiento){
+            mensajeSinRegistro+=' Se precargó el seguimiento disponible en Plan. No se encontraron indicaciones para paciente para precargar.';
+          }
+        }else{
+          mensajeSinRegistro='Esta atención está bloqueada y no tiene recomendaciones registradas.';
+        }
+
+        setMsg(mensajeSinRegistro,'info');
       }
 
       state.idAtencion=idSolicitada;
