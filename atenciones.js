@@ -1066,11 +1066,9 @@
   }
 
   /*
-    IASYN 2 · BLINDAJE FINALIZAR POR SELECCIÓN EXACTA
-    -------------------------------------------------
-    Devuelve únicamente la atención seleccionada mediante atencionActivaId
-    cuando pertenece al paciente visible. No busca ni sustituye por otra
-    atención abierta del paciente. Ante cualquier ambigüedad falla cerrado.
+    IASYN 2 · FINALIZAR POR SELECCIÓN EXACTA
+    Solo reconoce la atención elegida con Ver cuando pertenece al paciente visible.
+    No busca ni sustituye silenciosamente por otra atención abierta.
   */
   function atencionSeleccionadaExacta(idPaciente){
     const idPacienteActual = String(idPaciente || idPacienteActivo() || '').trim();
@@ -1079,12 +1077,35 @@
     if(!idPacienteActual || !idSeleccionada) return null;
 
     const encontrada = leerLocal().find(function(item){
-      return
+      return (
         String(item?.id_atencion || '').trim() === idSeleccionada &&
-        String(item?.id_paciente || '').trim() === idPacienteActual;
+        String(item?.id_paciente || '').trim() === idPacienteActual
+      );
     }) || null;
 
     return encontrada ? normalizar(encontrada) : null;
+  }
+
+  function actualizarBotonFinalizarSegunSeleccion(idPaciente){
+    const btnFinalizar = $('btnFinalizarAtencion');
+    if(!btnFinalizar) return;
+
+    const seleccionada = atencionSeleccionadaExacta(idPaciente);
+    const abiertaSeleccionada = !!(
+      seleccionada &&
+      String(seleccionada.estado_atencion || '').trim().toLowerCase() === 'abierta'
+    );
+
+    btnFinalizar.disabled = !abiertaSeleccionada || finalizandoAtencionEnCurso;
+    btnFinalizar.style.opacity = (abiertaSeleccionada && !finalizandoAtencionEnCurso) ? '1' : '0.55';
+    btnFinalizar.style.cursor = (abiertaSeleccionada && !finalizandoAtencionEnCurso) ? 'pointer' : 'not-allowed';
+    btnFinalizar.innerHTML = finalizandoAtencionEnCurso
+      ? '<i class="bi bi-hourglass-split me-1"></i> Finalizando...'
+      : (abiertaSeleccionada
+        ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
+        : (seleccionada
+          ? '<i class="bi bi-lock me-1"></i> Cerrada ✓'
+          : '<i class="bi bi-lock me-1"></i> Seleccione consulta'));
   }
 
   function siguienteConsulta(idPaciente){
@@ -1678,11 +1699,6 @@
       return;
     }
 
-    /*
-      IASYN 2 · FAIL CLOSED
-      Finalizar obedece exclusivamente a la atención seleccionada exacta.
-      Nunca se reemplaza silenciosamente por otra atención abierta.
-    */
     const seleccionada = atencionSeleccionadaExacta(idPaciente);
     if(!seleccionada){
       alert('Seleccione con “Ver” la atención que desea finalizar.');
@@ -2596,9 +2612,8 @@
       idAnterior:String(atencionActivaId || '').trim()
     });
 
-    /* Reevaluación inmediata del botón Finalizar para la selección exacta. */
     if(sincronizada){
-      renderAtencionesPaciente();
+      actualizarBotonFinalizarSegunSeleccion(idPacienteVisible);
     }
   }
 
@@ -2685,11 +2700,6 @@
 
     const arr = atencionesPaciente(idPaciente);
     const abierta = atencionAbierta(idPaciente);
-    const seleccionadaExacta = atencionSeleccionadaExacta(idPaciente);
-    const seleccionadaAbierta = !!(
-      seleccionadaExacta &&
-      String(seleccionadaExacta.estado_atencion || '').trim().toLowerCase() === 'abierta'
-    );
 
     if(btnToggleConsultas){
       btnToggleConsultas.disabled = false;
@@ -2711,16 +2721,7 @@
     }
 
     if(btnFinalizar){
-      btnFinalizar.disabled = !seleccionadaAbierta || finalizandoAtencionEnCurso;
-      btnFinalizar.style.opacity = (seleccionadaAbierta && !finalizandoAtencionEnCurso) ? '1' : '0.55';
-      btnFinalizar.style.cursor = (seleccionadaAbierta && !finalizandoAtencionEnCurso) ? 'pointer' : 'not-allowed';
-      btnFinalizar.innerHTML = finalizandoAtencionEnCurso
-        ? '<i class="bi bi-hourglass-split me-1"></i> Finalizando...'
-        : (seleccionadaAbierta
-          ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
-          : (seleccionadaExacta
-            ? '<i class="bi bi-lock me-1"></i> Cerrada ✓'
-            : '<i class="bi bi-lock me-1"></i> Seleccione consulta'));
+      actualizarBotonFinalizarSegunSeleccion(idPaciente);
     }
 
     resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '') + ' · Vista integral activa';
