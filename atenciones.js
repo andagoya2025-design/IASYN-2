@@ -2682,17 +2682,24 @@
     resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '') + ' · Vista integral activa';
 
     if(activaBox){
-      /*
-        AUROSANAX FIX:
-        No sobrescribir el detalle abierto por el botón Ver.
-        Si hay una consulta seleccionada (atencionActivaId), se mantiene visible.
-      */
-      if(abierta){
+      /* ==========================================================
+         IASYN 2 — SINCRONIZACIÓN VISUAL ANTIRREGRESIVA
+         ----------------------------------------------------------
+         - La atención seleccionada explícitamente (atencionActivaId)
+           gobierna la representación visual.
+         - Un render posterior NO puede sustituirla por otra atención
+           abierta del mismo paciente.
+         - Solo cuando no existe selección explícita se muestra la
+           atención abierta como referencia visual.
+         - La hora se formatea únicamente para presentación; no cambia
+           el valor almacenado ni el payload clínico.
+         ========================================================== */
+      if(!atencionActivaId && abierta){
         activaBox.style.display = 'block';
         activaBox.innerHTML =
           '<div class="auro-atencion-status abierta">' +
           '<b>🟢 ABIERTA</b> · Consulta #' + safe(abierta.numero_consulta) + '<br>' +
-          '<span>' + safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(abierta.hora_atencion) + '</span>' +
+          '<span>' + safe(fechaVisual(abierta.fecha_atencion)) + ' ' + safe(horaVisualAtencion(abierta.hora_atencion || '—')) + '</span>' +
           '</div>';
       }else if(!atencionActivaId){
         activaBox.style.display = 'block';
