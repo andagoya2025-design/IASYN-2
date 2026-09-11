@@ -3679,6 +3679,138 @@
     }
   </style>
 
+
+  <!-- ============================================================
+       IASYN 2 — UX FLOTANTE + AVISOS ANTIRREGRESIVOS
+       SOLO INTERFAZ / SIN PERSISTENCIA CLÍNICA
+       ============================================================ -->
+  <style id="iasyn-ux-flotante-avisos-v1">
+    #iasynUxFloatDock{
+      position:fixed;
+      right:22px;
+      bottom:96px;
+      z-index:44;
+      display:none;
+      align-items:stretch;
+      gap:6px;
+      padding:7px;
+      border:1px solid rgba(122,23,79,.18);
+      border-radius:18px;
+      background:rgba(255,255,255,.96);
+      box-shadow:0 16px 38px rgba(15,23,42,.18);
+      -webkit-backdrop-filter:blur(14px);
+      backdrop-filter:blur(14px);
+      user-select:none;
+      touch-action:none;
+      max-width:calc(100vw - 24px);
+    }
+    #iasynUxFloatDock.is-visible{display:flex}
+    #iasynUxFloatDock.is-vertical{flex-direction:column}
+    #iasynUxFloatDock.is-horizontal{flex-direction:row;align-items:center}
+    #iasynUxFloatDock button{
+      min-width:42px;
+      min-height:42px;
+      border:1px solid #ead5e2;
+      border-radius:13px;
+      background:#fff;
+      color:#7a174f;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:7px;
+      padding:8px 10px;
+      font:inherit;
+      font-size:12px;
+      font-weight:850;
+      line-height:1.1;
+      cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+    }
+    #iasynUxFloatDock button:hover{background:#fff7fb;border-color:#e5b8cf}
+    #iasynUxFloatDock button:focus-visible{outline:3px solid rgba(194,59,131,.22);outline-offset:2px}
+    #iasynUxFloatHandle{cursor:grab;background:#fdf2f8!important}
+    #iasynUxFloatHandle:active{cursor:grabbing}
+    #iasynUxFinalizar{
+      display:none!important;
+      min-width:168px!important;
+      color:#991b1b!important;
+      border-color:#fecaca!important;
+      background:#fff7f7!important;
+      white-space:nowrap;
+    }
+    #iasynUxFinalizar.is-available{display:inline-flex!important}
+    #iasynUxFinalizar.is-unlocked{
+      color:#fff!important;
+      border-color:transparent!important;
+      background:linear-gradient(135deg,#b91c1c,#dc2626)!important;
+      box-shadow:0 9px 20px rgba(220,38,38,.20);
+    }
+    #iasynUxFinalizar:disabled{opacity:.58;cursor:not-allowed;box-shadow:none!important}
+    #iasynUxFloatDock.is-vertical #iasynUxFinalizar{width:100%}
+
+    #iasynUxNotice{
+      position:fixed;
+      right:22px;
+      bottom:22px;
+      z-index:43;
+      width:min(430px,calc(100vw - 28px));
+      display:none;
+      grid-template-columns:auto 1fr auto;
+      align-items:center;
+      gap:10px;
+      padding:12px 12px 12px 14px;
+      border:1px solid #dbeafe;
+      border-radius:16px;
+      background:rgba(255,255,255,.98);
+      color:#1e3a8a;
+      box-shadow:0 16px 36px rgba(15,23,42,.16);
+      -webkit-backdrop-filter:blur(12px);
+      backdrop-filter:blur(12px);
+    }
+    #iasynUxNotice.is-visible{display:grid}
+    #iasynUxNotice.is-saving{border-color:#fed7aa;color:#9a3412;background:#fffaf3}
+    #iasynUxNotice.is-success{border-color:#bbf7d0;color:#166534;background:#f7fff9}
+    #iasynUxNotice.is-error{border-color:#fecaca;color:#991b1b;background:#fff8f8}
+    #iasynUxNoticeIcon{
+      width:28px;height:28px;border-radius:10px;display:grid;place-items:center;
+      background:rgba(37,99,235,.09);font-size:14px;font-weight:900;
+    }
+    #iasynUxNotice.is-saving #iasynUxNoticeIcon{background:#ffedd5}
+    #iasynUxNotice.is-success #iasynUxNoticeIcon{background:#dcfce7}
+    #iasynUxNotice.is-error #iasynUxNoticeIcon{background:#fee2e2}
+    #iasynUxNoticeText{font-size:12.5px;font-weight:800;line-height:1.35;overflow-wrap:anywhere}
+    #iasynUxNoticeClose{
+      width:32px;height:32px;border:0;border-radius:10px;background:transparent;color:currentColor;
+      display:grid;place-items:center;cursor:pointer;
+    }
+    #iasynUxNoticeClose:hover{background:rgba(15,23,42,.05)}
+
+    @media(max-width:980px){
+      #iasynUxFloatDock{
+        right:12px;
+        bottom:max(86px,calc(env(safe-area-inset-bottom) + 80px));
+        max-width:calc(100vw - 24px);
+      }
+      #iasynUxFloatDock button{min-width:40px;min-height:40px;padding:7px 9px}
+      #iasynUxFinalizar{min-width:148px!important;font-size:11.5px!important}
+      #iasynUxNotice{
+        left:12px;
+        right:12px;
+        bottom:max(14px,calc(env(safe-area-inset-bottom) + 10px));
+        width:auto;
+      }
+    }
+    @media(max-width:430px){
+      #iasynUxFloatDock{gap:5px;padding:6px;border-radius:16px}
+      #iasynUxFloatDock.is-horizontal #iasynUxFinalizar .iasyn-finalizar-label{display:none}
+      #iasynUxFloatDock.is-horizontal #iasynUxFinalizar{min-width:42px!important;width:42px!important;padding:7px!important}
+      #iasynUxNoticeText{font-size:12px}
+    }
+    @media(prefers-reduced-motion:reduce){
+      #iasynUxFloatDock,#iasynUxNotice{scroll-behavior:auto}
+    }
+  </style>
+
 </head>
 
 <body>
@@ -4522,7 +4654,7 @@
 
         <div class="sheet-note mb-3">
           <i class="bi bi-info-circle me-1"></i>
-          Esta versión genera la vista previa usando el paciente activo del ERP. No modifica Pacientes, Agenda, Historia Clínica ni Apps Script.
+          Esta versión genera la vista previa usando el paciente activo del ERP, sin modificar otros módulos clínicos o administrativos.
         </div>
 
         <div id="consentimientoPreview" class="cardx p-4 bg-white">
@@ -4626,6 +4758,25 @@
 <button class="btn-auro floating-action" onclick="openPatientModal()"><i class="bi bi-plus-lg"></i></button>
 <button type="button" class="auro-mobile-menu-fab" onclick="toggleSidebar()" aria-label="Abrir menú" title="Abrir menú"><i class="bi bi-list"></i><span>Menú</span></button>
 
+<!-- IASYN 2 — CONTROLES FLOTANTES UX / SIN LÓGICA CLÍNICA DUPLICADA -->
+<div id="iasynUxFloatDock" class="is-vertical" aria-label="Controles flotantes de Historia clínica">
+  <button type="button" id="iasynUxFloatHandle" title="Mover controles" aria-label="Mover controles"><i class="bi bi-arrows-move"></i></button>
+  <button type="button" id="iasynUxFloatRotate" title="Cambiar orientación" aria-label="Cambiar orientación"><i class="bi bi-arrow-repeat"></i></button>
+  <button type="button" id="iasynUxScrollUp" title="Subir" aria-label="Subir"><i class="bi bi-arrow-up"></i></button>
+  <button type="button" id="iasynUxScrollDown" title="Bajar" aria-label="Bajar"><i class="bi bi-arrow-down"></i></button>
+  <button type="button" id="iasynUxFinalizar" aria-label="Finalizar atención" title="Protección activa: primer clic desbloquea">
+    <i class="bi bi-lock-fill iasyn-finalizar-icon"></i>
+    <span class="iasyn-finalizar-label">Desbloquear Finalizar</span>
+  </button>
+</div>
+
+<div id="iasynUxNotice" role="status" aria-live="polite" aria-atomic="true">
+  <div id="iasynUxNoticeIcon" aria-hidden="true"><i class="bi bi-info-lg"></i></div>
+  <div id="iasynUxNoticeText"></div>
+  <button type="button" id="iasynUxNoticeClose" title="Cerrar aviso" aria-label="Cerrar aviso"><i class="bi bi-x-lg"></i></button>
+</div>
+
+
 <div class="modal-backdropx" id="patientModal">
   <div class="modalx">
     <div class="modalx-head">
@@ -4677,7 +4828,7 @@
         <input id="historiaFechaFiltro" type="date" class="form-control" onchange="renderHistoriasClinicas()">
         <button class="btn-soft" onclick="limpiarFiltrosHistorias()">Limpiar búsqueda</button>
       </div>
-      <div class="sheet-note mb-3"><i class="bi bi-info-circle me-1"></i> Vista de consulta: permite ubicar historias ya guardadas y abrir el paciente relacionado. La carga completa se optimizará desde Apps Script en la siguiente fase.</div>
+      <div class="sheet-note mb-3"><i class="bi bi-info-circle me-1"></i> Vista de consulta: permite ubicar historias ya guardadas y abrir el paciente relacionado. La carga completa se optimizará en una siguiente fase del sistema.</div>
       <div id="historiasList">
         <div class="text-center text-muted py-4">Cargando historias clínicas...</div>
       </div>
@@ -7037,6 +7188,13 @@ function auroHistoriaMostrarEstado(mensaje, tipo){
   status.style.color = '';
 
   status.textContent = mensaje || '';
+
+  /* IASYN 2 UX: espejo visual; no decide ni ejecuta el guardado. */
+  try{
+    if(typeof window.iasynUxMostrarAvisoEstado === 'function'){
+      window.iasynUxMostrarAvisoEstado(mensaje, tipo);
+    }
+  }catch(_){ }
 }
 
 /* =====================================================
@@ -7842,7 +8000,7 @@ window.auroHistoriaResolverEstadoRealModulo = auroHistoriaResolverEstadoRealModu
     auroHistoriaMostrarEstado(
       'Anamnesis · Consulta ' + (atn?.consulta || 'activa') +
       (fecha ? ' · Guardado local: ' + fecha : ' · Guardado local') +
-      ' · Sincronizando con Google Sheets…',
+      ' · Sincronizando con la base de datos…',
       'saving'
     );
   });
@@ -7858,7 +8016,7 @@ window.auroHistoriaResolverEstadoRealModulo = auroHistoriaResolverEstadoRealModu
       'Anamnesis · Consulta ' + (atn?.consulta || 'activa') +
       (fecha
         ? ' · Última actualización: ' + fecha
-        : ' · Guardado confirmado en Google Sheets.'),
+        : ' · Guardado confirmado en la base de datos.'),
       'ok'
     );
   });
@@ -7871,7 +8029,7 @@ window.auroHistoriaResolverEstadoRealModulo = auroHistoriaResolverEstadoRealModu
 
     auroHistoriaMostrarEstado(
       'Anamnesis · Consulta ' + (atn?.consulta || 'activa') +
-      ' · Guardado local seguro · Confirmación de Google Sheets pendiente.',
+      ' · Guardado local seguro · Confirmación de la base de datos pendiente.',
       'saving'
     );
   });
@@ -9096,7 +9254,7 @@ async function guardarHistoriaClinicaERP(){
     auroHistoriaGuardadoUXExitoso = true;
   }catch(error){
     console.error(error);
-    auroHistoriaMostrarEstado('No se pudo guardar o actualizar. Revise la conexión o Apps Script.', 'error');
+    auroHistoriaMostrarEstado('No se pudo guardar o actualizar. Revise la conexión con la base de datos.', 'error');
   }finally{
     if(typeof auroPlanActualizarBotonesHistoria === 'function'){
       auroPlanActualizarBotonesHistoria();
@@ -13824,6 +13982,340 @@ document.addEventListener('click',e=>{
         }
       });
   }, true);
+})();
+</script>
+
+
+<!-- ============================================================
+     IASYN 2 — UX FLOTANTE + AVISOS ANTIRREGRESIVOS V1
+     ------------------------------------------------------------
+     - Finalizar es SOLO delegador de atenciones.js.
+     - Contexto exacto: paciente + id_atencion seleccionado + estado Abierta.
+     - Primera interacción desbloquea; segunda vuelve a verificar y delega.
+     - Posición/orientación son preferencias visuales locales.
+     - Flechas solo navegan la página.
+     - Avisos reflejan estados reales emitidos por auroHistoriaMostrarEstado().
+     - Sin fetch, sin POST y sin persistencia clínica.
+============================================================ -->
+<script id="iasyn-ux-flotante-avisos-v1-script">
+(function(){
+  'use strict';
+
+  if(window.__iasynUxFlotanteAvisosV1) return;
+  window.__iasynUxFlotanteAvisosV1 = true;
+
+  const PREF_KEY = 'iasyn_ui_floatdock_v1';
+  const dock = document.getElementById('iasynUxFloatDock');
+  const handle = document.getElementById('iasynUxFloatHandle');
+  const rotate = document.getElementById('iasynUxFloatRotate');
+  const up = document.getElementById('iasynUxScrollUp');
+  const down = document.getElementById('iasynUxScrollDown');
+  const finalizar = document.getElementById('iasynUxFinalizar');
+  const historia = document.getElementById('historia');
+  const notice = document.getElementById('iasynUxNotice');
+  const noticeText = document.getElementById('iasynUxNoticeText');
+  const noticeIcon = document.getElementById('iasynUxNoticeIcon');
+  const noticeClose = document.getElementById('iasynUxNoticeClose');
+
+  if(!dock || !handle || !rotate || !up || !down || !finalizar || !notice) return;
+
+  let unlocked = false;
+  let contextId = '';
+  let drag = null;
+  let noticeTimer = null;
+
+  function texto(v){ return String(v == null ? '' : v).trim(); }
+
+  function pacienteActualId(){
+    try{
+      const select = document.getElementById('hcPacienteSelect');
+      const desdeSelect = texto(select?.value);
+      if(desdeSelect) return desdeSelect;
+    }catch(_){ }
+
+    try{
+      if(typeof activePatientId !== 'undefined'){
+        return texto(activePatientId);
+      }
+    }catch(_){ }
+
+    return '';
+  }
+
+  function contextoFinalizable(){
+    try{
+      if(typeof window.getAtencionActiva !== 'function') return null;
+      if(typeof window.getIdAtencionActiva !== 'function') return null;
+
+      const a = window.getAtencionActiva();
+      if(!a) return null;
+
+      const idAtencion = texto(a.id_atencion);
+      const idSeleccionado = texto(window.getIdAtencionActiva());
+      const idPaciente = texto(a.id_paciente);
+      const idPacienteActual = pacienteActualId();
+      const estado = texto(a.estado_atencion).toLowerCase();
+
+      if(!idAtencion || !idSeleccionado || idAtencion !== idSeleccionado) return null;
+      if(!idPaciente || !idPacienteActual || idPaciente !== idPacienteActual) return null;
+      if(estado !== 'abierta') return null;
+
+      return { id_atencion:idAtencion, id_paciente:idPaciente, atencion:a };
+    }catch(error){
+      console.warn('IASYN UX: no se pudo verificar la atención seleccionada.', error);
+      return null;
+    }
+  }
+
+  function bloquearFinalizar(){
+    unlocked = false;
+    finalizar.classList.remove('is-unlocked');
+    finalizar.title = 'Protección activa: primer clic desbloquea';
+    finalizar.setAttribute('aria-label','Desbloquear Finalizar atención');
+    const icon = finalizar.querySelector('.iasyn-finalizar-icon');
+    const label = finalizar.querySelector('.iasyn-finalizar-label');
+    if(icon) icon.className = 'bi bi-lock-fill iasyn-finalizar-icon';
+    if(label) label.textContent = 'Desbloquear Finalizar';
+  }
+
+  function refrescarFinalizar(){
+    const ctx = contextoFinalizable();
+    const nuevoId = texto(ctx?.id_atencion);
+
+    if(nuevoId !== contextId){
+      contextId = nuevoId;
+      bloquearFinalizar();
+    }
+
+    if(!ctx){
+      finalizar.classList.remove('is-available');
+      finalizar.disabled = true;
+      bloquearFinalizar();
+      return;
+    }
+
+    finalizar.classList.add('is-available');
+    finalizar.disabled = false;
+  }
+
+  function refrescarVisibilidad(){
+    const activa = !!historia?.classList.contains('active');
+    dock.classList.toggle('is-visible', activa);
+    if(!activa){
+      bloquearFinalizar();
+    }else if(dock.style.left && dock.style.top){
+      requestAnimationFrame(function(){
+        const r = dock.getBoundingClientRect();
+        aplicarPosicion(r.left, r.top);
+      });
+    }
+    refrescarFinalizar();
+  }
+
+  function leerPrefs(){
+    try{
+      const raw = localStorage.getItem(PREF_KEY);
+      const p = raw ? JSON.parse(raw) : {};
+      return p && typeof p === 'object' ? p : {};
+    }catch(_){ return {}; }
+  }
+
+  function guardarPrefs(){
+    try{
+      const rect = dock.getBoundingClientRect();
+      const orientation = dock.classList.contains('is-horizontal') ? 'horizontal' : 'vertical';
+      localStorage.setItem(PREF_KEY, JSON.stringify({
+        x:Math.round(rect.left),
+        y:Math.round(rect.top),
+        orientation:orientation
+      }));
+    }catch(_){ }
+  }
+
+  function clampPos(x,y){
+    const rect = dock.getBoundingClientRect();
+    const margin = 8;
+    const maxX = Math.max(margin, window.innerWidth - rect.width - margin);
+    const maxY = Math.max(margin, window.innerHeight - rect.height - margin);
+    return {
+      x:Math.min(Math.max(margin, Number(x) || margin), maxX),
+      y:Math.min(Math.max(margin, Number(y) || margin), maxY)
+    };
+  }
+
+  function aplicarPosicion(x,y){
+    const p = clampPos(x,y);
+    dock.style.left = p.x + 'px';
+    dock.style.top = p.y + 'px';
+    dock.style.right = 'auto';
+    dock.style.bottom = 'auto';
+  }
+
+  function restaurarPrefs(){
+    const p = leerPrefs();
+    const horizontal = p.orientation === 'horizontal';
+    dock.classList.toggle('is-horizontal', horizontal);
+    dock.classList.toggle('is-vertical', !horizontal);
+    rotate.setAttribute('aria-pressed', horizontal ? 'true' : 'false');
+
+    if(Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.y))){
+      requestAnimationFrame(function(){ aplicarPosicion(Number(p.x), Number(p.y)); });
+    }
+  }
+
+  handle.addEventListener('pointerdown', function(evento){
+    if(evento.button != null && evento.button !== 0) return;
+    const rect = dock.getBoundingClientRect();
+    drag = {
+      pointerId:evento.pointerId,
+      dx:evento.clientX - rect.left,
+      dy:evento.clientY - rect.top
+    };
+    try{ handle.setPointerCapture(evento.pointerId); }catch(_){ }
+    evento.preventDefault();
+  });
+
+  handle.addEventListener('pointermove', function(evento){
+    if(!drag || drag.pointerId !== evento.pointerId) return;
+    aplicarPosicion(evento.clientX - drag.dx, evento.clientY - drag.dy);
+    evento.preventDefault();
+  });
+
+  function terminarArrastre(evento){
+    if(!drag || drag.pointerId !== evento.pointerId) return;
+    drag = null;
+    guardarPrefs();
+    try{ handle.releasePointerCapture(evento.pointerId); }catch(_){ }
+  }
+
+  handle.addEventListener('pointerup', terminarArrastre);
+  handle.addEventListener('pointercancel', terminarArrastre);
+
+  rotate.addEventListener('click', function(){
+    const horizontal = !dock.classList.contains('is-horizontal');
+    dock.classList.toggle('is-horizontal', horizontal);
+    dock.classList.toggle('is-vertical', !horizontal);
+    rotate.setAttribute('aria-pressed', horizontal ? 'true' : 'false');
+    requestAnimationFrame(function(){
+      const r = dock.getBoundingClientRect();
+      aplicarPosicion(r.left, r.top);
+      guardarPrefs();
+    });
+  });
+
+  up.addEventListener('click', function(){
+    window.scrollBy({ top:-Math.max(360, Math.round(window.innerHeight * .72)), behavior:'smooth' });
+  });
+
+  down.addEventListener('click', function(){
+    window.scrollBy({ top:Math.max(360, Math.round(window.innerHeight * .72)), behavior:'smooth' });
+  });
+
+  finalizar.addEventListener('click', function(){
+    const ctx = contextoFinalizable();
+    if(!ctx){
+      bloquearFinalizar();
+      refrescarFinalizar();
+      return;
+    }
+
+    if(!unlocked){
+      unlocked = true;
+      contextId = ctx.id_atencion;
+      finalizar.classList.add('is-unlocked');
+      finalizar.title = 'Segundo clic: confirmar Finalizar atención';
+      finalizar.setAttribute('aria-label','Finalizar atención seleccionada');
+      const icon = finalizar.querySelector('.iasyn-finalizar-icon');
+      const label = finalizar.querySelector('.iasyn-finalizar-label');
+      if(icon) icon.className = 'bi bi-unlock-fill iasyn-finalizar-icon';
+      if(label) label.textContent = 'Finalizar atención';
+      return;
+    }
+
+    const verificacion = contextoFinalizable();
+    if(!verificacion || verificacion.id_atencion !== contextId){
+      bloquearFinalizar();
+      refrescarFinalizar();
+      return;
+    }
+
+    if(typeof window.finalizarAtencionActual !== 'function'){
+      bloquearFinalizar();
+      return;
+    }
+
+    finalizar.disabled = true;
+    Promise.resolve(window.finalizarAtencionActual())
+      .catch(function(error){
+        console.error('IASYN UX: no se pudo delegar Finalizar atención.', error);
+      })
+      .finally(function(){
+        bloquearFinalizar();
+        refrescarFinalizar();
+      });
+  });
+
+  function cerrarAviso(){
+    if(noticeTimer){ clearTimeout(noticeTimer); noticeTimer = null; }
+    notice.classList.remove('is-visible');
+  }
+
+  function textoProfesional(mensaje){
+    return texto(mensaje)
+      .replace(/Google Sheets/gi,'base de datos')
+      .replace(/Apps Script/gi,'servicio de datos')
+      .replace(/\bendpoint\b/gi,'conexión');
+  }
+
+  function mostrarAviso(mensaje,tipo){
+    if(noticeTimer){ clearTimeout(noticeTimer); noticeTimer = null; }
+
+    const t = tipo === 'ok' ? 'success' : (tipo === 'saving' ? 'saving' : (tipo === 'error' ? 'error' : 'info'));
+    const m = textoProfesional(mensaje);
+    if(!m){ cerrarAviso(); return; }
+
+    notice.className = 'is-visible is-' + t;
+    noticeText.textContent = m;
+
+    const icon = noticeIcon?.querySelector('i');
+    if(icon){
+      icon.className = t === 'success'
+        ? 'bi bi-check-lg'
+        : (t === 'error' ? 'bi bi-exclamation-lg' : (t === 'saving' ? 'bi bi-arrow-repeat' : 'bi bi-info-lg'));
+    }
+
+    if(t !== 'saving'){
+      const ms = t === 'success' ? 2400 : (t === 'error' ? 4000 : 3200);
+      noticeTimer = setTimeout(cerrarAviso, ms);
+    }
+  }
+
+  window.iasynUxMostrarAvisoEstado = mostrarAviso;
+
+  noticeClose.addEventListener('click', cerrarAviso);
+
+  ['aurosanax:atencion-seleccionada','aurosanax:atencion-iniciada','aurosanax:atencion-limpiada'].forEach(function(nombre){
+    window.addEventListener(nombre, function(){
+      bloquearFinalizar();
+      refrescarFinalizar();
+    });
+  });
+
+  if(historia && typeof MutationObserver === 'function'){
+    const observer = new MutationObserver(refrescarVisibilidad);
+    observer.observe(historia, { attributes:true, attributeFilter:['class'] });
+  }
+
+  window.addEventListener('resize', function(){
+    if(dock.style.left && dock.style.top){
+      const r = dock.getBoundingClientRect();
+      aplicarPosicion(r.left, r.top);
+      guardarPrefs();
+    }
+  });
+
+  restaurarPrefs();
+  refrescarVisibilidad();
 })();
 </script>
 
