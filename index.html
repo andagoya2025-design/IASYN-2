@@ -11615,91 +11615,8 @@ if(typeof showScreen==='function'){
   };
 }
 </script>
-<script id="ordenes-medicas-aurosanax-script">
-const ORDENES_MEDICAS_BASE = [
-  {categoria:'LABORATORIOS', nombre:'Hemograma completo'}, {categoria:'LABORATORIOS', nombre:'Glucosa basal'}, {categoria:'LABORATORIOS', nombre:'Hemoglobina glicosilada HbA1c'}, {categoria:'LABORATORIOS', nombre:'Insulina basal'}, {categoria:'LABORATORIOS', nombre:'Perfil lipídico'}, {categoria:'LABORATORIOS', nombre:'Perfil hepático'}, {categoria:'LABORATORIOS', nombre:'Perfil renal'}, {categoria:'LABORATORIOS', nombre:'Urea'}, {categoria:'LABORATORIOS', nombre:'Creatinina'}, {categoria:'LABORATORIOS', nombre:'Ácido úrico'}, {categoria:'LABORATORIOS', nombre:'Electrolitos séricos'}, {categoria:'LABORATORIOS', nombre:'TSH'}, {categoria:'LABORATORIOS', nombre:'T4 libre'}, {categoria:'LABORATORIOS', nombre:'T3 libre'}, {categoria:'LABORATORIOS', nombre:'Prolactina'}, {categoria:'LABORATORIOS', nombre:'FSH'}, {categoria:'LABORATORIOS', nombre:'LH'}, {categoria:'LABORATORIOS', nombre:'Estradiol'}, {categoria:'LABORATORIOS', nombre:'Progesterona'}, {categoria:'LABORATORIOS', nombre:'Testosterona total'}, {categoria:'LABORATORIOS', nombre:'Testosterona libre'}, {categoria:'LABORATORIOS', nombre:'DHEA-S'}, {categoria:'LABORATORIOS', nombre:'17 hidroxiprogesterona'}, {categoria:'LABORATORIOS', nombre:'Cortisol'}, {categoria:'LABORATORIOS', nombre:'Ferritina'}, {categoria:'LABORATORIOS', nombre:'Hierro sérico'}, {categoria:'LABORATORIOS', nombre:'Vitamina B12'}, {categoria:'LABORATORIOS', nombre:'Vitamina D 25 OH'}, {categoria:'LABORATORIOS', nombre:'Ácido fólico'}, {categoria:'LABORATORIOS', nombre:'PCR ultrasensible'}, {categoria:'LABORATORIOS', nombre:'VSG'}, {categoria:'LABORATORIOS', nombre:'Examen elemental y microscópico de orina'}, {categoria:'LABORATORIOS', nombre:'Urocultivo con antibiograma'}, {categoria:'LABORATORIOS', nombre:'Cultivo de secreción vaginal'}, {categoria:'LABORATORIOS', nombre:'Fresco y gram de secreción vaginal'}, {categoria:'LABORATORIOS', nombre:'Prueba de embarazo en sangre beta-hCG'}, {categoria:'LABORATORIOS', nombre:'Serología VIH'}, {categoria:'LABORATORIOS', nombre:'VDRL'}, {categoria:'LABORATORIOS', nombre:'Hepatitis B HBsAg'}, {categoria:'LABORATORIOS', nombre:'Hepatitis C anticuerpos'}, {categoria:'LABORATORIOS', nombre:'Toxoplasma IgG e IgM'}, {categoria:'LABORATORIOS', nombre:'Rubéola IgG e IgM'}, {categoria:'LABORATORIOS', nombre:'Citomegalovirus IgG e IgM'},
-  {categoria:'IMÁGENES', nombre:'Ecografía transvaginal'}, {categoria:'IMÁGENES', nombre:'Ecografía pélvica'}, {categoria:'IMÁGENES', nombre:'Ecografía mamaria bilateral'}, {categoria:'IMÁGENES', nombre:'Mamografía bilateral'}, {categoria:'IMÁGENES', nombre:'Densitometría ósea'}, {categoria:'IMÁGENES', nombre:'Ecografía abdominal'}, {categoria:'IMÁGENES', nombre:'Ecografía renal y vías urinarias'}, {categoria:'IMÁGENES', nombre:'Ecografía tiroidea'}, {categoria:'IMÁGENES', nombre:'Radiografía de tórax'}, {categoria:'IMÁGENES', nombre:'Radiografía de columna lumbar'},
-  {categoria:'GINECOLOGÍA', nombre:'Citología líquida cervical'}, {categoria:'GINECOLOGÍA', nombre:'Papanicolaou convencional'}, {categoria:'GINECOLOGÍA', nombre:'Colposcopia'}, {categoria:'GINECOLOGÍA', nombre:'Biopsia cervical'}, {categoria:'GINECOLOGÍA', nombre:'Tipificación HPV'}, {categoria:'GINECOLOGÍA', nombre:'Vaginoscopia'}, {categoria:'GINECOLOGÍA', nombre:'Histerosonografía'}, {categoria:'GINECOLOGÍA', nombre:'Histeroscopia diagnóstica'}, {categoria:'GINECOLOGÍA', nombre:'Control post cauterización cervical'}, {categoria:'GINECOLOGÍA', nombre:'Retiro de DIU'}, {categoria:'GINECOLOGÍA', nombre:'Colocación de DIU'},
-  {categoria:'OBSTETRICIA', nombre:'Ecografía obstétrica primer trimestre'}, {categoria:'OBSTETRICIA', nombre:'Ecografía obstétrica segundo trimestre'}, {categoria:'OBSTETRICIA', nombre:'Ecografía obstétrica tercer trimestre'}, {categoria:'OBSTETRICIA', nombre:'Screening primer trimestre'}, {categoria:'OBSTETRICIA', nombre:'Screening segundo trimestre'}, {categoria:'OBSTETRICIA', nombre:'Perfil biofísico fetal'}, {categoria:'OBSTETRICIA', nombre:'Monitoreo fetal'}, {categoria:'OBSTETRICIA', nombre:'Cervicometría'}, {categoria:'MATERNO FETAL', nombre:'Doppler materno fetal'}, {categoria:'MATERNO FETAL', nombre:'Doppler de arterias uterinas'}, {categoria:'MATERNO FETAL', nombre:'Doppler umbilical y cerebral media'},
-  {categoria:'ENDOCRINOLOGÍA', nombre:'Perfil tiroideo'}, {categoria:'ENDOCRINOLOGÍA', nombre:'Anticuerpos antitiroideos'}, {categoria:'ENDOCRINOLOGÍA', nombre:'Curva de tolerancia oral a la glucosa'}, {categoria:'ENDOCRINOLOGÍA', nombre:'Índice HOMA'}, {categoria:'METABÓLICO', nombre:'Perfil metabólico completo'}, {categoria:'METABÓLICO', nombre:'Control de peso y composición corporal'}, {categoria:'NUTRICIÓN', nombre:'Valoración nutricional'}, {categoria:'CARDIOLOGÍA', nombre:'Electrocardiograma'}, {categoria:'CARDIOLOGÍA', nombre:'Holter de presión arterial'}, {categoria:'CARDIOLOGÍA', nombre:'Ecocardiograma'}, {categoria:'MEDICINA GENERAL', nombre:'Control de presión arterial'}, {categoria:'MEDICINA INTERNA', nombre:'Valoración por medicina interna'}, {categoria:'UROLOGÍA', nombre:'Valoración urológica'}, {categoria:'DERMATOLOGÍA', nombre:'Valoración dermatológica'}, {categoria:'VACUNACIÓN', nombre:'Vacuna HPV Gardasil 9'}, {categoria:'VACUNACIÓN', nombre:'Vacuna influenza'}, {categoria:'VACUNACIÓN', nombre:'Vacuna hepatitis B'}, {categoria:'PROCEDIMIENTOS', nombre:'Procedimiento con láser'}, {categoria:'PROCEDIMIENTOS', nombre:'Cauterización cervical'}, {categoria:'PROCEDIMIENTOS', nombre:'Exéresis de lesión'}, {categoria:'OTROS', nombre:'Interconsulta especializada'}
-];
-let ordenesMedicasSeleccionadas = [];
-function normalizarOrdenTexto(t){return String(t||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();}
-function renderOrdenesSugerencias(forzarListado=false){
-  const input=document.getElementById('hcOrdenBusqueda');
-  const box=document.getElementById('hcOrdenSugerencias');
-  const tipo=document.getElementById('hcOrdenTipo')?.value||'';
-  if(!input||!box) return;
-
-  const q=normalizarOrdenTexto(input.value);
-
-  // Si el campo está vacío, igual se muestran opciones frecuentes para escoger,
-  // especialmente cuando ya se seleccionó un tipo de orden.
-  let res=ORDENES_MEDICAS_BASE.filter(o=>{
-    const coincideTipo=!tipo || o.categoria===tipo;
-    const coincideTexto=!q || normalizarOrdenTexto(o.nombre+' '+o.categoria).includes(q);
-    return coincideTipo && coincideTexto;
-  });
-
-  // Si no seleccionó categoría y tampoco escribió, se muestran frecuentes generales.
-  if(!tipo && !q){
-    res=ORDENES_MEDICAS_BASE.filter(o=>['LABORATORIOS','IMÁGENES','GINECOLOGÍA','OBSTETRICIA','MATERNO FETAL','ENDOCRINOLOGÍA','METABÓLICO'].includes(o.categoria));
-  }
-
-  res=res.slice(0,40);
-
-  if(!res.length){
-    box.innerHTML='<div class="orden-sug-item text-muted">Sin coincidencias. Puede escribirlo manualmente y agregar.</div>';
-    box.classList.remove('d-none');
-    return;
-  }
-
-  box.innerHTML=res.map(o=>`
-    <div class="orden-sug-item" data-categoria="${escapeHtmlOrden(o.categoria)}" data-nombre="${escapeHtmlOrden(o.nombre)}">
-      <div>• ${escapeHtmlOrden(o.nombre)}</div>
-      <div class="orden-sug-cat">${escapeHtmlOrden(o.categoria)}</div>
-    </div>`).join('');
-
-  box.classList.remove('d-none');
-}
-function escapeHtmlOrden(txt){
-  return String(txt||'').replace(/[&<>'"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
-}
-function seleccionarOrdenSugerida(categoria,nombre){
-  setValueIfExists('hcOrdenTipo', categoria);
-  setValueIfExists('hcOrdenBusqueda', nombre);
-  const box=document.getElementById('hcOrdenSugerencias');
-  if(box) box.classList.add('d-none');
-}
-function agregarOrdenMedicaDesdeFormulario(){
-  const tipo=getValueIfExists('hcOrdenTipo')||'OTROS'; const nombre=(getValueIfExists('hcOrdenBusqueda')||'').trim(); const obs=(getValueIfExists('hcOrdenObservacion')||'').trim();
-  if(!nombre){alert('Ingrese o seleccione un procedimiento/examen.'); return;}
-  ordenesMedicasSeleccionadas.push({categoria:tipo,nombre:nombre,observacion:obs});
-  setValueIfExists('hcOrdenBusqueda',''); setValueIfExists('hcOrdenObservacion',''); renderOrdenesMedicasTabla();
-}
-function eliminarOrdenMedica(i){ordenesMedicasSeleccionadas.splice(i,1); renderOrdenesMedicasTabla();}
-function renderOrdenesMedicasTabla(){
-  const tbody=document.getElementById('hcOrdenesTableBody'); const hidden=document.getElementById('hcExamenesSolicitados'); if(!tbody) return;
-  if(!ordenesMedicasSeleccionadas.length){tbody.innerHTML='<tr id="hcOrdenesEmpty"><td colspan="4" class="text-center text-muted py-3"><i class="bi bi-file-earmark-medical me-1"></i> Sin registros</td></tr>';} else {
-    tbody.innerHTML=ordenesMedicasSeleccionadas.map((o,i)=>`<tr><td>${o.nombre}</td><td><span class="badge bg-light text-dark border">${o.categoria}</span></td><td>${o.observacion||''}</td><td><button type="button" class="btn btn-sm btn-outline-danger" onclick="eliminarOrdenMedica(${i})"><i class="bi bi-trash"></i></button></td></tr>`).join('');
-  }
-  if(hidden) hidden.value=ordenesMedicasSeleccionadas.map(o=>`${o.categoria}: ${o.nombre}${o.observacion?' | '+o.observacion:''}`).join('\n');
-  if(typeof updateClinicalSummary==='function') updateClinicalSummary();
-}
-document.addEventListener('input',e=>{ if(e.target && e.target.id==='hcOrdenBusqueda') renderOrdenesSugerencias(); });
-document.addEventListener('focusin',e=>{ if(e.target && e.target.id==='hcOrdenBusqueda') renderOrdenesSugerencias(true); });
-document.addEventListener('change',e=>{
-  if(e.target && e.target.id==='hcOrdenTipo'){
-    setValueIfExists('hcOrdenBusqueda','');
-    renderOrdenesSugerencias(true);
-  }
-});
-document.addEventListener('click',e=>{
-  const item=e.target.closest('.orden-sug-item[data-categoria]');
-  if(item){ seleccionarOrdenSugerida(item.dataset.categoria, item.dataset.nombre); return; }
-  const box=document.getElementById('hcOrdenSugerencias');
-  if(box && !e.target.closest('#hcOrdenSugerencias') && e.target.id!=='hcOrdenBusqueda') box.classList.add('d-none');
-});
+<script id="ordenes-medicas-aurosanax-script" type="application/json" data-iasyn-legacy-disabled="true">
+{"iasyn":"legacy_index_ordenes_desactivado","owner":"plan.js","documento_formal":"ordenes_medicas.js","motivo":"evitar_doble_motor_y_colision_de_funciones"}
 </script>
   <script src="antecedentes.js?v=20260824_1"></script>
   <!-- AUROSANAX - Módulo Anamnesis inteligente -->
@@ -12646,10 +12563,11 @@ document.addEventListener('click',e=>{
 <script src="catalogo_medicamentos.js?v=20260908_1"></script>
 
 <!-- AUROSANAX - Módulo Plan clínico Fase 1 -->
-<script src="plan.js?v=20260824_1"></script>
+<script src="plan.js?v=20260912_ORDENES_V1"></script>
 
 <!-- AUROSANAX - Módulo Atenciones -->
 <script src="atenciones.js?v=20260824_1"></script>
+<script src="ordenes_medicas.js?v=20260912_ORDENES_V1"></script>
 
 <!-- AUROSANAX - Módulo Obstetricia por atención -->
 <script src="obstetricia.js?v=20260824_1"></script>
