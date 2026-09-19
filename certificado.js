@@ -1,5 +1,5 @@
 /***********************************************************************
- IASYN ERP
+ AUROSANAX ERP DEMO
  Archivo: certificado.js
  Módulo: Certificados médicos por atención
  Versión: 1.3.3 - documento maestro A4 + visor móvil escalado antirregresión
@@ -21,18 +21,8 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.3.8';
-const JSON_VERSION='IASYN_CERTIFICADO_JSON_V2';
-
-/*
- IASYN - AISLAMIENTO / COMPATIBILIDAD INTERNA
- --------------------------------------------
- El backend se obtiene únicamente desde API_URL definido por el index de IASYN.
- Este archivo no contiene URLs directas de Apps Script, Drive, Sheets ni
- dominios AUROSANAX. Los nombres window.auro*, IDs DOM auro* y variables
- internas auro* se conservan como contrato técnico heredado para no romper
- index ni otros módulos; no representan conexión activa con AUROSANAX PRUEBA.
-*/
+const VERSION='1.4.0-IASYN-FIRMA-CERT-V1';
+const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
   idAtencion:'',
@@ -45,7 +35,12 @@ const state={
   configuracion:{},
   medicos:[],
   paciente:null,
-  historia:null
+  historia:null,
+  firmasPorDocumento:{},
+  firmaSolicitudId:'',
+  firmaDocumentoId:'',
+  firmando:false,
+  firmaPollToken:0
 };
 
 const txt=v=>String(v??'').trim();
@@ -88,6 +83,34 @@ async function post(accion,data){
   });
   if(!r.ok) throw Error('HTTP '+r.status);
   return r.json();
+}
+
+
+/* ============================================================
+ * IASYN CERTIFICADO — PUENTE DE FIRMA ELECTRÓNICA V1
+ * Solo CERTIFICADO está activo en esta fase.
+ * No altera el guardado clínico ni la maqueta A4 existente.
+ * ============================================================ */
+function tokenSesionFirma(){
+  try{
+    const s=window.IASYN_SEGURIDAD||window.AUROSANAX_SEGURIDAD;
+    if(s){
+      if(typeof s.obtenerToken==='function') return txt(s.obtenerToken());
+      if(typeof s.obtenerTokenSesion==='function') return txt(s.obtenerTokenSesion());
+    }
+  }catch(e){}
+  try{
+    return txt(
+      sessionStorage.getItem('iasyn_seguridad_token')||
+      sessionStorage.getItem('aurosanax_seguridad_token')||''
+    );
+  }catch(e){return '';}
+}
+
+function postFirma(accion,data){
+  const token=tokenSesionFirma();
+  if(!token) return Promise.reject(new Error('No existe una sesión IASYN activa para firmar.'));
+  return post(accion,Object.assign({},data||{},{token}));
 }
 
 function arr(x){
@@ -281,7 +304,7 @@ function normalizarConfig(c){
   c=c||{};
   if(c.datos&&typeof c.datos==='object') c=c.datos;
   return {
-    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social)||'IASYN',
+    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social)||'AUROSANAX',
     subtitulo:txt(c.subtitulo_clinica||c.descripcion_clinica||c.eslogan_clinica),
     razon_social:txt(c.razon_social),
     ruc:txt(c.ruc),
@@ -504,6 +527,8 @@ function html(){
 
           <div class="ac-actions">
             <button class="ac-btn ac-primary" id="acGuardar">Emitir / Guardar certificado</button>
+            <button class="ac-btn ac-soft" id="acFirmar" disabled>Firmar electrónicamente</button>
+            <button class="ac-btn ac-soft" id="acVerFirmado" style="display:none">Ver certificado firmado ✓</button>
             <button class="ac-btn ac-soft" id="acVista">Vista previa</button>
             <button class="ac-btn ac-soft" id="acImprimir">Imprimir / PDF</button>
             <button class="ac-btn ac-soft" id="acNuevo">Nuevo certificado</button>
@@ -560,6 +585,8 @@ function eventos(){
     }
   });
   document.getElementById('acGuardar')?.addEventListener('click',guardar);
+  document.getElementById('acFirmar')?.addEventListener('click',()=>firmarCertificado(state.editandoId));
+  document.getElementById('acVerFirmado')?.addEventListener('click',()=>verCertificadoFirmado(state.editandoId));
   document.getElementById('acVista')?.addEventListener('click',()=>vista(false));
   document.getElementById('acImprimir')?.addEventListener('click',()=>vista(true));
   document.getElementById('acNuevo')?.addEventListener('click',nuevo);
@@ -605,6 +632,24 @@ function renderDx(){
     </label>`).join('');
 }
 
+async function cargarFirmasCertificados(idAtencion){
+  state.firmasPorDocumento={};
+  if(!idAtencion) return;
+  try{
+    const r=await postFirma('consultarDocumentosFirmados',{
+      tipo_documento:'CERTIFICADO',
+      id_atencion:idAtencion
+    });
+    const lista=arr(r);
+    lista.forEach(f=>{
+      const id=txt(f.id_documento_origen||f.id_certificado);
+      if(id && !state.firmasPorDocumento[id]) state.firmasPorDocumento[id]=f;
+    });
+  }catch(e){
+    console.warn('No se pudo cargar historial de firmas de certificados:',e);
+  }
+}
+
 async function cargarHistorial(id){
   try{
     const r=await get('listarCertificadosPorAtencion',{id_atencion:id});
@@ -612,7 +657,9 @@ async function cargarHistorial(id){
   }catch(e){
     state.certificados=[];
   }
+  await cargarFirmasCertificados(id);
   renderHistorial();
+  actualizarControlesFirma();
 }
 
 function renderHistorial(){
@@ -626,18 +673,32 @@ function renderHistorial(){
 
   b.innerHTML=[...state.certificados].reverse().map(c=>{
     const d=parse(c.detalle_json);
+    const id=txt(c.id_certificado);
+    const firmado=state.firmasPorDocumento[id];
+    const estado=firmado
+      ? '<span style="font-size:11px;font-weight:900;color:#166534">FIRMADO ✓</span>'
+      : '<span style="font-size:11px;font-weight:800;color:#64748b">SIN FIRMA</span>';
+    const accionFirma=firmado
+      ? `<button class="ac-btn ac-soft" data-acverfirmado="${esc(id)}">Ver firmado ✓</button>`
+      : `<button class="ac-btn ac-soft" data-acfirmar="${esc(id)}">Firmar</button>`;
     return `<div class="ac-item">
       <div class="ac-item-top">
         <div>
           <b>${esc(c.tipo_certificado||d.tipo_certificado||'Certificado')}</b>
-          <div class="ac-meta">${esc(fechaVisual(c.fecha_emision||d.fecha_emision))} · ${esc(c.id_certificado)}</div>
+          <div class="ac-meta">${esc(fechaVisual(c.fecha_emision||d.fecha_emision))} · ${esc(id)}</div>
+          <div style="margin-top:5px">${estado}</div>
         </div>
-        <button class="ac-btn ac-soft" data-aceditar="${esc(c.id_certificado)}">Abrir</button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          ${accionFirma}
+          <button class="ac-btn ac-soft" data-aceditar="${esc(id)}">Abrir</button>
+        </div>
       </div>
     </div>`;
   }).join('');
 
   b.querySelectorAll('[data-aceditar]').forEach(x=>x.onclick=()=>abrir(x.dataset.aceditar));
+  b.querySelectorAll('[data-acfirmar]').forEach(x=>x.onclick=()=>firmarCertificado(x.dataset.acfirmar));
+  b.querySelectorAll('[data-acverfirmado]').forEach(x=>x.onclick=()=>verCertificadoFirmado(x.dataset.acverfirmado));
 }
 
 function dxSeleccionados(){
@@ -752,6 +813,7 @@ async function guardar(){
     state.editandoId=txt(r.id||r.id_certificado||data.id_certificado);
     msg('ok','Certificado guardado correctamente.');
     await cargarHistorial(c.id);
+    actualizarControlesFirma();
   }catch(e){
     msg('error',e.message||'Error al guardar el certificado.');
   }finally{
@@ -789,6 +851,7 @@ function abrir(id){
   },0);
 
   msg('ok','Certificado cargado para revisión.');
+  actualizarControlesFirma();
 }
 
 function nuevo(){
@@ -810,7 +873,160 @@ function nuevo(){
   const preview=document.getElementById('acPreview');
   if(preview) preview.style.display='none';
 
+  state.firmaSolicitudId='';
+  state.firmaDocumentoId='';
+  actualizarControlesFirma();
   msg('','');
+}
+
+
+function certificadoPersistido(id){
+  const x=txt(id);
+  return state.certificados.find(c=>txt(c.id_certificado)===x)||null;
+}
+
+function htmlCompletoFirmaCertificado(certificado){
+  /* El PDF firmado no necesita handlers HTML. Se eliminan atributos on*
+     del documento que son útiles solo para la vista del navegador. */
+  const cuerpo=docHTML(certificado).replace(/\son[a-z]+=(?:"[^"]*"|'[^']*')/gi,'');
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Certificado médico</title>
+<style>${estilosImpresion()}</style>
+</head>
+<body>${cuerpo}</body>
+</html>`;
+}
+
+function actualizarControlesFirma(){
+  const btn=document.getElementById('acFirmar');
+  const ver=document.getElementById('acVerFirmado');
+  const id=txt(state.editandoId);
+  const firmado=id?state.firmasPorDocumento[id]:null;
+  if(btn){
+    btn.disabled=!id||!!firmado||state.firmando;
+    btn.textContent=state.firmando&&state.firmaDocumentoId===id
+      ? 'Esperando firma en Adobe…'
+      : (firmado?'Certificado firmado ✓':'Firmar electrónicamente');
+  }
+  if(ver){
+    ver.style.display=firmado?'inline-flex':'none';
+    ver.disabled=!firmado;
+  }
+}
+
+async function firmarCertificado(idCertificado){
+  const id=txt(idCertificado||state.editandoId);
+  if(!id) return msg('warn','Primero guarde el certificado que desea firmar.');
+  if(state.firmasPorDocumento[id]) return verCertificadoFirmado(id);
+  if(state.firmando) return msg('warn','Ya existe una solicitud de firma en proceso.');
+
+  const certificado=certificadoPersistido(id);
+  if(!certificado) return msg('warn','No se encontró el certificado guardado. Recargue el historial.');
+  const idAtencion=txt(certificado.id_atencion);
+  if(!idAtencion) return msg('warn','El certificado no tiene id_atencion.');
+
+  state.firmando=true;
+  state.firmaDocumentoId=id;
+  actualizarControlesFirma();
+  msg('','Preparando certificado para firma electrónica…');
+
+  try{
+    const htmlDocumento=htmlCompletoFirmaCertificado(certificado);
+    const nombre=`CERTIFICADO_${txt(certificado.numero_consulta||'CONSULTA')}_${id}.pdf`;
+    const r=await postFirma('firmarDocumento',{
+      tipo_documento:'CERTIFICADO',
+      id_documento_origen:id,
+      id_certificado:id,
+      id_atencion:idAtencion,
+      id_paciente:txt(certificado.id_paciente),
+      nombre_paciente:txt(certificado.nombre_paciente),
+      id_historia:txt(certificado.id_historia),
+      numero_consulta:txt(certificado.numero_consulta),
+      id_medico:txt(certificado.id_medico),
+      nombre_medico:txt(certificado.nombre_medico),
+      nombre_archivo:nombre,
+      firmas_requeridas:1,
+      html_documento:htmlDocumento
+    });
+    if(!r||r.success===false) throw Error(r?.message||'No se pudo crear la solicitud de firma.');
+
+    if(txt(r.estado_firma).toUpperCase()==='FIRMADO'){
+      await cargarFirmasCertificados(idAtencion);
+      renderHistorial();
+      msg('ok','Este certificado ya estaba firmado.');
+      return;
+    }
+
+    state.firmaSolicitudId=txt(r.id_solicitud);
+    if(!state.firmaSolicitudId) throw Error('IASYN no devolvió id_solicitud.');
+    msg('ok',r.agente_online===false
+      ? 'Solicitud creada. Abra IASYN Firma V2 en el computador autorizado.'
+      : 'Solicitud enviada. Adobe se abrirá automáticamente en el computador autorizado.');
+    await esperarFirmaCertificado(state.firmaSolicitudId,id,idAtencion);
+  }catch(e){
+    msg('error',e.message||'No se pudo iniciar la firma del certificado.');
+  }finally{
+    state.firmando=false;
+    actualizarControlesFirma();
+  }
+}
+
+async function esperarFirmaCertificado(idSolicitud,idCertificado,idAtencion){
+  const miToken=++state.firmaPollToken;
+  const inicio=Date.now();
+  while(miToken===state.firmaPollToken && Date.now()-inicio<35*60*1000){
+    await new Promise(r=>setTimeout(r,2000));
+    if(miToken!==state.firmaPollToken) return;
+    const r=await postFirma('obtenerEstadoFirmaElectronica',{id_solicitud:idSolicitud});
+    const estado=txt(r?.estado_firma||r?.estado).toUpperCase();
+    if(estado==='FIRMADO'){
+      await cargarFirmasCertificados(idAtencion);
+      renderHistorial();
+      if(txt(state.editandoId)===txt(idCertificado)) actualizarControlesFirma();
+      msg('ok','Certificado firmado electrónicamente y archivado en IASYN.');
+      return;
+    }
+    if(estado==='ERROR') throw Error(r?.error||'El motor reportó un error de firma.');
+    if(estado==='CANCELADA') throw Error('La solicitud de firma fue cancelada.');
+    if(estado==='EXPIRADA') throw Error('La solicitud de firma expiró. Vuelva a intentarlo.');
+    if(estado==='TOMADA') msg('','Adobe está abierto. Firme el certificado y guarde el PDF.');
+  }
+  throw Error('La solicitud sigue pendiente. Puede volver a abrir el certificado y consultar su estado.');
+}
+
+function base64BlobPDF(base64,nombre){
+  const bin=atob(base64||'');
+  const bytes=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return new Blob([bytes],{type:'application/pdf'});
+}
+
+async function verCertificadoFirmado(idCertificado){
+  const id=txt(idCertificado||state.editandoId);
+  const c=certificadoPersistido(id);
+  if(!id||!c) return msg('warn','No se pudo identificar el certificado.');
+  const ventana=window.open('','_blank');
+  try{
+    const r=await postFirma('obtenerDocumentoFirmado',{
+      tipo_documento:'CERTIFICADO',
+      id_atencion:txt(c.id_atencion),
+      id_documento_origen:id,
+      id_certificado:id
+    });
+    if(!r||r.success===false||!r.pdf_firmado_base64) throw Error(r?.message||'No se encontró el PDF firmado.');
+    const blob=base64BlobPDF(r.pdf_firmado_base64,r.nombre_archivo||'certificado_firmado.pdf');
+    const url=URL.createObjectURL(blob);
+    if(ventana) ventana.location.href=url;
+    else window.open(url,'_blank');
+    setTimeout(()=>URL.revokeObjectURL(url),120000);
+  }catch(e){
+    if(ventana) ventana.close();
+    msg('error',e.message||'No se pudo abrir el certificado firmado.');
+  }
 }
 
 function renderContextoClinico(){
@@ -865,7 +1081,7 @@ function docHTML(data){
     d.centro||{}
   );
 
-  const centro=txt(cfg.nombre)||'IASYN';
+  const centro=txt(cfg.nombre)||'AUROSANAX';
   const color=txt(cfg.colorPrincipal)||'#8b1e5a';
   const ciudad=txt(cfg.ciudad)||'Guayaquil';
   const tipo=txt(data.tipo_certificado||d.tipo_certificado||'Certificado médico').toUpperCase();
@@ -1008,7 +1224,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
 .ac-reposo{margin-top:16px}
 .ac-reposo-row{font-size:12.1px;line-height:1.5;margin-top:4px}
 .ac-firma-area{
-  position:absolute;
+position:absolute;
   left:0;
   right:0;
   bottom:0;
@@ -1079,7 +1295,7 @@ function auroGenerarVistaImpresionCertificadoUnificada(dataOpcional){
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Vista previa de certificado médico IASYN</title>
+<title>Vista previa de certificado médico AUROSANAX</title>
 <style>
 ${estilosImpresion()}
 html,body{background:#dfe3e8}
@@ -1248,11 +1464,10 @@ window.auroCertificados={
   vistaPrevia:()=>vista(false),
   imprimir:()=>vista(true),
   obtenerDatos:datos,
-  construirDocumento:docHTML
+  construirDocumento:docHTML,
+  firmarCertificado:firmarCertificado,
+  verCertificadoFirmado:verCertificadoFirmado
 };
-
-/* Alias IASYN aditivo; conserva window.auroCertificados por compatibilidad. */
-window.iasynCertificados=window.auroCertificados;
 
 if(document.readyState==='loading'){
   document.addEventListener('DOMContentLoaded',()=>{mount();},{once:true});
