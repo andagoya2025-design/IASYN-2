@@ -996,9 +996,7 @@ function auroPlanInterconsultasUnicas(lista){
             item.motivo ||
             item.observaciones
         );
-    }
-
-    function mismaInterconsulta(a, b){
+    }function mismaInterconsulta(a, b){
         const tipoA = normalizarTextoPlan(a?.tipo);
         const tipoB = normalizarTextoPlan(b?.tipo);
         const espA = normalizarTextoPlan(a?.especialidad);
@@ -1232,8 +1230,6 @@ function inicializarPlan(){
     instalarResponsivePlanAndroid();
     instalarEventosMedicamentosPlan();
     instalarEventosOrdenesMedicasPlan();
-    auroPlanPrepararControlesEdicionOrdenMedica();
-    auroPlanActualizarVisibilidadCategoriaLibreOrden();
     instalarEventosEvaluacionesPlan();
     auroPlanInstalarAyudasMedicamentos();
     auroPlanInstalarVisorSugerenciasDiagnosticas();
@@ -1250,7 +1246,6 @@ async function cambiarPlanPorAtencion(idAtencion){
 
     inicializarPlan();
     cancelarEdicionMedicamentoPlan({limpiarFormulario:false});
-    cancelarEdicionOrdenMedicaPlan({limpiarFormulario:false});
 
     idAtencion = String(
         idAtencion ||
@@ -1488,7 +1483,6 @@ function cargarPlanTemporal(idAtencion){
 function limpiarPlanTemporal(){
 
     window.auroPlanMedicamentoEditandoIndice = null;
-    window.auroPlanOrdenEditandoIndice = null;
     window.medicamentosPlanSeleccionados = [];
     window.ordenesMedicasPlanSeleccionadas = [];
     window.interconsultasPlanSeleccionadas = [];
@@ -1520,7 +1514,6 @@ function limpiarPlanTemporal(){
     auroPlanSetValue('recIndicaciones', '');
     auroPlanSetValue('recRecomendaciones', '');
 
-    limpiarFormularioOrdenMedica({conservarEdicion:true});
     limpiarEvaluacionesCamposPlan();
 
     auroPlanRefrescarVistas();
@@ -2002,8 +1995,7 @@ function auroPlanRenderSugerenciasDiagnosticas(){
     visor.innerHTML = `
       <div class="auro-plan-dx-head">
         <div class="auro-plan-dx-head-main">
-          <div class="auro-plan-dx-kicker">Apoyo clínico CIE-10</div>
-          <div class="auro-plan-dx-title">Sugerencias terapéuticas por diagnóstico</div>
+          <div class="auro-plan-dx-kicker">Apoyo clínico CIE-10</div><div class="auro-plan-dx-title">Sugerencias terapéuticas por diagnóstico</div>
           <div class="auro-plan-dx-help">Seleccione medicamentos directamente. Use “Ver más” solo para órdenes, indicaciones, seguimiento y alertas.</div>
         </div>
         <div class="auro-plan-dx-head-actions">
@@ -3002,8 +2994,7 @@ function renderMedicamentosPlanTabla(){
             <tr>
               <td>${escapeHtmlPlan(m.med)}</td>
               <td>${escapeHtmlPlan(m.pres)}</td>
-              <td>${escapeHtmlPlan(auroPlanNombreViaCompleta(m.via))}</td>
-              <td>${
+              <td>${escapeHtmlPlan(auroPlanNombreViaCompleta(m.via))}</td><td>${
                   String(m.cantidad || '').trim()
                       ? escapeHtmlPlan(m.cantidad)
                       : '<span class="auro-plan-pendiente" title="Complete la cantidad antes de emitir la receta">Pendiente</span>'
@@ -3095,141 +3086,10 @@ function limpiarMedicamentosPlan(){
 
 /* ============================================================
    ÓRDENES MÉDICAS DEL PLAN
-   IASYN 2 · PREPARACIÓN CLÍNICA / EDICIÓN SEGURA
-   ------------------------------------------------------------
-   - Plan prepara: agregar, editar, eliminar y revisar.
-   - No emite ni versiona documentos formales.
-   - Preserva metadatos adicionales (CIE-10, diagnóstico, protocolo, origen).
-   - Categoría OTROS usa campo libre sin cambiar el contrato JSON.
 ============================================================ */
-
-window.auroPlanOrdenEditandoIndice = Number.isInteger(window.auroPlanOrdenEditandoIndice)
-    ? window.auroPlanOrdenEditandoIndice
-    : null;
 
 function normalizarOrdenTexto(t){
     return normalizarTextoPlan(t);
-}
-
-function auroPlanBuscarBotonAgregarOrdenMedica(){
-    const botones = Array.from(document.querySelectorAll('#hc_plan button, button'));
-    return botones.find(btn =>
-        String(btn.getAttribute('onclick') || '').includes('agregarOrdenMedicaDesdeFormulario')
-    ) || null;
-}
-
-function auroPlanAsegurarCampoCategoriaLibreOrden(){
-    const select = document.getElementById('hcOrdenTipo');
-    if(!select) return null;
-
-    let campo = document.getElementById('hcOrdenTipoLibre');
-    if(!campo){
-        campo = document.createElement('input');
-        campo.type = 'text';
-        campo.id = 'hcOrdenTipoLibre';
-        campo.className = 'form-control mt-2 d-none';
-        campo.placeholder = 'Escriba el tipo de orden';
-        campo.setAttribute('autocomplete','off');
-        campo.setAttribute('aria-label','Otro tipo de orden médica');
-        select.insertAdjacentElement('afterend', campo);
-    }
-    return campo;
-}
-
-function auroPlanCategoriasOrdenSelect(){
-    const select = document.getElementById('hcOrdenTipo');
-    return select
-        ? Array.from(select.options || []).map(op => String(op.value || op.textContent || '').trim()).filter(Boolean)
-        : [];
-}
-
-function auroPlanCategoriaExisteEnSelect(categoria){
-    const objetivo = normalizarOrdenTexto(categoria);
-    if(!objetivo) return false;
-    return auroPlanCategoriasOrdenSelect().some(cat => normalizarOrdenTexto(cat) === objetivo);
-}
-
-function auroPlanActualizarVisibilidadCategoriaLibreOrden(){
-    const select = document.getElementById('hcOrdenTipo');
-    const campo = auroPlanAsegurarCampoCategoriaLibreOrden();
-    if(!select || !campo) return;
-
-    const esOtros = normalizarOrdenTexto(select.value) === 'otros';
-    campo.classList.toggle('d-none', !esOtros);
-    campo.disabled = !esOtros;
-
-    if(!esOtros){
-        campo.value = '';
-    }
-}
-
-function auroPlanCategoriaOrdenFormulario(){
-    const tipo = String(auroPlanGetValue('hcOrdenTipo') || '').trim();
-    if(normalizarOrdenTexto(tipo) !== 'otros') return tipo || 'OTROS';
-
-    const libre = String(auroPlanGetValue('hcOrdenTipoLibre') || '').trim();
-    return libre || 'OTROS';
-}
-
-function auroPlanPrepararControlesEdicionOrdenMedica(){
-    auroPlanAsegurarCampoCategoriaLibreOrden();
-
-    const boton = auroPlanBuscarBotonAgregarOrdenMedica();
-    if(!boton) return;
-
-    boton.id = boton.id || 'auroPlanBtnAgregarOrdenMedica';
-
-    let cancelar = document.getElementById('auroPlanBtnCancelarEdicionOrden');
-    if(!cancelar){
-        cancelar = document.createElement('button');
-        cancelar.type = 'button';
-        cancelar.id = 'auroPlanBtnCancelarEdicionOrden';
-        cancelar.className = 'btn btn-outline-secondary d-none mt-2';
-        cancelar.innerHTML = '<i class="bi bi-x-circle me-1"></i> Cancelar edición';
-        cancelar.addEventListener('click', function(){
-            cancelarEdicionOrdenMedicaPlan();
-        });
-        boton.parentElement?.appendChild(cancelar);
-    }
-
-    let aviso = document.getElementById('auroPlanAvisoEdicionOrden');
-    const caja = document.getElementById('hcOrdenesTableBody')?.closest('.ordenes-medicas-box');
-    if(!aviso && caja){
-        aviso = document.createElement('div');
-        aviso.id = 'auroPlanAvisoEdicionOrden';
-        aviso.className = 'alert alert-light border py-2 px-3 mt-3 mb-0 d-none';
-        aviso.setAttribute('role','status');
-        const tabla = document.getElementById('hcOrdenesTableBody')?.closest('.table-responsive');
-        (tabla || caja).insertAdjacentElement('beforebegin', aviso);
-    }
-
-    auroPlanActualizarEstadoEdicionOrden();
-}
-
-function auroPlanActualizarEstadoEdicionOrden(){
-    const boton = auroPlanBuscarBotonAgregarOrdenMedica();
-    const cancelar = document.getElementById('auroPlanBtnCancelarEdicionOrden');
-    const aviso = document.getElementById('auroPlanAvisoEdicionOrden');
-    const indice = window.auroPlanOrdenEditandoIndice;
-    const lista = Array.isArray(window.ordenesMedicasPlanSeleccionadas)
-        ? window.ordenesMedicasPlanSeleccionadas
-        : [];
-    const editando = Number.isInteger(indice) && indice >= 0 && indice < lista.length;
-
-    if(boton){
-        boton.innerHTML = editando
-            ? '<i class="bi bi-check-circle me-1"></i> Actualizar orden'
-            : '<i class="bi bi-plus-circle me-1"></i> Agregar';
-    }
-
-    if(cancelar) cancelar.classList.toggle('d-none', !editando);
-
-    if(aviso){
-        aviso.classList.toggle('d-none', !editando);
-        aviso.innerHTML = editando
-            ? '<i class="bi bi-pencil-square me-1"></i> Editando orden ' + (indice + 1) + '. Revise los datos y presione “Actualizar orden”.'
-            : '';
-    }
 }
 
 function renderOrdenesSugerencias(){
@@ -3240,8 +3100,7 @@ function renderOrdenesSugerencias(){
     if(!input || !box) return;
 
     const q = normalizarOrdenTexto(input.value);
-    const tipoActual = auroPlanCategoriaOrdenFormulario();
-    const tipoFiltro = normalizarOrdenTexto(tipoActual === 'OTROS' ? '' : tipoActual);
+    const tipoFiltro = normalizarOrdenTexto(auroPlanGetValue('hcOrdenTipo'));
 
     const base = Array.isArray(window.ORDENES_MEDICAS_IASYN_BASE)
         ? window.ORDENES_MEDICAS_IASYN_BASE
@@ -3279,152 +3138,54 @@ function seleccionarOrdenSugerida(el){
 
     if(!el) return;
 
-    const categoria = String(el.dataset.cat || '').trim();
     auroPlanSetValue('hcOrdenBusqueda', el.dataset.orden || '');
-
-    if(auroPlanCategoriaExisteEnSelect(categoria)){
-        auroPlanSetValue('hcOrdenTipo', categoria);
-        auroPlanSetValue('hcOrdenTipoLibre', '');
-    }else{
-        auroPlanSetValue('hcOrdenTipo', 'OTROS');
-        auroPlanSetValue('hcOrdenTipoLibre', categoria);
-    }
-
-    auroPlanActualizarVisibilidadCategoriaLibreOrden();
+    auroPlanSetValue('hcOrdenTipo', el.dataset.cat || '');
 
     const box = document.getElementById('hcOrdenSugerencias');
     if(box) box.classList.add('d-none');
 }
 
-function limpiarFormularioOrdenMedica(opciones){
-    opciones = opciones || {};
+function limpiarFormularioOrdenMedica(){
 
     auroPlanSetValue('hcOrdenTipo', '');
-    auroPlanSetValue('hcOrdenTipoLibre', '');
     auroPlanSetValue('hcOrdenBusqueda', '');
     auroPlanSetValue('hcOrdenObservacion', '');
 
-    if(!opciones.conservarEdicion){
-        window.auroPlanOrdenEditandoIndice = null;
-    }
-
-    auroPlanActualizarVisibilidadCategoriaLibreOrden();
-    auroPlanActualizarEstadoEdicionOrden();
-
     const box = document.getElementById('hcOrdenSugerencias');
     if(box) box.classList.add('d-none');
-}
-
-function cancelarEdicionOrdenMedicaPlan(opciones){
-    opciones = opciones || {};
-    window.auroPlanOrdenEditandoIndice = null;
-
-    if(opciones.limpiarFormulario === false){
-        auroPlanActualizarEstadoEdicionOrden();
-        return;
-    }
-
-    limpiarFormularioOrdenMedica({conservarEdicion:false});
-}
-
-function editarOrdenMedicaPlan(i){
-    i = Number(i);
-    const lista = Array.isArray(window.ordenesMedicasPlanSeleccionadas)
-        ? window.ordenesMedicasPlanSeleccionadas
-        : [];
-
-    if(!Number.isInteger(i) || i < 0 || i >= lista.length) return;
-
-    const item = lista[i] || {};
-    window.auroPlanOrdenEditandoIndice = i;
-
-    auroPlanSetValue('hcOrdenBusqueda', item.orden || item.nombre || '');
-    auroPlanSetValue('hcOrdenObservacion', item.obs || item.observacion || '');
-
-    const categoria = String(item.cat || item.categoria || 'OTROS').trim() || 'OTROS';
-    if(auroPlanCategoriaExisteEnSelect(categoria)){
-        auroPlanSetValue('hcOrdenTipo', categoria);
-        auroPlanSetValue('hcOrdenTipoLibre', '');
-    }else{
-        auroPlanSetValue('hcOrdenTipo', 'OTROS');
-        auroPlanSetValue('hcOrdenTipoLibre', categoria);
-    }
-
-    auroPlanActualizarVisibilidadCategoriaLibreOrden();
-    auroPlanActualizarEstadoEdicionOrden();
-    document.getElementById('hcOrdenBusqueda')?.focus();
 }
 
 function agregarOrdenMedicaDesdeFormulario(){
 
-    const orden = String(auroPlanGetValue('hcOrdenBusqueda') || '').trim();
-    const tipoSelect = String(auroPlanGetValue('hcOrdenTipo') || '').trim();
-    const tipoLibre = String(auroPlanGetValue('hcOrdenTipoLibre') || '').trim();
+    const orden = (auroPlanGetValue('hcOrdenBusqueda') || '').trim();
 
     if(!orden){
         alert('Ingrese o seleccione una orden médica.');
         return;
     }
 
-    if(normalizarOrdenTexto(tipoSelect) === 'otros' && !tipoLibre){
-        alert('Cuando seleccione OTROS, escriba el tipo de orden médica.');
-        document.getElementById('hcOrdenTipoLibre')?.focus();
-        return;
-    }
+    window.ordenesMedicasPlanSeleccionadas = auroPlanOrdenesUnicas([
+        ...(window.ordenesMedicasPlanSeleccionadas || []),
+        {
+            orden,
+            cat: auroPlanGetValue('hcOrdenTipo') || 'OTROS',
+            obs: auroPlanGetValue('hcOrdenObservacion')
+        }
+    ]);
 
-    const categoria = auroPlanCategoriaOrdenFormulario();
-    const observacion = String(auroPlanGetValue('hcOrdenObservacion') || '').trim();
-    const lista = Array.isArray(window.ordenesMedicasPlanSeleccionadas)
-        ? [...window.ordenesMedicasPlanSeleccionadas]
-        : [];
-    const indice = window.auroPlanOrdenEditandoIndice;
-    const editando = Number.isInteger(indice) && indice >= 0 && indice < lista.length;
-
-    if(editando){
-        const anterior = lista[indice] || {};
-        lista[indice] = Object.assign({}, anterior, {
-            orden: orden,
-            cat: categoria,
-            obs: observacion
-        });
-    }else{
-        lista.push({
-            orden: orden,
-            cat: categoria,
-            obs: observacion
-        });
-    }
-
-    window.ordenesMedicasPlanSeleccionadas = auroPlanOrdenesUnicas(lista);
-    window.auroPlanOrdenEditandoIndice = null;
-
-    limpiarFormularioOrdenMedica({conservarEdicion:false});
+    limpiarFormularioOrdenMedica();
     renderOrdenesMedicasTabla();
     recopilarOrdenesMedicasPlan();
     guardarPlanTemporal();
-    auroPlanRenderSugerenciasDiagnosticas();
 }
 
 function eliminarOrdenMedica(i){
 
     i = Number(i);
-    if(!Number.isInteger(i)) return;
 
-    const lista = Array.isArray(window.ordenesMedicasPlanSeleccionadas)
-        ? window.ordenesMedicasPlanSeleccionadas
-        : [];
-    if(i < 0 || i >= lista.length) return;
+    if(Number.isNaN(i)) return;
 
-    const indiceEditando = window.auroPlanOrdenEditandoIndice;
-    lista.splice(i,1);
-
-    if(Number.isInteger(indiceEditando)){
-        if(indiceEditando === i){
-            cancelarEdicionOrdenMedicaPlan();
-        }else if(indiceEditando > i){
-            window.auroPlanOrdenEditandoIndice = indiceEditando - 1;
-        }
-    }
+    window.ordenesMedicasPlanSeleccionadas.splice(i,1);
 
     renderOrdenesMedicasTabla();
     recopilarOrdenesMedicasPlan();
@@ -3437,15 +3198,13 @@ function eliminarOrdenMedica(i){
 function renderOrdenesMedicasTabla(){
 
     const tbody = document.getElementById('hcOrdenesTableBody');
+
     if(!tbody) return;
 
-    auroPlanPrepararControlesEdicionOrdenMedica();
-
-    const ordenes = Array.isArray(window.ordenesMedicasPlanSeleccionadas)
-        ? window.ordenesMedicasPlanSeleccionadas
-        : [];
+    const ordenes = window.ordenesMedicasPlanSeleccionadas || [];
 
     if(!ordenes.length){
+
         tbody.innerHTML = `
             <tr id="hcOrdenesEmpty">
               <td colspan="4" class="text-center text-muted py-3">
@@ -3453,9 +3212,8 @@ function renderOrdenesMedicasTabla(){
               </td>
             </tr>
         `;
+
         auroPlanSetValue('hcExamenesSolicitados', '');
-        window.auroPlanOrdenEditandoIndice = null;
-        auroPlanActualizarEstadoEdicionOrden();
         return;
     }
 
@@ -3465,28 +3223,16 @@ function renderOrdenesMedicasTabla(){
           <td>${escapeHtmlPlan(o.cat)}</td>
           <td>${escapeHtmlPlan(o.obs)}</td>
           <td>
-            <div class="d-inline-flex gap-1 flex-nowrap">
-              <button type="button"
-                      class="btn btn-sm btn-outline-primary"
-                      title="Editar orden"
-                      aria-label="Editar orden ${i + 1}"
-                      onclick="editarOrdenMedicaPlan(${i})">
-                <i class="bi bi-pencil-square"></i>
-              </button>
-              <button type="button"
-                      class="btn btn-sm btn-outline-danger"
-                      title="Eliminar orden"
-                      aria-label="Eliminar orden ${i + 1}"
-                      onclick="eliminarOrdenMedica(${i})">
-                <i class="bi bi-trash"></i>
-              </button>
-            </div>
+            <button type="button"
+                    class="btn btn-sm btn-outline-danger"
+                    onclick="eliminarOrdenMedica(${i})">
+              <i class="bi bi-trash"></i>
+            </button>
           </td>
         </tr>
     `).join('');
 
     recopilarOrdenesMedicasPlan();
-    auroPlanActualizarEstadoEdicionOrden();
 }
 
 function textoOrdenesMedicasPlan(){
@@ -3508,10 +3254,8 @@ function recopilarOrdenesMedicasPlan(){
 }
 
 function limpiarOrdenesMedicasPlan(){
-    window.auroPlanOrdenEditandoIndice = null;
     window.ordenesMedicasPlanSeleccionadas = [];
 
-    limpiarFormularioOrdenMedica({conservarEdicion:false});
     renderOrdenesMedicasTabla();
     recopilarOrdenesMedicasPlan();
     guardarPlanTemporal();
@@ -3949,7 +3693,6 @@ function instalarEventosOrdenesMedicasPlan(){
 
     document.addEventListener('change', function(e){
         if(e.target && e.target.id === 'hcOrdenTipo'){
-            auroPlanActualizarVisibilidadCategoriaLibreOrden();
             renderOrdenesSugerencias();
         }
     });
@@ -4250,8 +3993,7 @@ function instalarResponsivePlanAndroid(){
         #hc_plan .auro-plan-tabla-medicamentos td{
           padding:9px 8px!important;
           vertical-align:middle!important;
-          white-space:normal!important;
-          word-break:normal!important;
+          white-space:normal!important;word-break:normal!important;
           overflow-wrap:anywhere!important;
           line-height:1.35!important;
         }
@@ -5250,8 +4992,7 @@ document.addEventListener('DOMContentLoaded', function(){
    - Plan escucha directamente los eventos maestros de Atenciones.
    - La nueva atención se considera fuente autoritativa inmediata.
    - Limpia el Plan anterior antes de cualquier carga asíncrona.
-   - Evita depender de que el usuario pulse el botón Ver.
-============================================================ */
+   - Evita depender de que el usuario pulse el botón Ver.============================================================ */
 (function instalarSincronizacionInmediataPlanPorAtencion(){
     if(window.__auroPlanEventosAtencionV22Instalados) return;
     window.__auroPlanEventosAtencionV22Instalados = true;
@@ -5912,3 +5653,388 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
    - No modifica JSON, Apps Script, Google Sheets, protocolos,
      medicamentos, botones, responsive ni guardado.
 ============================================================ */
+/* ============================================================
+   IASYN PLAN 30 — FIRMA DE RECETA COMO EFECTO ESPEJO V1
+   2026-09-20 · ADITIVO / ANTIRREGRESIVO
+   ------------------------------------------------------------
+   OBJETIVO EXCLUSIVO:
+   - PLAN NO firma ni reconstruye la receta por sí mismo.
+   - PLAN consulta y refleja el estado que RECETAS calcula.
+   - El clic explícito delega a window.auroRecetas.
+   - CONSULTAR ESTADO nunca crea solicitud de firma.
+   - No modifica guardado del Plan, medicamentos, órdenes,
+     interconsultas, evaluaciones, navegación, backend ni motor V2.2.
+   - Protege cambio rápido de atención mediante secuencia + id_atencion.
+   ============================================================ */
+(function(){
+    'use strict';
+
+    if(window.__iasynPlanFirmaRecetaEspejoV1Instalado) return;
+    window.__iasynPlanFirmaRecetaEspejoV1Instalado = true;
+
+    const VERSION = 'IASYN-PLAN-FIRMA-RECETA-ESPEJO-V1';
+    let secuencia = 0;
+    let estadoActual = {
+        id_atencion:'',
+        id_receta:'',
+        estado:'SIN_RECETA',
+        mensaje:'Consultando estado de la receta…',
+        documento:null,
+        error:''
+    };
+    let accionActiva = false;
+    let refrescoTimer = null;
+
+    function texto(v){ return String(v === null || v === undefined ? '' : v).trim(); }
+    function escapar(v){
+        return texto(v).replace(/[&<>'"]/g,function(c){
+            return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c];
+        });
+    }
+
+    function idAtencionActiva(){
+        try{
+            if(typeof window.auroPlanObtenerIdAtencionActivaSeguro === 'function'){
+                const id = texto(window.auroPlanObtenerIdAtencionActivaSeguro());
+                if(id) return id;
+            }
+        }catch(_e){}
+        try{
+            if(typeof window.getIdAtencionActiva === 'function'){
+                const id = texto(window.getIdAtencionActiva());
+                if(id) return id;
+            }
+        }catch(_e){}
+        try{
+            if(typeof window.getAtencionActiva === 'function'){
+                const a = window.getAtencionActiva();
+                const id = texto(a?.id_atencion || a?.id);
+                if(id) return id;
+            }
+        }catch(_e){}
+        return texto(window.planState?.atencionActual || window.__auroPlanAtencionRenderizada || '');
+    }
+
+    function panelVisible(){
+        const panel = document.getElementById('hc_plan');
+        if(!panel) return false;
+        return panel.offsetParent !== null || panel.classList.contains('active');
+    }
+
+    function apiRecetas(){
+        const api = window.auroRecetas;
+        if(!api || typeof api !== 'object') return null;
+        return api;
+    }
+
+    function instalarEstilos(){
+        if(document.getElementById('iasynPlanFirmaRecetaEspejoV1Styles')) return;
+        const style = document.createElement('style');
+        style.id = 'iasynPlanFirmaRecetaEspejoV1Styles';
+        style.textContent = `
+          .iasyn-plan-firma-receta-v1{margin:10px 0 14px;padding:11px 12px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;box-shadow:0 3px 12px rgba(15,23,42,.05)}
+          .iasyn-plan-firma-receta-v1 .ipr-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+          .iasyn-plan-firma-receta-v1 .ipr-title{display:flex;align-items:center;gap:8px;font-weight:900;color:#111827;font-size:13px}
+          .iasyn-plan-firma-receta-v1 .ipr-sub{margin-top:3px;color:#64748b;font-size:11.5px;line-height:1.35}
+          .iasyn-plan-firma-receta-v1 .ipr-status{display:inline-flex;align-items:center;gap:6px;margin-top:7px;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:900;background:#f8fafc;color:#475569;border:1px solid #e2e8f0}
+          .iasyn-plan-firma-receta-v1 .ipr-status.ok{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+          .iasyn-plan-firma-receta-v1 .ipr-status.warn{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+          .iasyn-plan-firma-receta-v1 .ipr-status.err{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+          .iasyn-plan-firma-receta-v1 .ipr-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+          .iasyn-plan-firma-receta-v1 button{min-height:36px;border-radius:10px;padding:7px 11px;font-weight:850;font-size:12px;cursor:pointer;border:1px solid #d1d5db;background:#fff;color:#334155}
+          .iasyn-plan-firma-receta-v1 button.primary{background:#8b1e5a;border-color:#8b1e5a;color:#fff}
+          .iasyn-plan-firma-receta-v1 button.success{background:#166534;border-color:#166534;color:#fff}
+          .iasyn-plan-firma-receta-v1 button:disabled{opacity:.58;cursor:not-allowed}
+          .iasyn-plan-firma-receta-v1 .ipr-refresh{width:36px;padding:7px;display:inline-grid;place-items:center}
+          @media(max-width:768px){
+            .iasyn-plan-firma-receta-v1 .ipr-head{display:block}
+            .iasyn-plan-firma-receta-v1 .ipr-actions{margin-top:9px;justify-content:stretch}
+            .iasyn-plan-firma-receta-v1 .ipr-actions button:not(.ipr-refresh){flex:1 1 190px}
+          }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function asegurarCaja(){
+        instalarEstilos();
+        let box = document.getElementById('iasynPlanFirmaRecetaEspejoV1');
+        if(box) return box;
+
+        const panel = document.getElementById('hc_plan');
+        if(!panel) return null;
+
+        box = document.createElement('div');
+        box.id = 'iasynPlanFirmaRecetaEspejoV1';
+        box.className = 'iasyn-plan-firma-receta-v1';
+        box.setAttribute('data-version',VERSION);
+
+        const mini = document.getElementById('auroPlanMiniStatus');
+        if(mini && mini.parentNode){
+            mini.insertAdjacentElement('afterend',box);
+        }else{
+            const cabecera = panel.querySelector('.section-head, .card-header, h3, h4, h5');
+            if(cabecera) cabecera.insertAdjacentElement('afterend',box);
+            else panel.prepend(box);
+        }
+        return box;
+    }
+
+    function modeloVisual(){
+        const e = texto(estadoActual.estado).toUpperCase();
+        const idReceta = texto(estadoActual.id_receta);
+        let etiqueta = 'RECETA NO GUARDADA';
+        let clase = '';
+        let boton = {texto:'Guarde la receta para firmar',clase:'',accion:'',disabled:true};
+
+        if(accionActiva){
+            etiqueta = 'FIRMA EN PROCESO…';
+            clase = 'warn';
+            boton = {texto:'Firma en proceso…',clase:'',accion:'',disabled:true};
+        }else if(e === 'FIRMADA'){
+            etiqueta = 'FIRMADA ✓';
+            clase = 'ok';
+            boton = {texto:'Ver receta firmada ✓',clase:'success',accion:'VER',disabled:false};
+        }else if(e === 'NUEVA_VERSION'){
+            etiqueta = 'NUEVA VERSIÓN SIN FIRMAR';
+            clase = 'warn';
+            boton = {texto:'Firmar nueva versión',clase:'primary',accion:'FIRMAR',disabled:false};
+        }else if(e === 'SIN_FIRMA' || e === 'LISTA'){
+            etiqueta = 'SIN FIRMA';
+            boton = {texto:'Firmar receta',clase:'primary',accion:'FIRMAR',disabled:!idReceta};
+        }else if(e === 'EDICION_PENDIENTE'){
+            etiqueta = 'CAMBIOS SIN GUARDAR';
+            clase = 'warn';
+            boton = {texto:'Guarde la receta antes de firmar',clase:'',accion:'',disabled:true};
+        }else if(e === 'ERROR'){
+            etiqueta = 'NO SE PUDO CONSULTAR';
+            clase = 'err';
+            boton = {texto:'Estado no disponible',clase:'',accion:'',disabled:true};
+        }
+
+        return {etiqueta,clase,boton};
+    }
+
+    function pintar(){
+        const box = asegurarCaja();
+        if(!box) return;
+        const visual = modeloVisual();
+        const mensaje = texto(estadoActual.mensaje) || 'Estado administrado por el módulo Recetas.';
+
+        box.innerHTML = `
+          <div class="ipr-head">
+            <div>
+              <div class="ipr-title"><i class="bi bi-pen"></i> Firma de receta</div>
+              <div class="ipr-sub">Plan solo refleja el estado oficial de Recetas. No crea una segunda receta ni una segunda firma.</div>
+              <div class="ipr-status ${escapar(visual.clase)}"><i class="bi bi-shield-check"></i>${escapar(visual.etiqueta)}</div>
+              <div class="ipr-sub">${escapar(mensaje)}</div>
+            </div>
+            <div class="ipr-actions">
+              <button type="button" class="ipr-refresh" data-ipr-accion="REFRESCAR" title="Actualizar estado de firma" aria-label="Actualizar estado de firma"><i class="bi bi-arrow-clockwise"></i></button>
+              <button type="button" class="${escapar(visual.boton.clase)}" data-ipr-accion="${escapar(visual.boton.accion)}" ${visual.boton.disabled?'disabled':''}>${escapar(visual.boton.texto)}</button>
+              ${accionActiva && estadoActual.id_receta ? '<button type="button" data-ipr-accion="CANCELAR"><i class="bi bi-x-circle me-1"></i>Cancelar firma</button>' : ''}
+            </div>
+          </div>`;
+
+        box.querySelectorAll('[data-ipr-accion]').forEach(function(btn){
+            btn.addEventListener('click',function(){
+                const accion = texto(btn.getAttribute('data-ipr-accion')).toUpperCase();
+                if(accion === 'REFRESCAR') sincronizar(true);
+                else if(accion === 'FIRMAR') firmarDesdePlan();
+                else if(accion === 'VER') verFirmadaDesdePlan();
+                else if(accion === 'CANCELAR') cancelarDesdePlan();
+            });
+        });
+    }
+
+    function normalizarRespuestaEstado(r,idEsperado){
+        if(!r || r.success === false){
+            const e = texto(r?.estado || 'RECETA_NO_GUARDADA').toUpperCase();
+            return {
+                id_atencion:idEsperado,
+                id_receta:texto(r?.id_receta),
+                estado:e || 'RECETA_NO_GUARDADA',
+                mensaje:texto(r?.message) || (e === 'EDICION_PENDIENTE' ? 'Guarde los cambios de la receta antes de firmar.' : 'No existe una receta guardada y firmable para esta atención.'),
+                documento:null,
+                error:''
+            };
+        }
+
+        const ef = r.estado_firma && typeof r.estado_firma === 'object' ? r.estado_firma : {};
+        let estado = texto(ef.estado || r.estado_firma || 'SIN_FIRMA').toUpperCase();
+        if(!estado || estado === 'LISTA') estado = 'SIN_FIRMA';
+        let mensaje = 'Receta guardada y lista para firma.';
+        if(estado === 'FIRMADA') mensaje = 'La versión oficial guardada de esta atención ya está firmada.';
+        else if(estado === 'NUEVA_VERSION') mensaje = 'La receta fue actualizada después de una firma previa y requiere una nueva firma.';
+
+        return {
+            id_atencion:texto(r.id_atencion || idEsperado),
+            id_receta:texto(r.id_receta || r.id_documento_origen),
+            estado,
+            mensaje,
+            documento:r,
+            error:''
+        };
+    }
+
+    async function sincronizar(forzarVisual){
+        const token = ++secuencia;
+        const idEsperado = idAtencionActiva();
+
+        if(!idEsperado){
+            estadoActual = {id_atencion:'',id_receta:'',estado:'RECETA_NO_GUARDADA',mensaje:'Seleccione una atención para consultar la receta.',documento:null,error:''};
+            pintar();
+            return estadoActual;
+        }
+
+        if(forzarVisual){
+            estadoActual = Object.assign({},estadoActual,{id_atencion:idEsperado,mensaje:'Actualizando estado oficial de la receta…'});
+            pintar();
+        }
+
+        const api = apiRecetas();
+        if(!api || typeof api.obtenerEstadoFirmaActual !== 'function'){
+            if(token !== secuencia || idAtencionActiva() !== idEsperado) return null;
+            estadoActual = {id_atencion:idEsperado,id_receta:'',estado:'ERROR',mensaje:'El módulo Recetas con firma electrónica aún no está disponible.',documento:null,error:'API_RECETAS_NO_DISPONIBLE'};
+            pintar();
+            return estadoActual;
+        }
+
+        try{
+            const r = await api.obtenerEstadoFirmaActual();
+            if(token !== secuencia) return null;
+            if(idAtencionActiva() !== idEsperado) return null;
+            const normalizado = normalizarRespuestaEstado(r,idEsperado);
+            if(normalizado.id_atencion && normalizado.id_atencion !== idEsperado) return null;
+            estadoActual = normalizado;
+            pintar();
+            return estadoActual;
+        }catch(error){
+            if(token !== secuencia || idAtencionActiva() !== idEsperado) return null;
+            estadoActual = {id_atencion:idEsperado,id_receta:'',estado:'ERROR',mensaje:'No se pudo consultar el estado de firma. La información clínica del Plan no fue modificada.',documento:null,error:texto(error?.message||error)};
+            pintar();
+            return estadoActual;
+        }
+    }
+
+    function programarSincronizacion(ms){
+        clearTimeout(refrescoTimer);
+        refrescoTimer = setTimeout(function(){ sincronizar(false); }, Number(ms || 0));
+    }
+
+    async function firmarDesdePlan(){
+        if(accionActiva) return;
+        const idEsperado = idAtencionActiva();
+        if(!idEsperado) return;
+
+        /* Reconsulta antes del clic real: el botón visible nunca es autoridad. */
+        const estado = await sincronizar(true);
+        if(!estado || idAtencionActiva() !== idEsperado) return;
+        if(!['SIN_FIRMA','NUEVA_VERSION','LISTA'].includes(texto(estado.estado).toUpperCase())) return;
+
+        const api = apiRecetas();
+        if(!api || typeof api.firmarElectronicaActual !== 'function') return;
+
+        accionActiva = true;
+        pintar();
+        try{
+            await api.firmarElectronicaActual();
+        }catch(error){
+            console.warn('IASYN PLAN FIRMA RECETA: la operación delegada informó error.',error);
+        }finally{
+            accionActiva = false;
+            if(idAtencionActiva() === idEsperado) await sincronizar(false);
+            else pintar();
+        }
+    }
+
+    async function verFirmadaDesdePlan(){
+        const idEsperado = idAtencionActiva();
+        const estado = await sincronizar(true);
+        if(!estado || idAtencionActiva() !== idEsperado) return;
+        if(texto(estado.estado).toUpperCase() !== 'FIRMADA' || !estado.id_receta) return;
+
+        const api = apiRecetas();
+        if(!api || typeof api.abrirDocumentoFirmado !== 'function') return;
+        try{
+            await api.abrirDocumentoFirmado(estado.id_receta);
+        }catch(error){
+            console.warn('IASYN PLAN FIRMA RECETA: no se pudo abrir el documento firmado.',error);
+        }
+    }
+
+    async function cancelarDesdePlan(){
+        if(!accionActiva || !estadoActual.id_receta) return;
+        const api = apiRecetas();
+        if(!api || typeof api.cancelarFirma !== 'function') return;
+        try{
+            await api.cancelarFirma(estadoActual.id_receta);
+        }catch(error){
+            console.warn('IASYN PLAN FIRMA RECETA: no se pudo cancelar la firma delegada.',error);
+        }finally{
+            accionActiva = false;
+            await sincronizar(false);
+        }
+    }
+
+    function eventoAtencion(){
+        secuencia++;
+        accionActiva = false;
+        estadoActual = {id_atencion:idAtencionActiva(),id_receta:'',estado:'RECETA_NO_GUARDADA',mensaje:'Sincronizando la receta de la atención seleccionada…',documento:null,error:''};
+        pintar();
+        programarSincronizacion(80);
+    }
+
+    ['aurosanax:atencion-iniciada','aurosanax:atencion-seleccionada','aurosanax:atencion-cambiada','aurosanax:atencion-actualizada','aurosanax:plan-cargado'].forEach(function(nombre){
+        window.addEventListener(nombre,eventoAtencion);
+        document.addEventListener(nombre,eventoAtencion);
+    });
+
+    window.addEventListener('aurosanax:receta-firma-estado',function(ev){
+        const d = ev?.detail || {};
+        if(texto(d.tipo_documento).toUpperCase() !== 'RECETA') return;
+        if(texto(d.id_atencion) && texto(d.id_atencion) !== idAtencionActiva()) return;
+        programarSincronizacion(30);
+    });
+
+    window.addEventListener('aurosanax:firma-electronica-completada',function(ev){
+        const d = ev?.detail || {};
+        if(texto(d.tipo_documento).toUpperCase() !== 'RECETA') return;
+        if(texto(d.id_atencion) && texto(d.id_atencion) !== idAtencionActiva()) return;
+        accionActiva = false;
+        programarSincronizacion(30);
+    });
+
+    window.addEventListener('aurosanax:firma-electronica-cancelada',function(ev){
+        const d = ev?.detail || {};
+        if(texto(d.tipo_documento).toUpperCase() !== 'RECETA') return;
+        if(texto(d.id_atencion) && texto(d.id_atencion) !== idAtencionActiva()) return;
+        accionActiva = false;
+        programarSincronizacion(30);
+    });
+
+    window.addEventListener('focus',function(){
+        if(panelVisible()) programarSincronizacion(80);
+    });
+    document.addEventListener('visibilitychange',function(){
+        if(!document.hidden && panelVisible()) programarSincronizacion(80);
+    });
+
+    /* API pública de solo presentación/integración para otras capas. */
+    window.auroPlanFirmaReceta = Object.assign({},window.auroPlanFirmaReceta||{}, {
+        version:VERSION,
+        sincronizar:function(){ return sincronizar(true); },
+        obtenerEstado:function(){ return Object.assign({},estadoActual); },
+        firmar:function(){ return firmarDesdePlan(); },
+        verFirmada:function(){ return verFirmadaDesdePlan(); }
+    });
+
+    let intentos = 0;
+    const instalador = setInterval(function(){
+        intentos++;
+        if(asegurarCaja() || intentos >= 40){
+            clearInterval(instalador);
+            pintar();
+            programarSincronizacion(60);
+        }
+    },250);
+})();
