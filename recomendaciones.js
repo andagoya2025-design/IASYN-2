@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.3.0';
+  const VERSION = '1.3.1';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20260920_recomendaciones_firma_electronica_v1_antirregresiva';
+  const RELEASE = '20260920_recomendaciones_firma_v1_tarjeta_guardada_antirregresiva';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -450,6 +450,21 @@
       .auro-rec-btn.firma-ok{border-color:#86efac;background:#f0fdf4;color:#166534}
       .auro-rec-btn.firma-warn{border-color:#fdba74;background:#fff7ed;color:#9a3412}
       .auro-rec-firma-status{display:flex;align-items:center;justify-content:flex-end;gap:7px;width:100%;font-size:11px;font-weight:900;color:#64748b;margin-bottom:-3px}
+      .auro-rec-saved-list{display:grid;gap:10px}
+      .auro-rec-saved-item{border:1px solid #e5e7eb;border-radius:14px;background:#fff;padding:14px 16px;box-shadow:0 4px 16px rgba(15,23,42,.04)}
+      .auro-rec-saved-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+      .auro-rec-saved-title{font-size:14px;font-weight:950;color:#1f2937}
+      .auro-rec-saved-meta{font-size:11px;line-height:1.5;color:#64748b;margin-top:4px;overflow-wrap:anywhere}
+      .auro-rec-saved-badges{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+      .auro-rec-saved-badge{display:inline-flex;align-items:center;gap:5px;border:1px solid #d1d5db;border-radius:999px;padding:4px 8px;font-size:10.5px;font-weight:900;background:#f8fafc;color:#475569}
+      .auro-rec-saved-badge.ok{border-color:#86efac;background:#f0fdf4;color:#166534}
+      .auro-rec-saved-badge.warn{border-color:#fdba74;background:#fff7ed;color:#9a3412}
+      .auro-rec-saved-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+      @media(max-width:700px){
+        .auro-rec-saved-top{display:grid}
+        .auro-rec-saved-actions{justify-content:stretch}
+        .auro-rec-saved-actions .auro-rec-btn{width:100%}
+      }
       .auro-rec-btn:disabled{opacity:.5;cursor:not-allowed}
       .auro-rec-msg{padding:10px 12px;border-radius:13px;font-size:12px;font-weight:750}
       .auro-rec-msg.info{background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe}
@@ -614,6 +629,20 @@
             <button type="button" class="auro-rec-btn" id="auroRecBtnFirma"><i class="bi bi-pen me-1"></i> Guarde recomendaciones para firmar</button>
             <button type="button" class="auro-rec-btn" id="auroRecBtnCancelarFirma" hidden><i class="bi bi-x-circle me-1"></i> Cancelar firma</button>
           </div>
+
+          <section class="auro-rec-card" id="auroRecGuardadaCard">
+            <div class="auro-rec-card-head">
+              <div>
+                <b>Recomendación guardada</b>
+                <small>Documento persistido de esta atención. Esta tarjeta no muestra cambios que aún no se hayan guardado.</small>
+              </div>
+            </div>
+            <div class="auro-rec-card-body">
+              <div id="auroRecGuardada" class="auro-rec-saved-list">
+                <div class="auro-rec-empty">No existe una recomendación guardada para esta atención.</div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     `;
@@ -667,6 +696,7 @@
     aplicarChecks('alerta',[]);
     aplicarChecks('infeccion',[]);
     setText('auroRecActualizado','Sin guardar aún');
+    renderRecomendacionGuardada();
   }
 
   function renderDiagnosticos(){
@@ -1024,6 +1054,7 @@
       'auroRecActualizado',
       fechaVisual(registro?.actualizado_en || registro?.creado_en)
     );
+    renderRecomendacionGuardada();
   }
 
   function aplicarModo(){
@@ -1715,6 +1746,189 @@ html,body{background:#dfe3e8}
 
 
 
+
+  /* ============================================================
+     IASYN RECOMENDACIONES — TARJETA DE DOCUMENTO GUARDADO V1.1
+     ------------------------------------------------------------
+     CAPA SOLO VISUAL:
+     - Lee exclusivamente state.registro / state.idRecomendacion.
+     - No consulta red.
+     - No guarda.
+     - No crea solicitudes.
+     - No mantiene una segunda verdad de firma.
+     - “Abrir guardada” usa detalle_json persistido, no el formulario.
+     ============================================================ */
+
+  function auroRecGuardadaEstadoFirmaVisual(id){
+    const rid=txt(id);
+    const proceso=auroRecFirmaProceso(rid);
+    const estado=auroRecFirmaEstado(rid);
+    const hayCambios=auroRecFirmaHayCambiosSinGuardar();
+
+    if(proceso){
+      const op=txt(proceso.estado).toUpperCase();
+      if(op==='PREPARANDO') return {texto:'Preparando firma…',clase:'warn',accion:'Preparando firma…',disabled:true,cancelar:false};
+      if(op==='PENDIENTE') return {texto:'Firma en proceso',clase:'warn',accion:'Firma en proceso…',disabled:true,cancelar:true};
+      if(op==='TOMADA') return {texto:'Firma en Adobe',clase:'warn',accion:'Firma en Adobe…',disabled:true,cancelar:true};
+      if(op==='ERROR') return {texto:'Error recuperable',clase:'warn',accion:'Reintentar firma',disabled:false,cancelar:false};
+      if(op==='EXPIRADA') return {texto:'Firma expirada',clase:'warn',accion:'Reintentar firma',disabled:false,cancelar:false};
+    }
+
+    if(hayCambios){
+      return {texto:'Guardada · cambios sin guardar',clase:'warn',accion:'Guarde cambios antes de firmar',disabled:true,cancelar:false};
+    }
+
+    if(estado.estado==='FIRMADA'){
+      return {texto:'Firmada ✓',clase:'ok',accion:'Ver recomendación firmada ✓',disabled:false,cancelar:false};
+    }
+    if(estado.estado==='NUEVA_VERSION'){
+      return {texto:'Nueva versión sin firmar',clase:'warn',accion:'Firmar nueva versión',disabled:false,cancelar:false};
+    }
+    return {texto:'Sin firma',clase:'',accion:'Firmar recomendación',disabled:false,cancelar:false};
+  }
+
+  function renderRecomendacionGuardada(){
+    const box=document.getElementById('auroRecGuardada');
+    if(!box) return;
+
+    const registro=state.registro;
+    const ctx=state.contexto||contextoAtencion();
+    const idAtn=txt(ctx?.id);
+    const id=txt(registro?.id_recomendacion||state.idRecomendacion);
+    const idRegistroAtn=txt(registro?.id_atencion);
+
+    if(!registro || !id || !idAtn || idRegistroAtn!==idAtn){
+      box.innerHTML='<div class="auro-rec-empty">No existe una recomendación guardada para esta atención.</div>';
+      return;
+    }
+
+    const f=fechaVisual(registro.actualizado_en||registro.creado_en||registro.fecha_atencion);
+    const consulta=txt(registro.numero_consulta||ctx?.numeroConsulta);
+    const firma=auroRecGuardadaEstadoFirmaVisual(id);
+    const bloqueada=ctx?.bloqueada===true;
+    const deshabilitarFirma=state.guardando || bloqueada || firma.disabled;
+    const claseFirma=firma.clase ? ' '+firma.clase : '';
+
+    box.innerHTML=`
+      <div class="auro-rec-saved-item">
+        <div class="auro-rec-saved-top">
+          <div>
+            <div class="auro-rec-saved-title">Recomendaciones médicas</div>
+            <div class="auro-rec-saved-meta">
+              ${consulta?'Consulta #'+esc(consulta)+' · ':''}${esc(f||'Fecha no disponible')}<br>
+              ${esc(id)}
+            </div>
+            <div class="auro-rec-saved-badges">
+              <span class="auro-rec-saved-badge ok"><i class="bi bi-check2-circle"></i> Guardada</span>
+              <span class="auro-rec-saved-badge${claseFirma}"><i class="bi bi-shield-check"></i> ${esc(firma.texto)}</span>
+            </div>
+          </div>
+          <div class="auro-rec-saved-actions">
+            <button type="button" class="auro-rec-btn" data-auro-rec-abrir-guardada="${esc(id)}">
+              <i class="bi bi-folder2-open me-1"></i> Abrir guardada
+            </button>
+            <button type="button" class="auro-rec-btn${firma.clase==='ok'?' firma-ok':(firma.clase==='warn'?' firma-warn':' primary')}" data-auro-rec-firma-guardada="${esc(id)}" ${deshabilitarFirma?'disabled':''}>
+              <i class="bi ${firma.clase==='ok'?'bi-file-earmark-check':'bi-pen'} me-1"></i> ${esc(firma.accion)}
+            </button>
+            ${firma.cancelar?`
+              <button type="button" class="auro-rec-btn firma-warn" data-auro-rec-cancelar-guardada="${esc(id)}" ${state.guardando?'disabled':''}>
+                <i class="bi bi-x-circle me-1"></i> Cancelar firma
+              </button>`:''}
+          </div>
+        </div>
+      </div>`;
+
+    box.querySelectorAll('[data-auro-rec-abrir-guardada]').forEach(el=>{
+      el.onclick=()=>auroRecAbrirGuardada(el.dataset.auroRecAbrirGuardada);
+    });
+    box.querySelectorAll('[data-auro-rec-firma-guardada]').forEach(el=>{
+      el.onclick=()=>auroRecFirmaAccionPrincipal();
+    });
+    box.querySelectorAll('[data-auro-rec-cancelar-guardada]').forEach(el=>{
+      el.onclick=()=>auroRecFirmaCancelar();
+    });
+  }
+
+  function auroRecAbrirGuardada(id){
+    const rid=txt(id);
+    const registro=state.registro;
+    const ctx=state.contexto||contextoAtencion();
+
+    if(!registro || txt(registro.id_recomendacion)!==rid){
+      setMsg('No se encontró la recomendación guardada seleccionada.','error');
+      return null;
+    }
+    if(!ctx?.id || txt(registro.id_atencion)!==txt(ctx.id)){
+      setMsg('La recomendación guardada no pertenece a la atención seleccionada.','error');
+      return null;
+    }
+
+    const detalle=parseDetalle(registro.detalle_json);
+    const htmlDoc=recDocumentoHTML({
+      ctx:ctx,
+      detalle:detalle,
+      diagnosticos:Array.isArray(state.diagnosticos)?state.diagnosticos:[]
+    });
+
+    const w=window.open('','_blank');
+    if(!w){
+      setMsg('El navegador bloqueó la vista de la recomendación guardada. Permita ventanas emergentes para este sitio.','error');
+      return null;
+    }
+
+    w.document.open();
+    w.document.write(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Recomendación guardada IASYN</title>
+<style>
+${recEstilosImpresion()}
+html,body{background:#dfe3e8}
+.auro-rec-print-toolbar{position:sticky;top:0;z-index:9999;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 18px;background:#fff;border-bottom:1px solid #d1d5db;box-shadow:0 3px 14px rgba(15,23,42,.14)}
+.auro-rec-print-toolbar strong{color:#7a174f;font-size:15px}
+.auro-rec-print-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.auro-rec-print-btn{border:0;border-radius:10px;padding:9px 14px;font-weight:850;cursor:pointer;background:#8b1e5a;color:#fff}
+.auro-rec-print-btn.secondary{background:#fff;color:#374151;border:1px solid #d1d5db}
+.auro-rec-print-stage{padding:20px;display:flex;justify-content:center;align-items:flex-start;min-height:calc(100vh - 58px);overflow-x:hidden}
+.auro-rec-print-sheet{width:210mm;min-width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 18px 45px rgba(15,23,42,.18);transform-origin:top center}
+@media(max-width:700px){
+  .auro-rec-print-toolbar{padding:8px 10px}
+  .auro-rec-print-toolbar strong{display:none}
+  .auro-rec-print-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;width:100%;gap:8px}
+  .auro-rec-print-btn{width:100%;min-height:40px;padding:8px 10px}
+  .auro-rec-print-btn.secondary{width:auto;min-width:74px}
+  .auro-rec-print-stage{padding:10px 0 18px;overflow-x:hidden}
+  .auro-rec-print-sheet{width:210mm!important;min-width:210mm!important;max-width:none!important;min-height:297mm!important;flex:0 0 210mm!important;margin:0!important;padding:12mm 15mm!important;transform-origin:top center!important}
+}
+@media print{
+  html,body{background:#fff!important;margin:0!important;padding:0!important;overflow:visible!important}
+  .auro-rec-print-toolbar{display:none!important}
+  .auro-rec-print-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
+  .auro-rec-print-sheet{width:auto!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
+}
+</style>
+</head>
+<body>
+  <div class="auro-rec-print-toolbar">
+    <strong>Recomendación guardada · ${esc(rid)}</strong>
+    <div class="auro-rec-print-actions">
+      <button type="button" class="auro-rec-print-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+      <button type="button" class="auro-rec-print-btn secondary" onclick="window.close()">Cerrar</button>
+    </div>
+  </div>
+  <main class="auro-rec-print-stage">
+    <div class="auro-rec-print-sheet">${htmlDoc}</div>
+  </main>
+</body>
+</html>`);
+    w.document.close();
+    w.focus();
+    return registro;
+  }
+
+
   /* ============================================================
      IASYN RECOMENDACIONES — FIRMA ELECTRÓNICA V1
      ------------------------------------------------------------
@@ -1910,6 +2124,7 @@ html,body{background:#dfe3e8}
 
     estadoEl.innerHTML='<i class="bi bi-shield-check"></i> '+esc(textoEstado);
     btn.innerHTML=htmlBoton;
+    renderRecomendacionGuardada();
   }
 
   async function auroRecFirmaLogoDataUrl(){
