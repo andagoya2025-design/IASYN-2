@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.4.0-IASYN-FIRMA-CERT-V1';
+const VERSION='1.4.1-IASYN-FIRMA-CERT-SYNC-V1';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -603,18 +603,25 @@ function calcularHasta(){
   }
 }
 
-async function cargarDx(id){
+async function cargarDx(id, token){
+  let diagnosticos=[];
   try{
     const r=await get('listarDiagnosticosPorAtencion',{id_atencion:id});
-    state.diagnosticos=arr(r);
+    diagnosticos=arr(r);
   }catch(e){
     try{
       const r=await get('listarDiagnosticos');
-      state.diagnosticos=arr(r).filter(x=>txt(x.id_atencion)===id);
+      diagnosticos=arr(r).filter(x=>txt(x.id_atencion)===txt(id));
     }catch(_){
-      state.diagnosticos=[];
+      diagnosticos=[];
     }
   }
+
+  /* IASYN 1.4.1 — una respuesta tardía de otra consulta no puede repintar
+     Diagnóstico ni contaminar el contexto de Certificados. */
+  if(token!==state.token || txt(state.idAtencion)!==txt(id)) return;
+
+  state.diagnosticos=diagnosticos;
   renderDx();
 }
 
@@ -632,9 +639,13 @@ function renderDx(){
     </label>`).join('');
 }
 
-async function cargarFirmasCertificados(idAtencion){
-  state.firmasPorDocumento={};
-  if(!idAtencion) return;
+async function cargarFirmasCertificados(idAtencion, token=state.token){
+  const firmas={};
+  if(!idAtencion){
+    if(token===state.token) state.firmasPorDocumento={};
+    return;
+  }
+
   try{
     const r=await postFirma('consultarDocumentosFirmados',{
       tipo_documento:'CERTIFICADO',
@@ -643,23 +654,45 @@ async function cargarFirmasCertificados(idAtencion){
     const lista=arr(r);
     lista.forEach(f=>{
       const id=txt(f.id_documento_origen||f.id_certificado);
-      if(id && !state.firmasPorDocumento[id]) state.firmasPorDocumento[id]=f;
+      if(id && !firmas[id]) firmas[id]=f;
     });
   }catch(e){
     console.warn('No se pudo cargar historial de firmas de certificados:',e);
   }
+
+  /* No permitir que la respuesta de firmas de una consulta anterior
+     sobrescriba la consulta actualmente seleccionada. */
+  if(token!==state.token || txt(state.idAtencion)!==txt(idAtencion)) return;
+
+  state.firmasPorDocumento=firmas;
 }
 
-async function cargarHistorial(id){
+async function cargarHistorial(id, token=state.token){
+  let certificados=[];
   try{
     const r=await get('listarCertificadosPorAtencion',{id_atencion:id});
-    state.certificados=arr(r);
+    certificados=arr(r);
   }catch(e){
-    state.certificados=[];
+    certificados=[];
   }
-  await cargarFirmasCertificados(id);
+
+  /* La respuesta solo pertenece a la atención que inició esta carga. */
+  if(token!==state.token || txt(state.idAtencion)!==txt(id)) return;
+
+  state.certificados=certificados;
+
+  /* Mostrar el historial clínico inmediatamente. La consulta del estado
+     de firma es auxiliar y no debe retrasar la aparición del certificado. */
   renderHistorial();
   actualizarControlesFirma();
+
+  cargarFirmasCertificados(id,token)
+    .then(()=>{
+      if(token!==state.token || txt(state.idAtencion)!==txt(id)) return;
+      renderHistorial();
+      actualizarControlesFirma();
+    })
+    .catch(()=>{});
 }
 
 function renderHistorial(){
@@ -928,6 +961,11 @@ async function firmarCertificado(idCertificado){
   if(!certificado) return msg('warn','No se encontró el certificado guardado. Recargue el historial.');
   const idAtencion=txt(certificado.id_atencion);
   if(!idAtencion) return msg('warn','El certificado no tiene id_atencion.');
+
+  const idAtencionActual=txt(state.idAtencion||contexto().id);
+  if(!idAtencionActual || idAtencion!==idAtencionActual){
+    return msg('warn','El certificado no pertenece a la atención actualmente seleccionada.');
+  }
 
   state.firmando=true;
   state.firmaDocumentoId=id;
@@ -1414,6 +1452,20 @@ function auroInstalarMotorImpresionCertificadoUnificado(){
 
 auroInstalarMotorImpresionCertificadoUnificado();
 
+function pintarCargaAtencion(c){
+  const dx=document.getElementById('acDx');
+  const historial=document.getElementById('acHistorial');
+  const numero=txt(c?.numeroConsulta);
+
+  if(dx){
+    dx.innerHTML='<div class="ac-empty">Cargando diagnósticos de esta atención…</div>';
+  }
+  if(historial){
+    historial.innerHTML='<div class="ac-empty">Cargando certificados'+
+      (numero?' de la consulta #'+esc(numero):' de esta atención')+'…</div>';
+  }
+}
+
 async function inicializar(){
   mount();
 
@@ -1433,8 +1485,10 @@ async function inicializar(){
   if(!c.id){
     state.diagnosticos=[];
     state.certificados=[];
+    state.firmasPorDocumento={};
     state.paciente=null;
     state.historia=null;
+    state.editandoId='';
     renderDx();
     renderHistorial();
     renderContextoClinico();
@@ -1442,17 +1496,33 @@ async function inicializar(){
     return;
   }
 
-  await cargarContextoAuxiliar(c);
-  if(token!==state.token) return;
-
+  /* IASYN 1.4.1 — al cambiar de consulta se invalida inmediatamente la
+     proyección visual anterior. No se muestra "No existen certificados"
+     mientras todavía se está consultando la nueva atención. */
+  state.diagnosticos=[];
+  state.certificados=[];
+  state.firmasPorDocumento={};
+  state.paciente=null;
+  state.historia=null;
+  state.editandoId='';
+  actualizarControlesFirma();
   renderContextoClinico();
+  pintarCargaAtencion(c);
 
-  await Promise.all([
-    cargarDx(c.id),
-    cargarHistorial(c.id)
+  /* Contexto auxiliar y datos clínicos se cargan en paralelo. El historial
+     ya no queda bloqueado esperando Configuración/Médicos ni estado de firma. */
+  const cargaAuxiliar=cargarContextoAuxiliar(c);
+  const cargaClinica=Promise.all([
+    cargarDx(c.id,token),
+    cargarHistorial(c.id,token)
   ]);
 
-  if(token!==state.token) return;
+  await cargaAuxiliar;
+  if(token!==state.token || txt(state.idAtencion)!==txt(c.id)) return;
+  renderContextoClinico();
+
+  await cargaClinica;
+  if(token!==state.token || txt(state.idAtencion)!==txt(c.id)) return;
 
   nuevo();
 }
@@ -1468,6 +1538,24 @@ window.auroCertificados={
   firmarCertificado:firmarCertificado,
   verCertificadoFirmado:verCertificadoFirmado
 };
+
+/*
+  IASYN 1.4.1 — SINCRONIZACIÓN QUIRÚRGICA DE CERTIFICADOS
+  Atenciones emite 'aurosanax:atencion-seleccionada' después de fijar el
+  nuevo id_atencion como contexto maestro. Si Certificados está visible,
+  se reinicializa inmediatamente con ese contexto. No modifica Atenciones,
+  Index, persistencia, PDF ni el contrato de Firma Electrónica.
+*/
+function iasynCertificadosAlCambiarAtencion(){
+  const panel=document.getElementById('hc_certificados');
+  if(!panel || panel.offsetParent===null) return;
+
+  Promise.resolve(inicializar()).catch(error=>{
+    console.warn('IASYN CERTIFICADOS: no se pudo refrescar la atención seleccionada.',error);
+  });
+}
+
+window.addEventListener('aurosanax:atencion-seleccionada',iasynCertificadosAlCambiarAtencion);
 
 if(document.readyState==='loading'){
   document.addEventListener('DOMContentLoaded',()=>{mount();},{once:true});
