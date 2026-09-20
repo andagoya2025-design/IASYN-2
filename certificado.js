@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.4.2-IASYN-FIRMA-CERT-UX-SYNC-V1';
+const VERSION='1.4.3-IASYN-FIRMA-CERT-UX-SYNC-FIRMADOS-V1';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -720,10 +720,22 @@ async function cargarFirmasCertificados(idAtencion, token=state.token){
       tipo_documento:'CERTIFICADO',
       id_atencion:idAtencion
     });
-    const lista=arr(r);
+
+    /* IASYN backend devuelve {success, documentos:[...], total, documento}.
+       Compatibilidad adicional con respuestas legacy en registros/data. */
+    const lista=Array.isArray(r?.documentos) ? r.documentos : arr(r);
     lista.forEach(f=>{
       const id=txt(f.id_documento_origen||f.id_certificado);
-      if(id && !firmas[id]) firmas[id]=f;
+      const tipo=txt(f.tipo_documento).toUpperCase();
+      const estado=txt(f.estado_firma).toUpperCase();
+      const idAtn=txt(f.id_atencion);
+      if(
+        id &&
+        tipo==='CERTIFICADO' &&
+        estado==='FIRMADO' &&
+        idAtn===txt(idAtencion) &&
+        !firmas[id]
+      ) firmas[id]=f;
     });
   }catch(e){
     console.warn('No se pudo cargar historial de firmas de certificados:',e);
