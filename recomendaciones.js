@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.2.2-CIE10-HORA
+ Versión: 1.2.0
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.2.2-CIE10-HORA';
+  const VERSION = '1.3.0';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20260910_recomendaciones_fecha_hora_atencion_real_v3';
+  const RELEASE = '20260920_recomendaciones_firma_electronica_v1_antirregresiva';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -54,6 +54,20 @@
     firmaPersistida: '',
     firmaPersistidaAtencion: ''
   };
+
+  /*
+    IASYN RECOMENDACIONES — FIRMA ELECTRÓNICA V1
+    ------------------------------------------------------------
+    Estado aislado de firma. No reemplaza state.firmaPersistida:
+    - state.firmaPersistida = huella clínica usada por el guardado no-op.
+    - recomendacionFirmasPorDocumento = estado persistente de firma electrónica.
+    - recomendacionFirmaProcesos = solicitudes operativas en curso.
+  */
+  const recomendacionFirmasPorDocumento = new Map();
+  const recomendacionFirmaProcesos = new Map();
+  let recomendacionFirmaSyncToken = 0;
+  let recomendacionFirmaLogoCache = null;
+  let recomendacionFirmaLogoPromesa = null;
 
   const ALERTAS = [
     ['fiebre','Fiebre que no cede'],
@@ -380,70 +394,6 @@
     return raw;
   }
 
-  /*
-    IASYN RECOMENDACIONES 1.2.2-CIE10-HORA
-    Fecha/hora REAL de la atención:
-    - fecha_atencion aporta únicamente la FECHA.
-    - hora_atencion aporta únicamente la HORA.
-    - Nunca se toma 00:00 del componente horario artificial de fecha_atencion.
-    - Si hora_atencion no existe, se muestra solo la fecha.
-    - No modifica Atenciones, backend ni persistencia.
-  */
-  function fechaAtencionSoloFecha(valor){
-    const raw=txt(valor);
-    if(!raw) return '';
-
-    const iso=raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if(iso) return `${iso[3]}/${iso[2]}/${iso[1]}`;
-
-    const dmy=raw.match(/^(\d{2})[\/-](\d{2})[\/-](\d{4})/);
-    if(dmy) return `${dmy[1]}/${dmy[2]}/${dmy[3]}`;
-
-    const d=new Date(raw);
-    if(!Number.isNaN(d.getTime())){
-      return d.toLocaleDateString('es-EC',{
-        day:'2-digit',month:'2-digit',year:'numeric'
-      });
-    }
-
-    return raw;
-  }
-
-  function horaAtencionVisual(valor){
-    const raw=txt(valor);
-    if(!raw) return '';
-
-    if(raw.includes('T')){
-      const m=raw.match(/T(\d{1,2}):(\d{2})/);
-      if(m) return `${String(m[1]).padStart(2,'0')}:${m[2]}`;
-    }
-
-    const m=raw.match(/^(\d{1,2}):(\d{2})/);
-    if(m) return `${String(m[1]).padStart(2,'0')}:${m[2]}`;
-
-    return '';
-  }
-
-  function fechaHoraAtencionVisual(atencion){
-    const a=atencion || {};
-
-    const fecha=fechaAtencionSoloFecha(
-      a.fecha_atencion ||
-      a.fecha_consulta ||
-      a.fecha ||
-      a.creado_en
-    );
-
-    const hora=horaAtencionVisual(
-      a.hora_atencion ||
-      a.hora_consulta ||
-      ''
-    );
-
-    if(!fecha) return '—';
-    return hora ? `${fecha} · ${hora}` : fecha;
-  }
-
   function setMsg(texto, tipo){
     const el = document.getElementById('auroRecMensaje');
     if(!el) return;
@@ -497,6 +447,9 @@
       .auro-rec-actions{display:flex;justify-content:flex-end;gap:9px;flex-wrap:wrap;position:sticky;bottom:10px;z-index:3;padding:12px;border:1px solid #ead7e2;border-radius:18px;background:rgba(255,255,255,.96);backdrop-filter:blur(10px);box-shadow:0 12px 30px rgba(15,23,42,.08)}
       .auro-rec-btn{border:1px solid #e5e7eb;background:#fff;color:#374151;border-radius:13px;padding:10px 13px;font-weight:850;cursor:pointer}
       .auro-rec-btn.primary{border:0;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff}
+      .auro-rec-btn.firma-ok{border-color:#86efac;background:#f0fdf4;color:#166534}
+      .auro-rec-btn.firma-warn{border-color:#fdba74;background:#fff7ed;color:#9a3412}
+      .auro-rec-firma-status{display:flex;align-items:center;justify-content:flex-end;gap:7px;width:100%;font-size:11px;font-weight:900;color:#64748b;margin-bottom:-3px}
       .auro-rec-btn:disabled{opacity:.5;cursor:not-allowed}
       .auro-rec-msg{padding:10px 12px;border-radius:13px;font-size:12px;font-weight:750}
       .auro-rec-msg.info{background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe}
@@ -654,9 +607,12 @@
           </section>
 
           <div class="auro-rec-actions">
+            <div class="auro-rec-firma-status" id="auroRecFirmaEstado"><i class="bi bi-shield-check"></i> Firma: sin documento guardado</div>
             <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
             <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Imprimir recomendaciones</button>
             <button type="button" class="auro-rec-btn primary" id="auroRecBtnGuardar"><i class="bi bi-save2 me-1"></i> Guardar recomendaciones</button>
+            <button type="button" class="auro-rec-btn" id="auroRecBtnFirma"><i class="bi bi-pen me-1"></i> Guarde recomendaciones para firmar</button>
+            <button type="button" class="auro-rec-btn" id="auroRecBtnCancelarFirma" hidden><i class="bi bi-x-circle me-1"></i> Cancelar firma</button>
           </div>
         </div>
       </div>
@@ -713,36 +669,6 @@
     setText('auroRecActualizado','Sin guardar aún');
   }
 
-  /*
-    IASYN RECOMENDACIONES 1.2.1-CIE10
-    Presentación CIE-10 profesional:
-    - La persistencia/backend puede entregar códigos compactos (ej. N760).
-    - Diagnóstico ya expone auroFormatearCie10Visual() para mostrar N76.0.
-    - Recomendaciones reutiliza esa función SIN modificar el diagnóstico.
-    - Si por cualquier motivo el formateador no está disponible, aplica
-      un fallback visual equivalente únicamente para presentación.
-  */
-  function codigoCie10Visual(valor, registro){
-    const raw=txt(valor).toUpperCase();
-    if(!raw) return '';
-
-    try{
-      if(typeof window.auroFormatearCie10Visual === 'function'){
-        return txt(window.auroFormatearCie10Visual(raw, registro));
-      }
-      if(typeof window.iasynFormatearCie10Visual === 'function'){
-        return txt(window.iasynFormatearCie10Visual(raw, registro));
-      }
-    }catch(e){}
-
-    const compacto=raw.replace(/[^A-Z0-9]/g,'');
-    if(/^[A-Z][0-9]{2}$/.test(compacto)) return compacto;
-    if(/^[A-Z][0-9]{3,4}$/.test(compacto)){
-      return compacto.slice(0,3)+'.'+compacto.slice(3);
-    }
-    return raw;
-  }
-
   function renderDiagnosticos(){
     const box=document.getElementById('auroRecDiagnosticos');
     if(!box) return;
@@ -753,10 +679,7 @@
     }
 
     box.innerHTML=state.diagnosticos.map((d,i)=>{
-      const codigo=codigoCie10Visual(
-        d.codigo_cie10 || d.codigo || d.cie10,
-        d
-      );
+      const codigo=txt(d.codigo_cie10 || d.codigo || d.cie10);
       const nombre=txt(d.descripcion || d.nombre || d.diagnostico);
       const principal = d.principal === true || ['si','sí','true','1'].includes(norm(d.principal)) || i===0;
       return `<div class="auro-rec-dx">
@@ -1094,8 +1017,7 @@
     aplicarChecks('alerta',d?.signos_alerta?.seleccionados);
     setValue('auroRecAlertaOtros',d?.signos_alerta?.otros);
     aplicarChecks('infeccion',d?.signos_infeccion?.seleccionados);
-    setValue('auroRecInfeccionOtros',d?.signos_infeccion?.otros);
-    setValue('auroRecDieta',d?.dieta_cuidados);
+    setValue('auroRecInfeccionOtros',d?.signos_infeccion?.otros);setValue('auroRecDieta',d?.dieta_cuidados);
     setValue('auroRecGenerales',d?.recomendaciones_generales);
 
     setText(
@@ -1149,6 +1071,8 @@
         estado.innerHTML='<i class="bi bi-pencil-square"></i> Atención activa · Editable';
       }
     }
+
+    auroRecFirmaActualizarUI();
   }
 
   function renderContexto(){
@@ -1159,7 +1083,7 @@
     setText('auroRecAtencion',ctx.id ? 'Atención: '+ctx.id : 'Sin atención seleccionada');
     setText('auroRecConsulta',ctx.numeroConsulta ? 'Consulta #'+ctx.numeroConsulta : '—');
     setText('auroRecMedico',nombreMedicoDesdeContexto(a) || '—');
-    setText('auroRecFecha',fechaHoraAtencionVisual(a));
+    setText('auroRecFecha',fechaVisual(a.fecha_atencion || a.fecha_consulta || a.creado_en));
 
     aplicarModo();
   }
@@ -1283,6 +1207,17 @@
 
       state.idAtencion=idSolicitada;
       renderContexto();
+
+      if(registro && state.idRecomendacion){
+        await auroRecFirmaSincronizarPersistencia({
+          silencioso:true,
+          id_atencion:idSolicitada,
+          id_recomendacion:state.idRecomendacion
+        });
+      }else{
+        auroRecFirmaActualizarUI();
+      }
+
       return registro || null;
     }catch(e){
       if(token !== state.tokenCarga || txt(contextoAtencion()?.id) !== idSolicitada) return null;
@@ -1543,11 +1478,16 @@
     return `<p class="ar-rec-text">${esc(items[0] || raw)}</p>`;
   }
 
-  function recDocumentoHTML(){
-    const ctx=state.contexto||contextoAtencion();
+  function recDocumentoHTML(opciones){
+    opciones=opciones||{};
+    const ctx=opciones.ctx||state.contexto||contextoAtencion();
     const a=ctx.atencion||{};
-    const d=detalleActual();
+    const d=opciones.detalle||detalleActual();
     const cfg=recConfigInstitucional();
+    const diagnosticos=Array.isArray(opciones.diagnosticos)?opciones.diagnosticos:state.diagnosticos;
+    const logoFuente=Object.prototype.hasOwnProperty.call(opciones,'logo')
+      ? txt(opciones.logo)
+      : txt(cfg.logo);
     const paciente=recPacienteImpresion(ctx);
     const medico=recMedicoImpresion(ctx);
 
@@ -1559,8 +1499,8 @@
       .filter(([k])=>(d.signos_infeccion?.seleccionados||[]).includes(k))
       .map(([,l])=>l);
 
-    const dx=state.diagnosticos.map(x=>({
-      codigo:codigoCie10Visual(x.codigo_cie10||x.codigo||x.cie10,x),
+    const dx=diagnosticos.map(x=>({
+      codigo:txt(x.codigo_cie10||x.codigo||x.cie10),
       nombre:txt(x.descripcion||x.nombre||x.diagnostico)
     })).filter(x=>x.codigo||x.nombre);
 
@@ -1576,8 +1516,8 @@
       medico.registro_senescyt ? 'SENESCYT: '+medico.registro_senescyt : ''
     ].filter(Boolean);
 
-    const logo=cfg.logo
-      ? `<div class="ar-logo-wrap"><img class="ar-logo" src="${esc(cfg.logo)}" alt=""></div>`
+    const logo=logoFuente
+      ? `<div class="ar-logo-wrap"><img class="ar-logo" src="${esc(logoFuente)}" alt=""></div>`
       : '';
 
     const seguimiento=[
@@ -1774,11 +1714,854 @@ html,body{background:#dfe3e8}
   }
 
 
+
+  /* ============================================================
+     IASYN RECOMENDACIONES — FIRMA ELECTRÓNICA V1
+     ------------------------------------------------------------
+     REGLAS ANTIRREGRESIVAS:
+     - Solo firma una recomendación YA GUARDADA.
+     - Identidad: RECOMENDACION + id_atencion + id_recomendacion.
+     - Versión exacta: version_documento + SHA-256 del HTML enviado.
+     - Requiere 1 firma digital.
+     - Consultar firma NUNCA crea una solicitud.
+     - documentos_firmados + Drive son la verdad compartida.
+     - El logo de firma se incrusta como data URI; si falla, no se crea <img>.
+     - No modifica Plan, Diagnósticos, guardado ni estructura de la hoja.
+     ============================================================ */
+
+  function auroRecFirmaTokenSesion(){
+    try{
+      const s=window.IASYN_SEGURIDAD||window.AUROSANAX_SEGURIDAD;
+      if(s){
+        if(typeof s.obtenerToken==='function') return txt(s.obtenerToken());
+        if(typeof s.obtenerTokenSesion==='function') return txt(s.obtenerTokenSesion());
+      }
+    }catch(_e){}
+    try{
+      return txt(
+        sessionStorage.getItem('iasyn_seguridad_token') ||
+        sessionStorage.getItem('aurosanax_seguridad_token') || ''
+      );
+    }catch(_e){ return ''; }
+  }
+
+  async function auroRecFirmaPost(accion,data){
+    const base=apiUrl();
+    if(!base) throw new Error('API_URL no está definida.');
+
+    const token=auroRecFirmaTokenSesion();
+    if(!token) throw new Error('No existe una sesión IASYN activa para firmar.');
+
+    const r=await fetch(base,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({
+        accion:accion,
+        data:Object.assign({},data||{},{token})
+      })
+    });
+
+    if(!r.ok) throw new Error('Error HTTP '+r.status+' en '+accion);
+    const j=await r.json();
+    if(j && j.success===false){
+      throw new Error(txt(j.message||'La operación de firma no pudo completarse.'));
+    }
+    return j;
+  }
+
+  function auroRecFirmaEstado(id){
+    return recomendacionFirmasPorDocumento.get(txt(id)) || {
+      estado:'SIN_FIRMA',
+      documento:null,
+      sha_actual:'',
+      version_documento:'',
+      error:''
+    };
+  }
+
+  function auroRecFirmaProceso(id){
+    return recomendacionFirmaProcesos.get(txt(id)) || null;
+  }
+
+  function auroRecFirmaVersionDocumento(registro){
+    return txt(
+      registro?.actualizado_en ||
+      registro?.creado_en ||
+      registro?.fecha_atencion ||
+      ''
+    );
+  }
+
+  function auroRecFirmaVersionDesdeFirmado(doc){
+    try{
+      const d=JSON.parse(String(doc?.detalle_json||'{}'));
+      return txt(d?.version_documento);
+    }catch(_e){
+      return '';
+    }
+  }
+
+  function auroRecFirmaHayCambiosSinGuardar(){
+    const ctx=state.contexto||contextoAtencion();
+    const idAtn=txt(ctx?.id);
+    if(!idAtn || !state.idRecomendacion) return false;
+    if(state.firmaPersistidaAtencion!==idAtn || !state.firmaPersistida) return false;
+    return firmaDetalle(detalleActual())!==state.firmaPersistida;
+  }
+
+  function auroRecFirmaEsContextoActual(id,idAtencion){
+    return (
+      txt(state.idRecomendacion)===txt(id) &&
+      txt((state.contexto||contextoAtencion())?.id)===txt(idAtencion)
+    );
+  }
+
+  function auroRecFirmaEmitirCambio(id,estado,extra){
+    const rid=txt(id);
+    if(!rid) return;
+    const detail=Object.assign({
+      tipo_documento:'RECOMENDACION',
+      id_documento_origen:rid,
+      id_recomendacion:rid,
+      id_receta:'',
+      id_certificado:'',
+      id_atencion:txt(state.contexto?.id),
+      estado:txt(estado)
+    },extra||{});
+    try{
+      window.dispatchEvent(new CustomEvent('aurosanax:recomendacion-firma-estado',{detail}));
+    }catch(_e){}
+  }
+
+  function auroRecFirmaActualizarUI(){
+    const btn=document.getElementById('auroRecBtnFirma');
+    const cancelar=document.getElementById('auroRecBtnCancelarFirma');
+    const estadoEl=document.getElementById('auroRecFirmaEstado');
+    if(!btn || !cancelar || !estadoEl) return;
+
+    btn.classList.remove('primary','firma-ok','firma-warn');
+    btn.disabled=true;
+    cancelar.hidden=true;
+    cancelar.disabled=false;
+
+    const ctx=state.contexto||contextoAtencion();
+    const idAtn=txt(ctx?.id);
+    const id=txt(state.idRecomendacion);
+    const bloqueada=ctx?.bloqueada===true;
+
+    let textoEstado='Firma: sin documento guardado';
+    let htmlBoton='<i class="bi bi-pen me-1"></i> Guarde recomendaciones para firmar';
+
+    if(!idAtn || !id){
+      // Estado inicial.
+    }else if(bloqueada){
+      textoEstado='Firma: atención anulada/cancelada';
+      htmlBoton='<i class="bi bi-lock me-1"></i> Documento no firmable';
+    }else if(auroRecFirmaHayCambiosSinGuardar()){
+      textoEstado='Firma: cambios sin guardar';
+      htmlBoton='<i class="bi bi-save2 me-1"></i> Guarde cambios antes de firmar';
+      btn.classList.add('firma-warn');
+    }else{
+      const proceso=auroRecFirmaProceso(id);
+      const estado=auroRecFirmaEstado(id);
+
+      if(proceso){
+        const op=txt(proceso.estado).toUpperCase();
+        if(op==='PREPARANDO'){
+          textoEstado='Firma: preparando solicitud…';
+          htmlBoton='<i class="bi bi-hourglass-split me-1"></i> Preparando firma…';
+          btn.classList.add('firma-warn');
+        }else if(op==='PENDIENTE' || op==='TOMADA'){
+          textoEstado=op==='TOMADA'
+            ? 'Firma: documento abierto en Adobe'
+            : 'Firma: solicitud en proceso';
+          htmlBoton=op==='TOMADA'
+            ? '<i class="bi bi-pen me-1"></i> Firma en Adobe…'
+            : '<i class="bi bi-hourglass-split me-1"></i> Firma en proceso…';
+          cancelar.hidden=false;
+        }else if(op==='ERROR' || op==='EXPIRADA'){
+          textoEstado=op==='ERROR'?'Firma: error recuperable':'Firma: solicitud expirada';
+          htmlBoton='<i class="bi bi-arrow-repeat me-1"></i> Reintentar firma';
+          btn.disabled=false;
+          btn.classList.add('firma-warn');
+        }
+      }else if(estado.estado==='FIRMADA'){
+        textoEstado='Firma: documento firmado ✓';
+        htmlBoton='<i class="bi bi-file-earmark-check me-1"></i> Ver recomendación firmada ✓';
+        btn.disabled=false;
+        btn.classList.add('firma-ok');
+      }else if(estado.estado==='NUEVA_VERSION'){
+        textoEstado='Firma: nueva versión guardada sin firmar';
+        htmlBoton='<i class="bi bi-pen me-1"></i> Firmar nueva versión';
+        btn.disabled=false;
+        btn.classList.add('primary');
+      }else{
+        textoEstado='Firma: recomendación guardada sin firmar';
+        htmlBoton='<i class="bi bi-pen me-1"></i> Firmar recomendación';
+        btn.disabled=false;
+        btn.classList.add('primary');
+      }
+    }
+
+    if(state.guardando){
+      btn.disabled=true;
+      cancelar.disabled=true;
+    }
+
+    estadoEl.innerHTML='<i class="bi bi-shield-check"></i> '+esc(textoEstado);
+    btn.innerHTML=htmlBoton;
+  }
+
+  async function auroRecFirmaLogoDataUrl(){
+    if(recomendacionFirmaLogoCache!==null) return recomendacionFirmaLogoCache;
+    if(recomendacionFirmaLogoPromesa) return recomendacionFirmaLogoPromesa;
+
+    recomendacionFirmaLogoPromesa=(async function(){
+      try{
+        const r=await auroRecFirmaPost('obtenerLogoInstitucionalFirma',{});
+        recomendacionFirmaLogoCache=(
+          r?.disponible &&
+          String(r?.data_url||'').startsWith('data:image/')
+        ) ? String(r.data_url) : '';
+      }catch(_e){
+        recomendacionFirmaLogoCache='';
+      }finally{
+        recomendacionFirmaLogoPromesa=null;
+      }
+      return recomendacionFirmaLogoCache;
+    })();
+
+    return recomendacionFirmaLogoPromesa;
+  }
+
+  async function auroRecFirmaSha256(texto){
+    if(!window.crypto?.subtle) return '';
+    const data=new TextEncoder().encode(String(texto||''));
+    const digest=await crypto.subtle.digest('SHA-256',data);
+    return Array.from(new Uint8Array(digest))
+      .map(x=>x.toString(16).padStart(2,'0'))
+      .join('');
+  }
+
+  async function auroRecFirmaPersistidaExacta(id,idAtencion){
+    const r=await apiGet('buscarRecomendacionPorAtencion',{id_atencion:txt(idAtencion)});
+    if(!r || !txt(r.id_recomendacion)) return null;
+    if(txt(r.id_recomendacion)!==txt(id)) return null;
+    if(txt(r.id_atencion)!==txt(idAtencion)) return null;
+
+    const estado=norm(r.estado||'activo');
+    if(estado.includes('anulad') || estado.includes('cancelad')) return null;
+    return r;
+  }
+
+  async function auroRecFirmaDiagnosticos(idAtencion){
+    try{
+      const data=await apiGet('listarDiagnosticosPorAtencion',{id_atencion:txt(idAtencion)});
+      return Array.isArray(data)
+        ? data
+        : (Array.isArray(data?.registros)?data.registros:[]);
+    }catch(_e){
+      return Array.isArray(state.diagnosticos)?state.diagnosticos:[];
+    }
+  }
+
+  async function auroRecFirmaHtmlCanonico(registro){
+    const idAtn=txt(registro?.id_atencion);
+    if(!txt(registro?.id_recomendacion) || !idAtn){
+      throw new Error('La recomendación no tiene identidad clínica completa.');
+    }
+
+    const ctxActual=state.contexto||contextoAtencion();
+    if(txt(ctxActual?.id)!==idAtn){
+      throw new Error('La recomendación ya no pertenece a la atención seleccionada.');
+    }
+
+    const detalle=parseDetalle(registro.detalle_json);
+    const diagnosticos=await auroRecFirmaDiagnosticos(idAtn);
+    const logo=await auroRecFirmaLogoDataUrl();
+
+    const cuerpo=recDocumentoHTML({
+      ctx:ctxActual,
+      detalle:detalle,
+      diagnosticos:diagnosticos,
+      logo:logo
+    });
+
+    return '<!DOCTYPE html><html lang="es"><head>'+
+      '<meta charset="UTF-8">'+
+      '<meta name="viewport" content="width=device-width,initial-scale=1">'+
+      '<title>Recomendaciones médicas</title>'+
+      '<style>'+recEstilosImpresion()+'</style>'+
+      '</head><body>'+cuerpo+'</body></html>';
+  }
+
+  async function auroRecFirmaSincronizarPersistencia(opciones){
+    opciones=opciones||{};
+    const token=++recomendacionFirmaSyncToken;
+    const ctx=state.contexto||contextoAtencion();
+    const idAtn=txt(opciones.id_atencion||ctx?.id);
+    const id=txt(opciones.id_recomendacion||state.idRecomendacion);
+
+    if(!idAtn || !id){
+      auroRecFirmaActualizarUI();
+      return {success:true,documentos:[]};
+    }
+
+    try{
+      const [registro,resFirmas]=await Promise.all([
+        auroRecFirmaPersistidaExacta(id,idAtn),
+        auroRecFirmaPost('consultarDocumentosFirmados',{
+          tipo_documento:'RECOMENDACION',
+          id_documento_origen:id,
+          id_recomendacion:id,
+          id_atencion:idAtn
+        })
+      ]);
+
+      if(token!==recomendacionFirmaSyncToken) return {success:false,descartada:true};
+      if(!auroRecFirmaEsContextoActual(id,idAtn)) return {success:false,descartada:true};
+      if(!registro){
+        recomendacionFirmasPorDocumento.set(id,{
+          estado:'SIN_FIRMA',documento:null,sha_actual:'',version_documento:'',error:''
+        });
+        auroRecFirmaActualizarUI();
+        return {success:true,documentos:[]};
+      }
+
+      const docs=(Array.isArray(resFirmas?.documentos)?resFirmas.documentos:[])
+        .filter(d=>
+          txt(d.tipo_documento).toUpperCase()==='RECOMENDACION' &&
+          txt(d.id_documento_origen||d.id_recomendacion)===id &&
+          txt(d.id_atencion)===idAtn &&
+          txt(d.estado_firma).toUpperCase()==='FIRMADO'
+        );
+
+      if(!docs.length){
+        recomendacionFirmasPorDocumento.set(id,{
+          estado:'SIN_FIRMA',documento:null,sha_actual:'',version_documento:auroRecFirmaVersionDocumento(registro),error:''
+        });
+        auroRecFirmaActualizarUI();
+        return {success:true,documentos:[]};
+      }
+
+      const versionActual=auroRecFirmaVersionDocumento(registro);
+      let exacto=versionActual
+        ? docs.find(d=>auroRecFirmaVersionDesdeFirmado(d)===versionActual)
+        : null;
+      let sha='';
+
+      try{
+        if(!exacto){
+          const html=await auroRecFirmaHtmlCanonico(registro);
+          sha=await auroRecFirmaSha256(html);
+          exacto=sha
+            ? docs.find(d=>txt(d.sha256_origen).toLowerCase()===sha.toLowerCase())
+            : null;
+        }
+
+        recomendacionFirmasPorDocumento.set(id,{
+          estado:exacto?'FIRMADA':'NUEVA_VERSION',
+          documento:exacto||docs[0],
+          sha_actual:sha,
+          version_documento:versionActual,
+          error:''
+        });
+      }catch(error){
+        /*
+          Si existe un documento firmado pero no se pudo recalcular la
+          representación, se bloquea una firma duplicada: el histórico
+          firmado prevalece hasta poder sincronizar correctamente.
+        */
+        recomendacionFirmasPorDocumento.set(id,{
+          estado:'FIRMADA',
+          documento:docs[0],
+          sha_actual:'',
+          version_documento:versionActual,
+          error:txt(error?.message||error)
+        });
+      }
+
+      if(token===recomendacionFirmaSyncToken && auroRecFirmaEsContextoActual(id,idAtn)){
+        auroRecFirmaActualizarUI();
+      }
+
+      return {success:true,documentos:docs};
+    }catch(error){
+      if(token===recomendacionFirmaSyncToken) auroRecFirmaActualizarUI();
+      if(!opciones.silencioso){
+        setMsg('No se pudo sincronizar el estado de firma. Las recomendaciones clínicas siguen disponibles.','error');
+      }
+      return {success:false,error:txt(error?.message||error)};
+    }
+  }
+
+  async function auroRecFirmaObtenerDocumentoActual(){
+    const ctx=state.contexto||contextoAtencion();
+    const idAtn=txt(ctx?.id);
+    const id=txt(state.idRecomendacion);
+
+    if(!idAtn || !id){
+      return {
+        success:false,
+        estado:'RECOMENDACION_NO_GUARDADA',
+        message:'Guarde las recomendaciones antes de firmarlas.'
+      };
+    }
+
+    if(ctx?.bloqueada===true){
+      return {
+        success:false,
+        estado:'RECOMENDACION_NO_FIRMABLE',
+        message:'La atención está anulada o cancelada.'
+      };
+    }
+
+    if(auroRecFirmaHayCambiosSinGuardar()){
+      return {
+        success:false,
+        estado:'EDICION_PENDIENTE',
+        message:'Guarde los cambios de Recomendaciones antes de firmar.'
+      };
+    }
+
+    const registro=await auroRecFirmaPersistidaExacta(id,idAtn);
+    if(!registro){
+      return {
+        success:false,
+        estado:'RECOMENDACION_NO_GUARDADA',
+        message:'La recomendación no está persistida en Google Sheets.'
+      };
+    }
+
+    const html=await auroRecFirmaHtmlCanonico(registro);
+    const sha=await auroRecFirmaSha256(html);
+
+    return {
+      success:true,
+      estado:'LISTA',
+      tipo_documento:'RECOMENDACION',
+      id_documento_origen:id,
+      id_recomendacion:id,
+      id_receta:'',
+      id_certificado:'',
+      id_atencion:idAtn,
+      id_paciente:txt(registro.id_paciente),
+      nombre_paciente:txt(registro.nombre_paciente),
+      id_historia:txt(registro.id_historia),
+      numero_consulta:txt(registro.numero_consulta||ctx?.numeroConsulta),
+      id_medico:txt(registro.id_medico),
+      nombre_medico:txt(registro.nombre_medico),
+      nombre_archivo:'RECOMENDACION_'+txt(registro.numero_consulta||ctx?.numeroConsulta||'CONSULTA')+'_'+id+'.pdf',
+      firmas_requeridas:1,
+      version_documento:auroRecFirmaVersionDocumento(registro),
+      html_documento:html,
+      sha256_origen:sha,
+      recomendacion:registro
+    };
+  }
+
+  async function auroRecFirmaObtenerEstadoActual(){
+    const doc=await auroRecFirmaObtenerDocumentoActual();
+    if(!doc.success) return doc;
+    await auroRecFirmaSincronizarPersistencia({
+      silencioso:true,
+      id_atencion:doc.id_atencion,
+      id_recomendacion:doc.id_recomendacion
+    });
+    return Object.assign({},doc,{
+      estado_firma:auroRecFirmaEstado(doc.id_recomendacion)
+    });
+  }
+
+  async function auroRecFirmaFirmarActual(){
+    const doc=await auroRecFirmaObtenerDocumentoActual();
+    if(!doc.success){
+      setMsg(doc.message||'Las recomendaciones no están listas para firmar.','error');
+      auroRecFirmaActualizarUI();
+      return doc;
+    }
+    return auroRecFirmaFirmar(doc.id_recomendacion);
+  }
+
+  async function auroRecFirmaFirmar(id){
+    const rid=txt(id);
+    if(!rid) return null;
+
+    const proceso=auroRecFirmaProceso(rid);
+    if(proceso && ['PREPARANDO','PENDIENTE','TOMADA'].includes(txt(proceso.estado).toUpperCase())){
+      setMsg('Esta recomendación ya tiene una firma en proceso.','info');
+      auroRecFirmaActualizarUI();
+      return proceso;
+    }
+    if(proceso && ['ERROR','EXPIRADA'].includes(txt(proceso.estado).toUpperCase())){
+      return auroRecFirmaReabrir(rid);
+    }
+
+    const doc=await auroRecFirmaObtenerDocumentoActual();
+    if(!doc.success || doc.id_recomendacion!==rid){
+      setMsg(doc.message||'La recomendación no está lista para firmar.','error');
+      auroRecFirmaActualizarUI();
+      return doc;
+    }
+
+    /*
+      Consulta solo lectura antes del POST creador.
+      Una versión ya firmada jamás crea otra solicitud por error.
+    */
+    try{
+      const q=await auroRecFirmaPost('consultarDocumentosFirmados',{
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:rid,
+        id_recomendacion:rid,
+        id_atencion:doc.id_atencion
+      });
+      const docs=Array.isArray(q?.documentos)?q.documentos:[];
+      const exacto=docs.find(x=>
+        txt(x.estado_firma).toUpperCase()==='FIRMADO' &&
+        (
+          (doc.version_documento && auroRecFirmaVersionDesdeFirmado(x)===doc.version_documento) ||
+          txt(x.sha256_origen).toLowerCase()===txt(doc.sha256_origen).toLowerCase()
+        )
+      );
+
+      if(exacto){
+        recomendacionFirmasPorDocumento.set(rid,{
+          estado:'FIRMADA',
+          documento:exacto,
+          sha_actual:doc.sha256_origen,
+          version_documento:doc.version_documento,
+          error:''
+        });
+        auroRecFirmaActualizarUI();
+        setMsg('Esta versión de Recomendaciones ya está firmada.','ok');
+        return exacto;
+      }
+    }catch(_e){}
+
+    recomendacionFirmaProcesos.set(rid,{
+      estado:'PREPARANDO',
+      id_solicitud:'',
+      id_atencion:doc.id_atencion
+    });
+    auroRecFirmaActualizarUI();
+    setMsg('Preparando Recomendaciones para firma electrónica. Se requiere 1 firma digital.','info');
+
+    try{
+      const r=await auroRecFirmaPost('firmarDocumento',{
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:rid,
+        id_recomendacion:rid,
+        id_receta:'',
+        id_certificado:'',
+        id_atencion:doc.id_atencion,
+        id_paciente:doc.id_paciente,
+        nombre_paciente:doc.nombre_paciente,
+        id_historia:doc.id_historia,
+        numero_consulta:doc.numero_consulta,
+        id_medico:doc.id_medico,
+        nombre_medico:doc.nombre_medico,
+        nombre_archivo:doc.nombre_archivo,
+        firmas_requeridas:1,
+        version_documento:doc.version_documento,
+        html_documento:doc.html_documento
+      });
+
+      if(txt(r?.estado_firma).toUpperCase()==='FIRMADO'){
+        recomendacionFirmaProcesos.delete(rid);
+        await auroRecFirmaSincronizarPersistencia({
+          silencioso:true,
+          id_atencion:doc.id_atencion,
+          id_recomendacion:rid
+        });
+        setMsg('Esta versión de Recomendaciones ya estaba firmada.','ok');
+        return r;
+      }
+
+      const solicitud=txt(r?.id_solicitud);
+      if(!solicitud) throw new Error('IASYN no devolvió id_solicitud.');
+
+      recomendacionFirmaProcesos.set(rid,{
+        estado:txt(r.estado_firma||'PENDIENTE').toUpperCase(),
+        id_solicitud:solicitud,
+        id_atencion:doc.id_atencion,
+        poll_token:Date.now()
+      });
+      auroRecFirmaActualizarUI();
+      setMsg('Solicitud enviada. En Adobe aplique 1 firma digital y guarde el PDF.','ok');
+
+      return await auroRecFirmaEsperar(rid,solicitud,doc.id_atencion);
+    }catch(error){
+      recomendacionFirmaProcesos.delete(rid);
+      auroRecFirmaActualizarUI();
+      setMsg(txt(error?.message||'No se pudo iniciar la firma.'),'error');
+      return {success:false,error:txt(error?.message||error)};
+    }
+  }
+
+  async function auroRecFirmaEsperar(id,idSolicitud,idAtencion){
+    const proceso=auroRecFirmaProceso(id);
+    const pollToken=proceso?.poll_token||Date.now();
+    const inicio=Date.now();
+
+    while(Date.now()-inicio<35*60*1000){
+      await new Promise(r=>setTimeout(r,2000));
+
+      const actual=auroRecFirmaProceso(id);
+      if(!actual || actual.poll_token!==pollToken || actual.id_solicitud!==idSolicitud){
+        return null;
+      }
+
+      let r;
+      try{
+        r=await auroRecFirmaPost('obtenerEstadoFirmaElectronica',{
+          id_solicitud:idSolicitud
+        });
+      }catch(_e){
+        // Error de transporte != error de firma.
+        continue;
+      }
+
+      const estado=txt(r?.estado_firma||r?.estado).toUpperCase();
+      actual.estado=estado||actual.estado;
+      recomendacionFirmaProcesos.set(id,actual);
+
+      if(auroRecFirmaEsContextoActual(id,idAtencion)){
+        auroRecFirmaActualizarUI();
+      }
+
+      if(estado==='FIRMADO'){
+        recomendacionFirmaProcesos.delete(id);
+
+        if(auroRecFirmaEsContextoActual(id,idAtencion)){
+          await auroRecFirmaSincronizarPersistencia({
+            silencioso:true,
+            id_atencion:idAtencion,
+            id_recomendacion:id
+          });
+          setMsg('Recomendaciones firmadas electrónicamente y archivadas en IASYN.','ok');
+        }
+
+        try{
+          window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada',{
+            detail:{
+              tipo_documento:'RECOMENDACION',
+              id_documento_origen:id,
+              id_recomendacion:id,
+              id_atencion:idAtencion,
+              id_solicitud:idSolicitud
+            }
+          }));
+        }catch(_e){}
+
+        auroRecFirmaEmitirCambio(id,'FIRMADA',{
+          id_atencion:idAtencion,
+          id_solicitud:idSolicitud
+        });
+        return r;
+      }
+
+      if(estado==='ERROR' || estado==='EXPIRADA'){
+        actual.estado=estado;
+        actual.error=txt(r?.error);
+        recomendacionFirmaProcesos.set(id,actual);
+
+        if(auroRecFirmaEsContextoActual(id,idAtencion)){
+          auroRecFirmaActualizarUI();
+          setMsg(
+            actual.error || ('La solicitud quedó '+estado+'. Puede reintentar.'),
+            'error'
+          );
+        }
+        return r;
+      }
+
+      if(estado==='CANCELADA'){
+        recomendacionFirmaProcesos.delete(id);
+        if(auroRecFirmaEsContextoActual(id,idAtencion)){
+          auroRecFirmaActualizarUI();
+        }
+        auroRecFirmaEmitirCambio(id,'CANCELADA',{
+          id_atencion:idAtencion,
+          id_solicitud:idSolicitud
+        });
+        return r;
+      }
+
+      if(estado==='TOMADA' && auroRecFirmaEsContextoActual(id,idAtencion)){
+        setMsg('Adobe está abierto. Aplique 1 firma digital y guarde el PDF.','info');
+      }
+    }
+
+    const actual=auroRecFirmaProceso(id);
+    if(actual){
+      actual.estado='EXPIRADA';
+      recomendacionFirmaProcesos.set(id,actual);
+      if(auroRecFirmaEsContextoActual(id,idAtencion)){
+        auroRecFirmaActualizarUI();
+      }
+    }
+
+    return {success:false,estado_firma:'EXPIRADA'};
+  }
+
+  async function auroRecFirmaCancelar(){
+    const id=txt(state.idRecomendacion);
+    const proceso=auroRecFirmaProceso(id);
+    if(!id || !proceso?.id_solicitud){
+      setMsg('No existe una solicitud activa para cancelar.','error');
+      return null;
+    }
+
+    try{
+      const r=await auroRecFirmaPost('firmarDocumento',{
+        operacion_frontend:'CANCELAR',
+        id_solicitud:proceso.id_solicitud,
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:id,
+        id_recomendacion:id,
+        id_receta:'',
+        id_certificado:'',
+        id_atencion:proceso.id_atencion
+      });
+
+      recomendacionFirmaProcesos.delete(id);
+      auroRecFirmaActualizarUI();
+      setMsg('Firma de Recomendaciones cancelada.','info');
+
+      try{
+        window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-cancelada',{
+          detail:{
+            tipo_documento:'RECOMENDACION',
+            id_documento_origen:id,
+            id_recomendacion:id,
+            id_atencion:proceso.id_atencion,
+            id_solicitud:proceso.id_solicitud
+          }
+        }));
+      }catch(_e){}
+
+      auroRecFirmaEmitirCambio(id,'CANCELADA',{
+        id_atencion:proceso.id_atencion,
+        id_solicitud:proceso.id_solicitud
+      });
+      return r;
+    }catch(error){
+      setMsg(txt(error?.message||'No se pudo cancelar la firma.'),'error');
+      return null;
+    }
+  }
+
+  async function auroRecFirmaReabrir(id){
+    const rid=txt(id||state.idRecomendacion);
+    const proceso=auroRecFirmaProceso(rid);
+    if(!proceso?.id_solicitud) return auroRecFirmaFirmar(rid);
+
+    try{
+      const r=await auroRecFirmaPost('firmarDocumento',{
+        operacion_frontend:'REABRIR',
+        id_solicitud:proceso.id_solicitud,
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:rid,
+        id_recomendacion:rid,
+        id_receta:'',
+        id_certificado:'',
+        id_atencion:proceso.id_atencion
+      });
+
+      proceso.estado='PENDIENTE';
+      proceso.poll_token=Date.now();
+      recomendacionFirmaProcesos.set(rid,proceso);
+
+      if(auroRecFirmaEsContextoActual(rid,proceso.id_atencion)){
+        auroRecFirmaActualizarUI();
+        setMsg('Solicitud de firma reabierta.','ok');
+      }
+
+      return auroRecFirmaEsperar(
+        rid,
+        proceso.id_solicitud,
+        proceso.id_atencion
+      );
+    }catch(error){
+      setMsg(txt(error?.message||'No se pudo reabrir la firma.'),'error');
+      return null;
+    }
+  }
+
+  function auroRecFirmaBlobPDF(base64){
+    const bin=atob(String(base64||''));
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    return new Blob([bytes],{type:'application/pdf'});
+  }
+
+  async function auroRecFirmaVerFirmada(){
+    const id=txt(state.idRecomendacion);
+    const idAtn=txt((state.contexto||contextoAtencion())?.id);
+    if(!id || !idAtn){
+      setMsg('No se pudo identificar la recomendación firmada.','error');
+      return null;
+    }
+
+    const ventana=window.open('','_blank');
+    try{
+      const r=await auroRecFirmaPost('obtenerDocumentoFirmado',{
+        tipo_documento:'RECOMENDACION',
+        id_documento_origen:id,
+        id_recomendacion:id,
+        id_receta:'',
+        id_certificado:'',
+        id_atencion:idAtn
+      });
+
+      if(!r?.pdf_firmado_base64){
+        throw new Error(r?.message||'No se encontró el PDF firmado.');
+      }
+
+      const url=URL.createObjectURL(auroRecFirmaBlobPDF(r.pdf_firmado_base64));
+      if(ventana) ventana.location.href=url;
+      else window.open(url,'_blank');
+      setTimeout(()=>URL.revokeObjectURL(url),120000);
+      return r;
+    }catch(error){
+      if(ventana) ventana.close();
+      setMsg(txt(error?.message||'No se pudo abrir la recomendación firmada.'),'error');
+      return null;
+    }
+  }
+
+  async function auroRecFirmaAccionPrincipal(){
+    const id=txt(state.idRecomendacion);
+    if(!id) return auroRecFirmaFirmarActual();
+
+    if(auroRecFirmaHayCambiosSinGuardar()){
+      setMsg('Guarde los cambios antes de firmar una nueva versión.','error');
+      auroRecFirmaActualizarUI();
+      return null;
+    }
+
+    const proceso=auroRecFirmaProceso(id);
+    if(proceso && ['ERROR','EXPIRADA'].includes(txt(proceso.estado).toUpperCase())){
+      return auroRecFirmaReabrir(id);
+    }
+
+    const estado=auroRecFirmaEstado(id);
+    if(estado.estado==='FIRMADA' && !proceso){
+      return auroRecFirmaVerFirmada();
+    }
+
+    return auroRecFirmaFirmarActual();
+  }
+
+
   function enlazar(){
     const guardarBtn=document.getElementById('auroRecBtnGuardar');
     const recargarBtn=document.getElementById('auroRecBtnRecargar');
     const vistaBtn=document.getElementById('auroRecBtnVista');
     const agregarPlanBtn=document.getElementById('auroRecBtnAgregarPlan');
+    const firmaBtn=document.getElementById('auroRecBtnFirma');
+    const cancelarFirmaBtn=document.getElementById('auroRecBtnCancelarFirma');
+    const app=document.getElementById('auroRecomendacionesApp');
 
     if(guardarBtn && guardarBtn.dataset.auroRec!=='1'){
       guardarBtn.dataset.auroRec='1';
@@ -1794,8 +2577,25 @@ html,body{background:#dfe3e8}
     }
     if(agregarPlanBtn && agregarPlanBtn.dataset.auroRec!=='1'){
       agregarPlanBtn.dataset.auroRec='1';
-      agregarPlanBtn.addEventListener('click',agregarIndicacionesPlanManualmente);
+      agregarPlanBtn.addEventListener('click',async ()=>{
+        await agregarIndicacionesPlanManualmente();
+        auroRecFirmaActualizarUI();
+      });
     }
+    if(firmaBtn && firmaBtn.dataset.auroRecFirma!=='1'){
+      firmaBtn.dataset.auroRecFirma='1';
+      firmaBtn.addEventListener('click',auroRecFirmaAccionPrincipal);
+    }
+    if(cancelarFirmaBtn && cancelarFirmaBtn.dataset.auroRecFirma!=='1'){
+      cancelarFirmaBtn.dataset.auroRecFirma='1';
+      cancelarFirmaBtn.addEventListener('click',auroRecFirmaCancelar);
+    }
+    if(app && app.dataset.auroRecFirmaDirty!=='1'){
+      app.dataset.auroRecFirmaDirty='1';
+      app.addEventListener('input',auroRecFirmaActualizarUI);
+      app.addEventListener('change',auroRecFirmaActualizarUI);
+    }
+    auroRecFirmaActualizarUI();
   }
 
   async function inicializar(){
@@ -1818,6 +2618,7 @@ html,body{background:#dfe3e8}
   function onAtencionLimpiada(){
     state.tokenCarga++;
     state.tokenGuardado++;
+    recomendacionFirmaSyncToken++;
     state.cargando=false;
     state.guardando=false;
     state.idAtencion='';
@@ -1849,6 +2650,7 @@ html,body{background:#dfe3e8}
     if(id !== state.idAtencion){
       state.tokenCarga++;
       state.tokenGuardado++;
+      recomendacionFirmaSyncToken++;
       state.cargando=false;
       state.guardando=false;
       state.idAtencion=id;
@@ -1899,6 +2701,7 @@ html,body{background:#dfe3e8}
         'Se precargaron las indicaciones para paciente del Plan en Recomendaciones generales. Puede revisarlas y editarlas antes de guardar.',
         'info'
       );
+      auroRecFirmaActualizarUI();
     }
   });
 
@@ -1921,7 +2724,17 @@ html,body{background:#dfe3e8}
     cargar:function(){return cargar(true);},
     guardar:guardar,
     vistaPrevia:vistaPrevia,
-    estado:state
+    estado:state,
+
+    /* Contrato público único de firma de Recomendaciones. */
+    obtenerDocumentoFirmableActual:auroRecFirmaObtenerDocumentoActual,
+    obtenerEstadoFirmaActual:auroRecFirmaObtenerEstadoActual,
+    firmarElectronicaActual:auroRecFirmaFirmarActual,
+    firmarRecomendacion:auroRecFirmaFirmar,
+    cancelarFirma:auroRecFirmaCancelar,
+    reabrirFirma:auroRecFirmaReabrir,
+    abrirDocumentoFirmado:auroRecFirmaVerFirmada,
+    sincronizarEstadoFirma:auroRecFirmaSincronizarPersistencia
   };
 
   /* Alias propio IASYN sin romper consumidores heredados de window.auroRecomendaciones. */
