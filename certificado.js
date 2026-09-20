@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.4.1-IASYN-FIRMA-CERT-SYNC-V1';
+const VERSION='1.4.2-IASYN-FIRMA-CERT-UX-SYNC-V1';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -410,6 +410,11 @@ function instalarCSS(){
 @media(max-width:700px){.ac-dx label{padding:10px}.ac-dx span{font-size:12.5px;gap:8px}.ac-dx span b{min-width:54px;font-size:11px;padding:4px 7px}}
 .ac-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .ac-btn{border:0;border-radius:12px;padding:10px 14px;font-weight:850;cursor:pointer}
+.ac-btn[disabled]{opacity:.72;cursor:wait}
+.ac-firma-preparando{background:#fff7ed!important;color:#9a3412!important;border:1px solid #fed7aa!important}
+.ac-firma-proceso{background:#eff6ff!important;color:#1d4ed8!important;border:1px solid #bfdbfe!important}
+.ac-firma-firmada{background:#ecfdf5!important;color:#166534!important;border:1px solid #bbf7d0!important}
+.ac-firma-cancelar{background:#fff1f2!important;color:#be123c!important;border:1px solid #fecdd3!important}
 .ac-primary{background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff}
 .ac-soft{background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8}
 .ac-item{border:1px solid #e5e7eb;border-radius:13px;padding:11px;margin-bottom:8px}
@@ -445,6 +450,32 @@ function instalarCSS(){
 .ac-sign{text-align:center;font-size:11.5px}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.5px}
+.ac-toast-zone{
+  position:fixed;top:18px;right:18px;z-index:2147483000;
+  width:min(390px,calc(100vw - 28px));display:grid;gap:10px;
+  pointer-events:none
+}
+.ac-toast{
+  display:grid;grid-template-columns:42px minmax(0,1fr);gap:11px;align-items:center;
+  padding:13px 15px;border-radius:16px;color:#fff;
+  box-shadow:0 18px 45px rgba(15,23,42,.22),0 2px 8px rgba(15,23,42,.14);
+  border:1px solid rgba(255,255,255,.22);
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  animation:acToastIn .22s ease-out both
+}
+.ac-toast-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:rgba(255,255,255,.17);font-size:22px;font-weight:950}
+.ac-toast-title{font-size:13.5px;font-weight:950;letter-spacing:.01em;line-height:1.2}
+.ac-toast-text{font-size:12px;line-height:1.35;margin-top:3px;color:rgba(255,255,255,.92)}
+.ac-toast-ok{background:linear-gradient(135deg,#047857,#059669)}
+.ac-toast-warn{background:linear-gradient(135deg,#9a6700,#b7791f)}
+.ac-toast-info{background:linear-gradient(135deg,#6c1749,#8b1e5a)}
+.ac-toast-error{background:linear-gradient(135deg,#8f1d18,#b42318)}
+.ac-toast-out{animation:acToastOut .2s ease-in both}
+@keyframes acToastIn{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
+@keyframes acToastOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-6px) scale(.98)}}
+@media(prefers-reduced-motion:reduce){.ac-toast,.ac-toast-out{animation:none}}
+@media(max-width:700px){.ac-toast-zone{top:10px;right:10px;width:calc(100vw - 20px)}.ac-toast{padding:12px 13px;border-radius:14px}}
+
 @media(max-width:1000px){
   .ac-context-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .ac-preview{padding:10px}
@@ -527,8 +558,6 @@ function html(){
 
           <div class="ac-actions">
             <button class="ac-btn ac-primary" id="acGuardar">Emitir / Guardar certificado</button>
-            <button class="ac-btn ac-soft" id="acFirmar" disabled>Firmar electrónicamente</button>
-            <button class="ac-btn ac-soft" id="acVerFirmado" style="display:none">Ver certificado firmado ✓</button>
             <button class="ac-btn ac-soft" id="acVista">Vista previa</button>
             <button class="ac-btn ac-soft" id="acImprimir">Imprimir / PDF</button>
             <button class="ac-btn ac-soft" id="acNuevo">Nuevo certificado</button>
@@ -563,6 +592,48 @@ function mount(){
   return m;
 }
 
+let acToastTimer=null;
+
+function toastPremium(tipo,texto){
+  const textoLimpio=txt(texto);
+  if(!textoLimpio) return;
+
+  let zona=document.getElementById('acToastZone');
+  if(!zona){
+    zona=document.createElement('div');
+    zona.id='acToastZone';
+    zona.className='ac-toast-zone';
+    zona.setAttribute('aria-live','polite');
+    zona.setAttribute('aria-atomic','true');
+    document.body.appendChild(zona);
+  }
+
+  if(acToastTimer){clearTimeout(acToastTimer);acToastTimer=null;}
+
+  const mapa={
+    ok:{clase:'ok',icono:'✓',titulo:'Operación completada'},
+    warn:{clase:'warn',icono:'!',titulo:'Firma electrónica'},
+    info:{clase:'info',icono:'•',titulo:'IASYN'},
+    error:{clase:'error',icono:'×',titulo:'Atención requerida'}
+  };
+  const cfg=mapa[tipo]||mapa.info;
+
+  zona.innerHTML=`<div class="ac-toast ac-toast-${cfg.clase}" role="status">
+    <div class="ac-toast-icon">${cfg.icono}</div>
+    <div><div class="ac-toast-title">${esc(cfg.titulo)}</div><div class="ac-toast-text">${esc(textoLimpio)}</div></div>
+  </div>`;
+
+  const tarjeta=zona.firstElementChild;
+  acToastTimer=setTimeout(()=>{
+    if(!tarjeta||!tarjeta.isConnected) return;
+    tarjeta.classList.add('ac-toast-out');
+    setTimeout(()=>{
+      if(tarjeta.isConnected) tarjeta.remove();
+      if(zona && !zona.children.length) zona.remove();
+    },220);
+  },3600);
+}
+
 function msg(t,s){
   const e=document.getElementById('acMsg');
   if(e) e.innerHTML=s?`<div class="ac-msg ac-${t}">${esc(s)}</div>`:'';
@@ -585,8 +656,6 @@ function eventos(){
     }
   });
   document.getElementById('acGuardar')?.addEventListener('click',guardar);
-  document.getElementById('acFirmar')?.addEventListener('click',()=>firmarCertificado(state.editandoId));
-  document.getElementById('acVerFirmado')?.addEventListener('click',()=>verCertificadoFirmado(state.editandoId));
   document.getElementById('acVista')?.addEventListener('click',()=>vista(false));
   document.getElementById('acImprimir')?.addEventListener('click',()=>vista(true));
   document.getElementById('acNuevo')?.addEventListener('click',nuevo);
@@ -708,12 +777,26 @@ function renderHistorial(){
     const d=parse(c.detalle_json);
     const id=txt(c.id_certificado);
     const firmado=state.firmasPorDocumento[id];
+    const esProceso=state.firmando && txt(state.firmaDocumentoId)===id;
+    const preparando=esProceso && !txt(state.firmaSolicitudId);
+    const proceso=esProceso && !!txt(state.firmaSolicitudId);
+
     const estado=firmado
       ? '<span style="font-size:11px;font-weight:900;color:#166534">FIRMADO ✓</span>'
-      : '<span style="font-size:11px;font-weight:800;color:#64748b">SIN FIRMA</span>';
+      : (preparando
+          ? '<span style="font-size:11px;font-weight:900;color:#9a3412">PREPARANDO FIRMA…</span>'
+          : (proceso
+              ? '<span style="font-size:11px;font-weight:900;color:#1d4ed8">FIRMA EN PROCESO…</span>'
+              : '<span style="font-size:11px;font-weight:800;color:#64748b">SIN FIRMA</span>'));
+
     const accionFirma=firmado
-      ? `<button class="ac-btn ac-soft" data-acverfirmado="${esc(id)}">Ver firmado ✓</button>`
-      : `<button class="ac-btn ac-soft" data-acfirmar="${esc(id)}">Firmar</button>`;
+      ? `<button class="ac-btn ac-firma-firmada" data-acverfirmado="${esc(id)}">Ver certificado firmado ✓</button>`
+      : `<button class="ac-btn ac-soft${preparando?' ac-firma-preparando':(proceso?' ac-firma-proceso':'')}" data-acfirmar="${esc(id)}" ${esProceso?'disabled aria-busy="true"':''}>${preparando?'Preparando firma…':(proceso?'Firma en proceso…':'Firmar certificado')}</button>`;
+
+    const cancelar=proceso
+      ? `<button class="ac-btn ac-firma-cancelar" data-accancelarfirma="${esc(id)}">Cancelar firma</button>`
+      : '';
+
     return `<div class="ac-item">
       <div class="ac-item-top">
         <div>
@@ -721,9 +804,10 @@ function renderHistorial(){
           <div class="ac-meta">${esc(fechaVisual(c.fecha_emision||d.fecha_emision))} · ${esc(id)}</div>
           <div style="margin-top:5px">${estado}</div>
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
-          ${accionFirma}
+        <div class="ac-actions" style="margin-top:0;justify-content:flex-end">
           <button class="ac-btn ac-soft" data-aceditar="${esc(id)}">Abrir</button>
+          ${accionFirma}
+          ${cancelar}
         </div>
       </div>
     </div>`;
@@ -732,6 +816,7 @@ function renderHistorial(){
   b.querySelectorAll('[data-aceditar]').forEach(x=>x.onclick=()=>abrir(x.dataset.aceditar));
   b.querySelectorAll('[data-acfirmar]').forEach(x=>x.onclick=()=>firmarCertificado(x.dataset.acfirmar));
   b.querySelectorAll('[data-acverfirmado]').forEach(x=>x.onclick=()=>verCertificadoFirmado(x.dataset.acverfirmado));
+  b.querySelectorAll('[data-accancelarfirma]').forEach(x=>x.onclick=()=>cancelarFirmaCertificado(x.dataset.accancelarfirma));
 }
 
 function dxSeleccionados(){
@@ -951,6 +1036,53 @@ function actualizarControlesFirma(){
   }
 }
 
+async function cancelarFirmaCertificado(idCertificado){
+  const id=txt(idCertificado||state.firmaDocumentoId);
+  const idSolicitud=txt(state.firmaSolicitudId);
+  const certificado=certificadoPersistido(id);
+
+  if(!id || !idSolicitud || !certificado){
+    msg('warn','No existe una solicitud activa de firma para cancelar.');
+    toastPremium('warn','No existe una solicitud activa de firma para cancelar.');
+    return;
+  }
+
+  try{
+    msg('warn','Cancelando firma del certificado…');
+    toastPremium('info','Cancelando firma del certificado…');
+
+    const r=await postFirma('firmarDocumento',{
+      operacion_frontend:'CANCELAR',
+      id_solicitud:idSolicitud,
+      tipo_documento:'CERTIFICADO',
+      id_documento_origen:id,
+      id_certificado:id,
+      id_atencion:txt(certificado.id_atencion),
+      id_receta:''
+    });
+
+    if(!r || r.success===false) throw Error(r?.message||'No se pudo cancelar la firma.');
+    const estado=txt(r.estado_firma||r.estado).toUpperCase();
+    if(estado && !['CANCELADA','CANCELADO'].includes(estado)){
+      throw Error('IASYN no confirmó la cancelación de la firma.');
+    }
+
+    state.firmaPollToken++;
+    state.firmando=false;
+    state.firmaSolicitudId='';
+    state.firmaDocumentoId='';
+    renderHistorial();
+    actualizarControlesFirma();
+    msg('warn','Firma del certificado cancelada.');
+    toastPremium('warn','Firma cancelada correctamente. El certificado está disponible nuevamente.');
+    return r;
+  }catch(e){
+    msg('error',e.message||'No se pudo cancelar la firma del certificado.');
+    toastPremium('error',e.message||'No se pudo cancelar la firma del certificado.');
+    return null;
+  }
+}
+
 async function firmarCertificado(idCertificado){
   const id=txt(idCertificado||state.editandoId);
   if(!id) return msg('warn','Primero guarde el certificado que desea firmar.');
@@ -968,9 +1100,12 @@ async function firmarCertificado(idCertificado){
   }
 
   state.firmando=true;
+  state.firmaSolicitudId='';
   state.firmaDocumentoId=id;
   actualizarControlesFirma();
+  renderHistorial();
   msg('','Preparando certificado para firma electrónica…');
+  toastPremium('info','Certificado enviado a firma. Preparando Adobe…');
 
   try{
     const htmlDocumento=htmlCompletoFirmaCertificado(certificado);
@@ -996,20 +1131,29 @@ async function firmarCertificado(idCertificado){
       await cargarFirmasCertificados(idAtencion);
       renderHistorial();
       msg('ok','Este certificado ya estaba firmado.');
+      toastPremium('ok','Este certificado ya se encuentra firmado.');
       return;
     }
 
     state.firmaSolicitudId=txt(r.id_solicitud);
     if(!state.firmaSolicitudId) throw Error('IASYN no devolvió id_solicitud.');
+    renderHistorial();
     msg('ok',r.agente_online===false
-      ? 'Solicitud creada. Abra IASYN Firma V2 en el computador autorizado.'
+      ? 'Solicitud creada. Abra IASYN Firma en el computador autorizado.'
       : 'Solicitud enviada. Adobe se abrirá automáticamente en el computador autorizado.');
+    toastPremium('info',r.agente_online===false
+      ? 'Solicitud creada. El motor IASYN debe estar activo en el computador autorizado.'
+      : 'Firma en proceso. Adobe se abrirá automáticamente.');
     await esperarFirmaCertificado(state.firmaSolicitudId,id,idAtencion);
   }catch(e){
     msg('error',e.message||'No se pudo iniciar la firma del certificado.');
+    toastPremium('error',e.message||'No se pudo iniciar la firma del certificado.');
   }finally{
     state.firmando=false;
+    state.firmaSolicitudId='';
+    state.firmaDocumentoId='';
     actualizarControlesFirma();
+    renderHistorial();
   }
 }
 
@@ -1026,6 +1170,7 @@ async function esperarFirmaCertificado(idSolicitud,idCertificado,idAtencion){
       renderHistorial();
       if(txt(state.editandoId)===txt(idCertificado)) actualizarControlesFirma();
       msg('ok','Certificado firmado electrónicamente y archivado en IASYN.');
+      toastPremium('ok','Certificado firmado correctamente y archivado en IASYN.');
       return;
     }
     if(estado==='ERROR') throw Error(r?.error||'El motor reportó un error de firma.');
@@ -1536,11 +1681,12 @@ window.auroCertificados={
   obtenerDatos:datos,
   construirDocumento:docHTML,
   firmarCertificado:firmarCertificado,
+  cancelarFirmaCertificado:cancelarFirmaCertificado,
   verCertificadoFirmado:verCertificadoFirmado
 };
 
 /*
-  IASYN 1.4.1 — SINCRONIZACIÓN QUIRÚRGICA DE CERTIFICADOS
+  IASYN 1.4.2 — SINCRONIZACIÓN + UX DE BOTONES DE CERTIFICADOS
   Atenciones emite 'aurosanax:atencion-seleccionada' después de fijar el
   nuevo id_atencion como contexto maestro. Si Certificados está visible,
   se reinicializa inmediatamente con ese contexto. No modifica Atenciones,
