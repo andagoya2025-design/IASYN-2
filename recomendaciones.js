@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.3.1';
+  const VERSION = '1.3.2';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20260920_recomendaciones_firma_v1_tarjeta_guardada_antirregresiva';
+  const RELEASE = '20260921_recomendaciones_tarjeta_unica_firma_sin_duplicidad_antirregresiva';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -622,12 +622,9 @@
           </section>
 
           <div class="auro-rec-actions">
-            <div class="auro-rec-firma-status" id="auroRecFirmaEstado"><i class="bi bi-shield-check"></i> Firma: sin documento guardado</div>
             <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
             <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Imprimir recomendaciones</button>
             <button type="button" class="auro-rec-btn primary" id="auroRecBtnGuardar"><i class="bi bi-save2 me-1"></i> Guardar recomendaciones</button>
-            <button type="button" class="auro-rec-btn" id="auroRecBtnFirma"><i class="bi bi-pen me-1"></i> Guarde recomendaciones para firmar</button>
-            <button type="button" class="auro-rec-btn" id="auroRecBtnCancelarFirma" hidden><i class="bi bi-x-circle me-1"></i> Cancelar firma</button>
           </div>
 
           <section class="auro-rec-card" id="auroRecGuardadaCard">
@@ -2048,82 +2045,11 @@ html,body{background:#dfe3e8}
   }
 
   function auroRecFirmaActualizarUI(){
-    const btn=document.getElementById('auroRecBtnFirma');
-    const cancelar=document.getElementById('auroRecBtnCancelarFirma');
-    const estadoEl=document.getElementById('auroRecFirmaEstado');
-    if(!btn || !cancelar || !estadoEl) return;
-
-    btn.classList.remove('primary','firma-ok','firma-warn');
-    btn.disabled=true;
-    cancelar.hidden=true;
-    cancelar.disabled=false;
-
-    const ctx=state.contexto||contextoAtencion();
-    const idAtn=txt(ctx?.id);
-    const id=txt(state.idRecomendacion);
-    const bloqueada=ctx?.bloqueada===true;
-
-    let textoEstado='Firma: sin documento guardado';
-    let htmlBoton='<i class="bi bi-pen me-1"></i> Guarde recomendaciones para firmar';
-
-    if(!idAtn || !id){
-      // Estado inicial.
-    }else if(bloqueada){
-      textoEstado='Firma: atención anulada/cancelada';
-      htmlBoton='<i class="bi bi-lock me-1"></i> Documento no firmable';
-    }else if(auroRecFirmaHayCambiosSinGuardar()){
-      textoEstado='Firma: cambios sin guardar';
-      htmlBoton='<i class="bi bi-save2 me-1"></i> Guarde cambios antes de firmar';
-      btn.classList.add('firma-warn');
-    }else{
-      const proceso=auroRecFirmaProceso(id);
-      const estado=auroRecFirmaEstado(id);
-
-      if(proceso){
-        const op=txt(proceso.estado).toUpperCase();
-        if(op==='PREPARANDO'){
-          textoEstado='Firma: preparando solicitud…';
-          htmlBoton='<i class="bi bi-hourglass-split me-1"></i> Preparando firma…';
-          btn.classList.add('firma-warn');
-        }else if(op==='PENDIENTE' || op==='TOMADA'){
-          textoEstado=op==='TOMADA'
-            ? 'Firma: documento abierto en Adobe'
-            : 'Firma: solicitud en proceso';
-          htmlBoton=op==='TOMADA'
-            ? '<i class="bi bi-pen me-1"></i> Firma en Adobe…'
-            : '<i class="bi bi-hourglass-split me-1"></i> Firma en proceso…';
-          cancelar.hidden=false;
-        }else if(op==='ERROR' || op==='EXPIRADA'){
-          textoEstado=op==='ERROR'?'Firma: error recuperable':'Firma: solicitud expirada';
-          htmlBoton='<i class="bi bi-arrow-repeat me-1"></i> Reintentar firma';
-          btn.disabled=false;
-          btn.classList.add('firma-warn');
-        }
-      }else if(estado.estado==='FIRMADA'){
-        textoEstado='Firma: documento firmado ✓';
-        htmlBoton='<i class="bi bi-file-earmark-check me-1"></i> Ver recomendación firmada ✓';
-        btn.disabled=false;
-        btn.classList.add('firma-ok');
-      }else if(estado.estado==='NUEVA_VERSION'){
-        textoEstado='Firma: nueva versión guardada sin firmar';
-        htmlBoton='<i class="bi bi-pen me-1"></i> Firmar nueva versión';
-        btn.disabled=false;
-        btn.classList.add('primary');
-      }else{
-        textoEstado='Firma: recomendación guardada sin firmar';
-        htmlBoton='<i class="bi bi-pen me-1"></i> Firmar recomendación';
-        btn.disabled=false;
-        btn.classList.add('primary');
-      }
-    }
-
-    if(state.guardando){
-      btn.disabled=true;
-      cancelar.disabled=true;
-    }
-
-    estadoEl.innerHTML='<i class="bi bi-shield-check"></i> '+esc(textoEstado);
-    btn.innerHTML=htmlBoton;
+    /*
+      V1.3.2 — fuente visual única:
+      toda la UX de firma vive en la tarjeta “Recomendación guardada”.
+      La state machine, polling, persistencia y acciones NO cambian.
+    */
     renderRecomendacionGuardada();
   }
 
@@ -2774,8 +2700,6 @@ html,body{background:#dfe3e8}
     const recargarBtn=document.getElementById('auroRecBtnRecargar');
     const vistaBtn=document.getElementById('auroRecBtnVista');
     const agregarPlanBtn=document.getElementById('auroRecBtnAgregarPlan');
-    const firmaBtn=document.getElementById('auroRecBtnFirma');
-    const cancelarFirmaBtn=document.getElementById('auroRecBtnCancelarFirma');
     const app=document.getElementById('auroRecomendacionesApp');
 
     if(guardarBtn && guardarBtn.dataset.auroRec!=='1'){
@@ -2796,14 +2720,6 @@ html,body{background:#dfe3e8}
         await agregarIndicacionesPlanManualmente();
         auroRecFirmaActualizarUI();
       });
-    }
-    if(firmaBtn && firmaBtn.dataset.auroRecFirma!=='1'){
-      firmaBtn.dataset.auroRecFirma='1';
-      firmaBtn.addEventListener('click',auroRecFirmaAccionPrincipal);
-    }
-    if(cancelarFirmaBtn && cancelarFirmaBtn.dataset.auroRecFirma!=='1'){
-      cancelarFirmaBtn.dataset.auroRecFirma='1';
-      cancelarFirmaBtn.addEventListener('click',auroRecFirmaCancelar);
     }
     if(app && app.dataset.auroRecFirmaDirty!=='1'){
       app.dataset.auroRecFirmaDirty='1';
