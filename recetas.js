@@ -47,6 +47,77 @@
   let recetaFirmaLogoCache = null;
   let recetaFirmaLogoPromesa = null;
 
+  /* ============================================================
+     IASYN RECETAS — NOTIFICACIÓN PREMIUM ANTIRREGRESIVA
+     ------------------------------------------------------------
+     Réplica visual del toast ya validado en Certificados.
+     Capa exclusivamente UX: no altera firma, estados, polling,
+     persistencia, eventos, Plan, PDF, endpoints ni contratos.
+     ============================================================ */
+  let recetaToastPremiumTimer = null;
+
+  function auroRecetaToastPremium(tipo,texto){
+    const textoLimpio=String(texto||'').trim();
+    if(!textoLimpio) return;
+
+    if(!document.getElementById('auroRecetaToastPremiumStyle')){
+      const style=document.createElement('style');
+      style.id='auroRecetaToastPremiumStyle';
+      style.textContent=`
+        .ac-toast-zone{position:fixed;top:18px;right:18px;z-index:2147483000;width:min(390px,calc(100vw - 28px));display:grid;gap:10px;pointer-events:none}
+        .ac-toast{display:grid;grid-template-columns:42px minmax(0,1fr);gap:11px;align-items:center;padding:13px 15px;border-radius:16px;color:#fff;box-shadow:0 18px 45px rgba(15,23,42,.22),0 2px 8px rgba(15,23,42,.14);border:1px solid rgba(255,255,255,.22);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);animation:acToastIn .22s ease-out both}
+        .ac-toast-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:rgba(255,255,255,.17);font-size:22px;font-weight:950}
+        .ac-toast-title{font-size:13.5px;font-weight:950;letter-spacing:.01em;line-height:1.2}
+        .ac-toast-text{font-size:12px;line-height:1.35;margin-top:3px;color:rgba(255,255,255,.92)}
+        .ac-toast-ok{background:linear-gradient(135deg,#047857,#059669)}
+        .ac-toast-warn{background:linear-gradient(135deg,#9a6700,#b7791f)}
+        .ac-toast-info{background:linear-gradient(135deg,#6c1749,#8b1e5a)}
+        .ac-toast-error{background:linear-gradient(135deg,#8f1d18,#b42318)}
+        .ac-toast-out{animation:acToastOut .2s ease-in both}
+        @keyframes acToastIn{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
+        @keyframes acToastOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-6px) scale(.98)}}
+        @media(prefers-reduced-motion:reduce){.ac-toast,.ac-toast-out{animation:none}}
+        @media(max-width:700px){.ac-toast-zone{top:10px;right:10px;width:calc(100vw - 20px)}.ac-toast{padding:12px 13px;border-radius:14px}}
+      `;
+      document.head.appendChild(style);
+    }
+
+    let zona=document.getElementById('acToastZone');
+    if(!zona){
+      zona=document.createElement('div');
+      zona.id='acToastZone';
+      zona.className='ac-toast-zone';
+      zona.setAttribute('aria-live','polite');
+      zona.setAttribute('aria-atomic','true');
+      document.body.appendChild(zona);
+    }
+
+    if(recetaToastPremiumTimer){clearTimeout(recetaToastPremiumTimer);recetaToastPremiumTimer=null;}
+
+    const mapa={
+      ok:{clase:'ok',icono:'✓',titulo:'Operación completada'},
+      warn:{clase:'warn',icono:'!',titulo:'Firma electrónica'},
+      info:{clase:'info',icono:'•',titulo:'IASYN'},
+      error:{clase:'error',icono:'×',titulo:'Atención requerida'}
+    };
+    const cfg=mapa[tipo]||mapa.info;
+
+    zona.innerHTML=`<div class="ac-toast ac-toast-${cfg.clase}" role="status">
+      <div class="ac-toast-icon">${cfg.icono}</div>
+      <div><div class="ac-toast-title">${safe(cfg.titulo)}</div><div class="ac-toast-text">${safe(textoLimpio)}</div></div>
+    </div>`;
+
+    const tarjeta=zona.firstElementChild;
+    recetaToastPremiumTimer=setTimeout(()=>{
+      if(!tarjeta||!tarjeta.isConnected) return;
+      tarjeta.classList.add('ac-toast-out');
+      setTimeout(()=>{
+        if(tarjeta.isConnected) tarjeta.remove();
+        if(zona && !zona.children.length) zona.remove();
+      },220);
+    },3600);
+  }
+
   /*
     AUROSANAX RECETAS 2.5 - VISTA PACIENTE OFICIAL ÚNICA
     ---------------------------------------------------
@@ -6635,6 +6706,7 @@ cargarMedicosActivosReceta(false).then(function(){
     const existente=auroRecetaFirmaProceso(rid);
     if(existente && ['PREPARANDO','PENDIENTE','TOMADA'].includes(String(existente.estado||'').toUpperCase())){
       mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Esta receta ya tiene una firma en proceso.', '');
+      auroRecetaToastPremium('info','Esta receta ya tiene una firma electrónica en proceso.');
       return existente;
     }
     if(existente && ['ERROR','EXPIRADA'].includes(String(existente.estado||'').toUpperCase())){
@@ -6668,6 +6740,7 @@ cargarMedicosActivosReceta(false).then(function(){
         recetaFirmasPorDocumento.set(rid,{estado:'FIRMADA',documento:exacto,sha_actual:doc.sha256_origen,error:''});
         renderHistorialRecetas();
         mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Esta versión de la receta ya está firmada.', 'ok');
+        auroRecetaToastPremium('ok','Esta versión de la receta ya se encuentra firmada.');
         return exacto;
       }
     }catch(_e){}
@@ -6675,6 +6748,7 @@ cargarMedicosActivosReceta(false).then(function(){
     recetaFirmaProcesos.set(rid,{estado:'PREPARANDO',id_solicitud:'',id_atencion:doc.id_atencion});
     renderHistorialRecetas();
     mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Preparando receta para firma electrónica. Esta receta requiere 2 firmas digitales.', '');
+    auroRecetaToastPremium('info','Receta enviada a firma. Preparando Adobe…');
 
     try{
       const r=await auroRecetaFirmaPost('firmarDocumento',{
@@ -6698,6 +6772,7 @@ cargarMedicosActivosReceta(false).then(function(){
         recetaFirmaProcesos.delete(rid);
         await auroRecetaFirmaSincronizarPersistencia({silencioso:true,forzar:true});
         mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Esta versión de la receta ya estaba firmada.', 'ok');
+        auroRecetaToastPremium('ok','Esta versión de la receta ya se encuentra firmada.');
         return r;
       }
 
@@ -6715,12 +6790,16 @@ cargarMedicosActivosReceta(false).then(function(){
         '<i class="bi bi-pen me-1"></i> Solicitud enviada. En Adobe aplique las 2 firmas digitales requeridas y guarde el PDF.',
         'ok'
       );
+      auroRecetaToastPremium('info',r?.agente_online===false
+        ? 'Solicitud creada. El motor IASYN debe estar activo en el computador autorizado.'
+        : 'Firma en proceso. Adobe se abrirá automáticamente.');
 
       return await auroRecetaFirmaEsperar(rid,solicitud,doc.id_atencion);
     }catch(error){
       recetaFirmaProcesos.delete(rid);
       renderHistorialRecetas();
       mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo iniciar la firma.'), '');
+      auroRecetaToastPremium('error',error?.message||'No se pudo iniciar la firma de la receta.');
       return {success:false,error:String(error?.message||error||'')};
     }
   }
@@ -6754,6 +6833,7 @@ cargarMedicosActivosReceta(false).then(function(){
         await auroRecetaFirmaSincronizarPersistencia({silencioso:true,forzar:true});
         renderHistorialRecetas();
         mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Receta firmada electrónicamente y archivada en IASYN.', 'ok');
+        auroRecetaToastPremium('ok','Receta firmada correctamente y archivada en IASYN.');
         try{
           window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada',{
             detail:{tipo_documento:'RECETA',id_receta:id,id_documento_origen:id,id_atencion:idAtencion,id_solicitud:idSolicitud}
@@ -6769,6 +6849,7 @@ cargarMedicosActivosReceta(false).then(function(){
         recetaFirmaProcesos.set(id,actual);
         renderHistorialRecetas();
         mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(actual.error||('La solicitud quedó '+estado+'. Puede reintentar.')), '');
+        auroRecetaToastPremium('error',actual.error||('La solicitud quedó '+estado+'. Puede reintentar.'));
         return r;
       }
 
@@ -6798,10 +6879,12 @@ cargarMedicosActivosReceta(false).then(function(){
     const proceso=auroRecetaFirmaProceso(rid);
     if(!proceso?.id_solicitud){
       mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> No existe una solicitud activa para cancelar.', '');
+      auroRecetaToastPremium('warn','No existe una solicitud activa de firma para cancelar.');
       return null;
     }
 
     try{
+      auroRecetaToastPremium('info','Cancelando firma de la receta…');
       const r=await auroRecetaFirmaPost('firmarDocumento',{
         operacion_frontend:'CANCELAR',
         id_solicitud:proceso.id_solicitud,
@@ -6813,6 +6896,7 @@ cargarMedicosActivosReceta(false).then(function(){
       recetaFirmaProcesos.delete(rid);
       renderHistorialRecetas();
       mostrarMensajeReceta('<i class="bi bi-x-circle me-1"></i> Firma de receta cancelada.', '');
+      auroRecetaToastPremium('warn','Firma cancelada correctamente. La receta está disponible nuevamente.');
       try{
         window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-cancelada',{
           detail:{tipo_documento:'RECETA',id_receta:rid,id_documento_origen:rid,id_atencion:proceso.id_atencion,id_solicitud:proceso.id_solicitud}
@@ -6822,6 +6906,7 @@ cargarMedicosActivosReceta(false).then(function(){
       return r;
     }catch(error){
       mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo cancelar la firma.'), '');
+      auroRecetaToastPremium('error',error?.message||'No se pudo cancelar la firma de la receta.');
       return null;
     }
   }
@@ -6846,6 +6931,7 @@ cargarMedicosActivosReceta(false).then(function(){
       recetaFirmaProcesos.set(rid,proceso);
       renderHistorialRecetas();
       mostrarMensajeReceta('<i class="bi bi-arrow-repeat me-1"></i> Solicitud de firma reabierta.', 'ok');
+      auroRecetaToastPremium('info','Solicitud de firma reabierta. IASYN retomará el proceso.');
       return auroRecetaFirmaEsperar(rid,proceso.id_solicitud,proceso.id_atencion);
     }catch(error){
       mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo reabrir la firma.'), '');
