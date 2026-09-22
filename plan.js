@@ -5927,20 +5927,13 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         if(!idEsperado) return;
 
         /*
-          IASYN PLAN - FIRMA RÁPIDA ANTIRREGRESIVA
-          -----------------------------------------
-          Plan es únicamente espejo/presentación del estado oficial de Recetas.
-          Al pulsar Firmar NO vuelve a consultar Google/Sheets antes de delegar:
-          esa reconsulta duplicaba la espera y Recetas ya realiza la validación
-          autoritativa del documento/version antes de crear la solicitud de firma.
-
-          Se conserva una barrera local contra clics sobre estados no firmables y
-          contra cambios de atención. La sincronización oficial se mantiene DESPUÉS
-          de la operación para refrescar la interfaz.
+          IASYN PLAN - FIRMA DIRECTA ANTIRREGRESIVA
+          La tarjeta ya refleja el estado oficial calculado por Recetas.
+          No se hace un GET preventivo al pulsar Firmar: Recetas vuelve a validar
+          identidad, versión y contenido antes de crear la solicitud.
         */
-        const estadoLocal = Object.assign({},estadoActual || {});
-        if(texto(estadoLocal.id_atencion) && texto(estadoLocal.id_atencion) !== idEsperado) return;
-        if(!['SIN_FIRMA','NUEVA_VERSION','LISTA'].includes(texto(estadoLocal.estado).toUpperCase())) return;
+        if(idAtencionActiva() !== idEsperado) return;
+        if(!['SIN_FIRMA','NUEVA_VERSION','LISTA'].includes(texto(estadoActual.estado).toUpperCase())) return;
 
         const api = apiRecetas();
         if(!api || typeof api.firmarElectronicaActual !== 'function') return;
@@ -5948,7 +5941,6 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         accionActiva = true;
         pintar();
         try{
-            /* Delegación inmediata: Recetas conserva la autoridad y sus validaciones. */
             await api.firmarElectronicaActual();
         }catch(error){
             console.warn('IASYN PLAN FIRMA RECETA: la operación delegada informó error.',error);
