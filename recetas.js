@@ -1158,6 +1158,35 @@
         #recetas .auro-receta-modebar{display:block;font-size:12px;}
         #recetas .auro-receta-modebar .badge-auro{display:inline-block;margin-top:6px;}
       }
+      /* IASYN RECETAS — NOTIFICACIONES PREMIUM AISLADAS / ANTIRREGRESIÓN */
+      .iasyn-receta-toast-zone{
+        position:fixed;top:18px;right:18px;z-index:2147483000;
+        width:min(390px,calc(100vw - 28px));display:grid;gap:10px;pointer-events:none;
+      }
+      .iasyn-receta-toast{
+        display:grid;grid-template-columns:42px minmax(0,1fr);gap:11px;align-items:center;
+        padding:13px 15px;border-radius:16px;color:#fff;
+        box-shadow:0 18px 45px rgba(15,23,42,.22),0 2px 8px rgba(15,23,42,.14);
+        border:1px solid rgba(255,255,255,.22);
+        backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+        animation:iasynRecetaToastIn .22s ease-out both;
+      }
+      .iasyn-receta-toast-icon{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;background:rgba(255,255,255,.17);font-size:22px;font-weight:950;}
+      .iasyn-receta-toast-title{font-size:13.5px;font-weight:950;letter-spacing:.01em;line-height:1.2;}
+      .iasyn-receta-toast-text{font-size:12px;line-height:1.35;margin-top:3px;color:rgba(255,255,255,.92);}
+      .iasyn-receta-toast-ok{background:linear-gradient(135deg,#047857,#059669);}
+      .iasyn-receta-toast-warn{background:linear-gradient(135deg,#9a6700,#b7791f);}
+      .iasyn-receta-toast-info{background:linear-gradient(135deg,#6c1749,#8b1e5a);}
+      .iasyn-receta-toast-error{background:linear-gradient(135deg,#8f1d18,#b42318);}
+      .iasyn-receta-toast-out{animation:iasynRecetaToastOut .2s ease-in both;}
+      @keyframes iasynRecetaToastIn{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:none}}
+      @keyframes iasynRecetaToastOut{from{opacity:1;transform:none}to{opacity:0;transform:translateY(-6px) scale(.98)}}
+      @media(prefers-reduced-motion:reduce){.iasyn-receta-toast,.iasyn-receta-toast-out{animation:none}}
+      @media(max-width:700px){
+        .iasyn-receta-toast-zone{top:10px;right:10px;width:calc(100vw - 20px)}
+        .iasyn-receta-toast{padding:12px 13px;border-radius:14px}
+      }
+
       @media(max-width:520px){
         #recetas .auro-receta-main-actions{
           grid-template-columns:1fr!important;
@@ -2668,6 +2697,55 @@ if(!lista.length) return `<b>${safe(r?.diagnostico || '—')}</b>`;
         else card?.prepend(box);
       });
     }
+  }
+
+  /*
+    IASYN RECETAS — TOAST PREMIUM / ANTIRREGRESIÓN
+    ------------------------------------------------
+    Capa visual solamente. No crea solicitudes, no consulta firma, no modifica
+    PDF, Plan, Apps Script, motor P12/BER ni persistencia clínica.
+  */
+  let iasynRecetaToastTimer = null;
+  function iasynRecetaToastPremium(tipo, texto){
+    const limpio = String(texto || '').trim();
+    if(!limpio || !document.body) return;
+
+    let zona = document.getElementById('iasynRecetaToastZone');
+    if(!zona){
+      zona = document.createElement('div');
+      zona.id = 'iasynRecetaToastZone';
+      zona.className = 'iasyn-receta-toast-zone';
+      zona.setAttribute('aria-live','polite');
+      zona.setAttribute('aria-atomic','true');
+      document.body.appendChild(zona);
+    }
+
+    if(iasynRecetaToastTimer){
+      clearTimeout(iasynRecetaToastTimer);
+      iasynRecetaToastTimer = null;
+    }
+
+    const mapa = {
+      ok:{clase:'ok',icono:'✓',titulo:'Operación completada'},
+      warn:{clase:'warn',icono:'!',titulo:'Firma electrónica'},
+      info:{clase:'info',icono:'•',titulo:'Información'},
+      error:{clase:'error',icono:'×',titulo:'Atención requerida'}
+    };
+    const cfg = mapa[tipo] || mapa.info;
+    zona.innerHTML = '<div class="iasyn-receta-toast iasyn-receta-toast-' + cfg.clase + '" role="status">' +
+      '<div class="iasyn-receta-toast-icon">' + safe(cfg.icono) + '</div>' +
+      '<div><div class="iasyn-receta-toast-title">' + safe(cfg.titulo) + '</div>' +
+      '<div class="iasyn-receta-toast-text">' + safe(limpio) + '</div></div></div>';
+
+    const tarjeta = zona.firstElementChild;
+    iasynRecetaToastTimer = setTimeout(function(){
+      if(!tarjeta || !tarjeta.isConnected) return;
+      tarjeta.classList.add('iasyn-receta-toast-out');
+      setTimeout(function(){
+        if(tarjeta.isConnected) tarjeta.remove();
+        if(zona && !zona.children.length) zona.remove();
+      },220);
+    },3600);
   }
 
   function marcarEstadoRecetaGuardadaVisual(esActualizacion){
@@ -5255,6 +5333,12 @@ setVal('recRecomendaciones', recetaListaParaFormulario(receta.recomendaciones ||
             motivo:'POST_GUARDADO'
           });
 
+          if(estadoPostGuardado === 'NUEVA_VERSION'){
+            iasynRecetaToastPremium('ok','Nueva versión de la receta guardada. Ya puede firmarla electrónicamente.');
+          }else if(!estabaEditando){
+            iasynRecetaToastPremium('ok','Receta guardada correctamente. Ya puede firmarla electrónicamente.');
+          }
+
           /* Verificación asíncrona contra persistencia. No bloquea el guardado
              ni convierte un fallo de consulta de firma en fallo clínico. */
           Promise.resolve(auroRecetaFirmaSincronizarPersistencia({silencioso:true}))
@@ -5957,7 +6041,12 @@ setVal('recRecomendaciones', recetaListaParaFormulario(receta.recomendaciones ||
     if(!r) return alert('No se encontró la receta.');
 
     await auroRecetaResolverDiagnosticoPorRecetaGuardada(r);
+    const estadoFirmaAntesDeEditar = String(auroRecetaFirmaEstado(id)?.estado || '').toUpperCase();
     cargarRecetaEnFormulario(r);
+
+    if(estadoFirmaAntesDeEditar === 'FIRMADA'){
+      iasynRecetaToastPremium('warn','Esta receta tiene una versión firmada. Realice la corrección y guarde los cambios para habilitar una nueva versión.');
+    }
 
     window.scrollTo({
       top: el('recetas')?.offsetTop || 0,
@@ -6636,6 +6725,7 @@ cargarMedicosActivosReceta(false).then(function(){
     recetaFirmaProcesos.set(rid,{estado:'PREPARANDO',id_solicitud:'',id_atencion:doc.id_atencion});
     renderHistorialRecetas();
     mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Preparando receta para firma electrónica. Esta receta requiere 2 firmas digitales.', '');
+    iasynRecetaToastPremium('info','Receta enviada al proceso de firma electrónica.');
 
     try{
       const r=await auroRecetaFirmaPost('firmarDocumento',{
@@ -6715,6 +6805,7 @@ cargarMedicosActivosReceta(false).then(function(){
         await auroRecetaFirmaSincronizarPersistencia({silencioso:true});
         renderHistorialRecetas();
         mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Receta firmada electrónicamente y archivada en IASYN.', 'ok');
+        iasynRecetaToastPremium('ok','Receta firmada correctamente.');
         try{
           window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada',{
             detail:{tipo_documento:'RECETA',id_receta:id,id_documento_origen:id,id_atencion:idAtencion,id_solicitud:idSolicitud}
@@ -6774,6 +6865,7 @@ cargarMedicosActivosReceta(false).then(function(){
       recetaFirmaProcesos.delete(rid);
       renderHistorialRecetas();
       mostrarMensajeReceta('<i class="bi bi-x-circle me-1"></i> Firma de receta cancelada.', '');
+      iasynRecetaToastPremium('warn','Firma cancelada. La receta continúa disponible.');
       try{
         window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-cancelada',{
           detail:{tipo_documento:'RECETA',id_receta:rid,id_documento_origen:rid,id_atencion:proceso.id_atencion,id_solicitud:proceso.id_solicitud}
