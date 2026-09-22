@@ -34,6 +34,19 @@
   let recetaMedicosCargados = false;
   let recetaMedicosCargando = null;
 
+  /* IASYN RECETAS — FIRMA ELECTRÓNICA V1
+     Capa aditiva: no sustituye guardado, historial, Plan ni PDF oficial. */
+  const recetaFirmasPorDocumento = new Map();
+  const recetaFirmaProcesos = new Map();
+  let recetaFirmaSyncToken = 0;
+  let recetaFirmaSyncPromesa = null;
+  let recetaFirmaSyncClave = '';
+  let recetaFirmaSyncUltimoFin = 0;
+  let recetaFirmaSyncUltimoResultado = null;
+  const RECETA_FIRMA_SYNC_REUSO_MS = 1200;
+  let recetaFirmaLogoCache = null;
+  let recetaFirmaLogoPromesa = null;
+
   /*
     AUROSANAX RECETAS 2.5 - VISTA PACIENTE OFICIAL ÚNICA
     ---------------------------------------------------
@@ -398,39 +411,6 @@
 
   function auroRecetaCodigoNormalizado(codigo){
     return String(codigo || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  }
-
-  /* =====================================================
-     AUROSANAX RECETAS 3.10 - CIE-10 VISUAL ANTIRREGRESIVO
-     ---------------------------------------------------------
-     Capa EXCLUSIVAMENTE de presentación:
-     - Conserva el código canónico/compacto para comparación y persistencia.
-     - Muestra subcategorías CIE-10 con punto: N760 -> N76.0.
-     - Conserva categorías válidas de 3 caracteres: I10, I48, I64, etc.
-     - Compatibilidad histórica AUROSANAX: N720 se presenta como N72.
-     - No modifica id_atencion, diagnósticos, Plan, backend, Sheets,
-       Apps Script, guardado, edición, PDF ni contratos clínicos.
-  ===================================================== */
-  function auroRecetaCodigoCieVisual(codigo){
-    const compacto = auroRecetaCodigoNormalizado(codigo);
-    if(!compacto) return '';
-
-    if(compacto === 'N720') return 'N72';
-    if(compacto.length <= 3) return compacto;
-
-    return compacto.slice(0, 3) + '.' + compacto.slice(3);
-  }
-
-  function auroRecetaTextoDiagnosticoVisual(texto){
-    const raw = String(texto || '').trim();
-    if(!raw) return '';
-
-    return raw.replace(
-      /^([A-Za-z][0-9]{2}(?:\.?[0-9A-Za-z]+)?)(\s*[-–:]\s*)/,
-      function(_, codigo, separador){
-        return auroRecetaCodigoCieVisual(codigo) + separador;
-      }
-    );
   }
 
   function auroRecetaDiagnosticoGenerico(txt){
@@ -1031,7 +1011,7 @@
       #recetas .auro-rx-secondary-block textarea{
         min-height:82px!important;
         background:#fff!important;
-      }
+}
       #recetas .auro-rx-internal-label{
         display:inline-flex!important;
         align-items:center!important;
@@ -1521,36 +1501,6 @@
         if(guardar){
           guardar.setAttribute('data-auro-receta-action','guardar');
         }
-
-
-        let firmar = el('btnFirmaElectronicaReceta');
-        if(!firmar){
-          firmar = document.createElement('button');
-          firmar.id = 'btnFirmaElectronicaReceta';
-          firmar.type = 'button';
-          firmar.className = 'btn-soft';
-          firmar.setAttribute('data-auro-receta-action','firma-electronica');
-          firmar.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
-          if(pdf && pdf.parentNode){
-            pdf.insertAdjacentElement('afterend', firmar);
-          }else{
-            acciones.appendChild(firmar);
-          }
-        }
-
-        /*
-          AUROSANAX RECETAS 3.12.1 - ENLACE ÚNICO DEL BOTÓN DE FIRMA
-          ---------------------------------------------------------
-          El botón puede existir previamente en el DOM (por Index o por una
-          renderización anterior). El handler se enlaza SIEMPRE al propietario
-          real de la acción: Recetas. Así no depende de quién creó visualmente
-          el botón y no se duplica addEventListener.
-        */
-        firmar.type = 'button';
-        firmar.setAttribute('data-auro-receta-action','firma-electronica');
-        firmar.onclick = auroRecetaFirmarElectronicaActual;
-
-        auroRecetaSincronizarEstadoFirmaVisual();
       }
     }
 
@@ -1628,67 +1578,14 @@
     });
   }
 
-  /* =====================================================
-     AUROSANAX RECETAS 3.9 - BLINDAJE INDICACIONES PLAN → RECETA
-     ---------------------------------------------------------
-     Intervención quirúrgica y antirregresiva:
-     - Preserva el JSON canónico existente de Recetas.
-     - Si la sincronización Plan → Receta entrega un medicamento
-       estructurado sin `ind`, recupera únicamente esa indicación
-       desde el medicamento equivalente del Plan de la MISMA atención.
-     - Nunca sustituye una indicación ya escrita en Recetas.
-     - No modifica Plan, visor, PDF, CSS, responsive, IDs, endpoints,
-       Google Sheets, Apps Script ni contratos de impresión.
-  ===================================================== */
-  function auroRecetaBlindarIndicacionesDesdePlan(listaActual, listaPlan){
-    const actual = Array.isArray(listaActual) ? listaActual : [];
-    const plan = Array.isArray(listaPlan) ? listaPlan : [];
-    if(!actual.length || !plan.length) return actual;
-
-    function claveMedicamento(m){
-      const x = normalizarMedicamentoRecetaObjeto(m || {});
-      return [x.med, x.pres, x.via]
-        .map(recetaNormalizarPlano)
-        .filter(Boolean)
-        .join('|');
-    }
-
-    return actual.map(function(item, index){
-      if(!item || typeof item !== 'object' || item.texto) return item;
-
-      const actualNorm = normalizarMedicamentoRecetaObjeto(item);
-      if(String(actualNorm.ind || '').trim()) return item;
-
-      const clave = claveMedicamento(actualNorm);
-      const candidato = plan.find(function(m){
-        return clave && claveMedicamento(m) === clave;
-      }) || plan[index] || null;
-
-      if(!candidato) return item;
-
-      const planNorm = normalizarMedicamentoRecetaObjeto(candidato);
-      const indicacionPlan = String(planNorm.ind || '').trim();
-      if(!indicacionPlan) return item;
-
-      return Object.assign({}, item, {ind:indicacionPlan});
-    });
-  }
-
   function medicamentoRecetaParaGuardarJSON(textoFormulario){
     const actual = String(textoFormulario || '').trim();
-    const medsPlan = recetaMedicamentosPlanActualesSeguros();
 
     if(medicamentoRecetaEsJSON(actual)){
-      try{
-        let listaActual = JSON.parse(actual);
-        if(!Array.isArray(listaActual)) listaActual = [listaActual];
-
-        const blindada = auroRecetaBlindarIndicacionesDesdePlan(listaActual, medsPlan);
-        return JSON.stringify(blindada);
-      }catch(e){
-        return actual;
-      }
+      return actual;
     }
+
+    const medsPlan = recetaMedicamentosPlanActualesSeguros();
 
     if(medsPlan.length){
       return JSON.stringify(medsPlan);
@@ -2090,12 +1987,12 @@
     const lista = auroRecetaDiagnosticosNormalizados(r?.diagnosticos || []);
 
     if(!lista.length){
-      return `<b>${safe(auroRecetaTextoDiagnosticoVisual(r?.diagnostico || '—'))}</b>`;
+      return `<b>${safe(r?.diagnostico || '—')}</b>`;
     }
 
     return `<div class="auro-rx-diagnosticos-lista">${lista.map(function(dx){
       return `<div class="auro-rx-diagnostico-linea ${dx.principal ? 'principal' : ''}">
-        <b>${safe(auroRecetaTextoDiagnosticoVisual(dx.texto || '—'))}</b>
+        <b>${safe(dx.texto || '—')}</b>
       </div>`;
     }).join('')}</div>`;
   }
@@ -2114,10 +2011,10 @@
 
   function auroRecetaDiagnosticoCabeceraPacienteHTML(r){
     const lista = auroRecetaDiagnosticosListaImpresion(r);
-    if(!lista.length) return `<b>${safe(auroRecetaTextoDiagnosticoVisual(r?.diagnostico || '—'))}</b>`;
+if(!lista.length) return `<b>${safe(r?.diagnostico || '—')}</b>`;
 
     const principal = lista.find(dx => dx.principal) || lista[0];
-    return `<b>${safe(auroRecetaTextoDiagnosticoVisual(principal?.texto || r?.diagnostico || '—'))}</b>`;
+    return `<b>${safe(principal?.texto || r?.diagnostico || '—')}</b>`;
   }
 
   function auroRecetaTipoDiagnosticoVisual(valor){
@@ -2144,7 +2041,7 @@
       jerarquia = dx.principal ? 'Principal' : 'Asociado';
     }else{
       codigo = String(r?.cie10 || r?.diagnostico_cie10 || '').trim();
-      descripcion = auroRecetaTextoDiagnosticoVisual(r?.diagnostico || '');
+      descripcion = String(r?.diagnostico || '').trim();
     }
 
     if(!codigo && !descripcion) return '';
@@ -2153,7 +2050,7 @@
       <div class="auro-receta-section auro-rx-diagnostico-unico-section">
         <h4>Diagnóstico de la atención</h4>
         <div class="auro-rx-diagnostico-unico">
-          ${codigo ? `<strong>${safe(auroRecetaCodigoCieVisual(codigo))}</strong>` : ''}
+          ${codigo ? `<strong>${safe(codigo)}</strong>` : ''}
           ${jerarquia ? `<span class="auro-rx-dx-jerarquia">${safe(jerarquia)}</span>` : ''}
           ${tipo ? `<span class="auro-rx-dx-tipo ${recetaNormalizarPlano(tipo) === 'definitivo' ? 'definitivo' : ''}">${safe(tipo)}</span>` : ''}
           ${descripcion ? `<span class="auro-rx-diagnostico-unico-name">${safe(descripcion)}</span>` : ''}
@@ -2176,7 +2073,7 @@
             return `
               <div class="auro-rx-diagnostico-card ${dx.principal ? 'principal' : 'asociado'}">
                 <div class="auro-rx-diagnostico-card-head">
-                  <strong>${safe(auroRecetaCodigoCieVisual(dx.codigo) || 'S/C')}</strong>
+                  <strong>${safe(dx.codigo || 'S/C')}</strong>
                   <span class="auro-rx-dx-jerarquia">${dx.principal ? 'Principal' : 'Asociado'}</span>
                   ${tipo ? `<span class="auro-rx-dx-tipo ${recetaNormalizarPlano(tipo) === 'definitivo' ? 'definitivo' : ''}">${safe(tipo)}</span>` : ''}
                 </div>
@@ -2431,13 +2328,6 @@
         id_paciente: receta.id_paciente || '',
         id_historia: receta.id_historia || '',
         id_medico: receta.id_medico || obtenerIdMedicoReal() || '',
-        /* Snapshot legible persistido: la firma no dependerá de la caché del navegador. */
-        paciente_nombre: receta.paciente_nombre || '',
-        paciente_cedula: receta.paciente_cedula || '',
-        paciente_telefono: receta.paciente_telefono || '',
-        paciente_edad: receta.paciente_edad || '',
-        medico: receta.medico || '',
-        codigo_medico: receta.codigo_medico || '',
         fecha_receta: receta.fecha_receta || fechaHoyReceta(),
         diagnostico_cie10: receta.diagnostico_cie10 || '',
         diagnostico: receta.diagnostico || '',
@@ -2455,7 +2345,6 @@
         creado_en: receta.creado_en || fechaHoraEcuadorISO(),
         actualizado_en: fechaHoraEcuadorISO(),
         id_atencion: receta.id_atencion || obtenerIdAtencionActivaSeguro() || '',
-        numero_consulta: receta.numero_consulta || '',
         forzar_nueva_receta: receta.forzar_nueva_receta || 'NO',
         token: auroRecetaTokenControlClinico()
       };
@@ -2621,11 +2510,9 @@
       id_paciente: r.id_paciente || r.paciente_id || '',
       id_historia: r.id_historia || '',
       id_atencion: r.id_atencion || '',
-      numero_consulta: r.numero_consulta || '',
       id_medico: r.id_medico || obtenerIdMedicoReal(),
       codigo_medico: r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
-      /* AUROSANAX 3.17: nombre persistido autoritativo; evita caché distinta por equipo. */
-      paciente_nombre: r.paciente_nombre || r.nombre_paciente || r.paciente || r.nombre || '',
+      paciente_nombre: r.paciente_nombre || r.paciente || r.nombre || '',
       paciente_cedula: r.paciente_cedula || r.cedula || r.numero_documento || '',
       paciente_telefono: r.paciente_telefono || r.telefono || r.whatsapp || '',
       fecha_receta: r.fecha_receta || r.fecha || fechaHoyReceta(),
@@ -2717,8 +2604,7 @@
       const tiempoLocal = recetaTiempoSincronizacion(local);
       const tiempoRemoto = recetaTiempoSincronizacion(remota);
 
-      /* A igual versión temporal, la fuente persistida remota desempata. */
-      if(tiempoRemoto >= tiempoLocal){
+      if(tiempoRemoto > tiempoLocal){
         mapa.set(id, Object.assign({}, local, remota));
       }else{
         mapa.set(id, Object.assign({}, remota, local));
@@ -2744,7 +2630,7 @@
 
       recetasSheetsCargando = true;
 
-      const res = await fetch(API_URL + '?accion=listarRecetas&_=' + Date.now(), {method:'GET', cache:'no-store'});
+      const res = await fetch(API_URL + '?accion=listarRecetas&_=' + Date.now());
       const data = await res.json();
       const remotas = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
 
@@ -2843,9 +2729,6 @@
     recetaNuevaForzada = false;
     recetaEditandoId = null;
     actualizarBotonGuardarReceta();
-    setTimeout(function(){
-      auroRecetaSincronizarFirmaPersistenteActual(false);
-    }, 0);
     auroRecetaActualizarCabeceraClinicaPremium();
   }
 
@@ -3128,7 +3011,7 @@
     recetaNuevaForzada = true;
     recetaModoTrabajo = 'nueva';
     auroRecetaMostrarPreview(false);
-    recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
+recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
     recetaEstadoVisual = '';
     recetaBloqueoPostGuardadoHasta = 0;
@@ -3177,7 +3060,6 @@
 
     recetaAtencionActualId = actual;
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
-    auroRecetaSincronizarEstadoFirmaVisual();
   }
 
   window.obtenerDatosReceta = function(){
@@ -4109,7 +3991,7 @@
           <div><span>Edad</span><b>${safe(edad)}</b></div><div><span>WhatsApp</span><b>${safe(telefono)}</b></div>
           <div><span>ID paciente</span><b>${safe(idPaciente)}</b></div><div><span>ID atención</span><b>${safe(idAtencion)}</b></div>
           <div><span>ID receta</span><b>${safe(idReceta)}</b></div><div><span>ID médico</span><b>${safe(idMedico)}</b></div>
-          <div><span>CIE-10</span><b>${safe(auroRecetaCodigoCieVisual(r.cie10 || r.diagnostico_cie10) || '—')}</b></div><div><span>Estado</span><b>${safe(r.estado || 'Emitida')}</b></div>
+          <div><span>CIE-10</span><b>${safe(r.cie10 || '—')}</b></div><div><span>Estado</span><b>${safe(r.estado || 'Emitida')}</b></div>
           <div style="grid-column:1/-1"><span>Diagnóstico</span>${diagnosticosRepresentacion}</div>`
       : `
           <div class="auro-rx-dato auro-rx-paciente"><span>Paciente</span><b>${safe(nombre)}</b></div>
@@ -4129,7 +4011,7 @@
           .auro-receta-header{border-bottom:3px solid #8b1e5a;padding:0 0 11px;margin-bottom:10px;display:grid;grid-template-columns:auto 1fr auto;gap:14px;align-items:center;}
           .auro-receta-logo-wrap{width:76px;height:76px;display:grid;place-items:center;border:1px solid #ead5e2;border-radius:16px;background:#fff;overflow:hidden}.auro-receta-logo-wrap:empty,.auro-receta-logo-wrap.sin-logo{display:none}.auro-receta-logo{max-width:100%;max-height:100%;object-fit:contain;display:block}
           .auro-receta-brand h2{margin:0;color:#8b1e5a;font-weight:950;letter-spacing:.04em;font-size:22px;line-height:1.05}.auro-receta-brand small{color:#6b7280;font-weight:750;font-size:11px;line-height:1.3;display:block;margin-top:3px}
-          .auro-receta-title{text-align:right;color:#111827;min-width:180px}.auro-receta-title b{display:block;font-size:18px;letter-spacing:.04em}.auro-receta-title small{display:block;color:#6b7280;font-size:10.5px;margin-top:2px}
+.auro-receta-title{text-align:right;color:#111827;min-width:180px}.auro-receta-title b{display:block;font-size:18px;letter-spacing:.04em}.auro-receta-title small{display:block;color:#6b7280;font-size:10.5px;margin-top:2px}
           .auro-receta-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;background:#fff7fb;border:1px solid #fbcfe8;border-radius:16px;padding:9px;margin-bottom:10px}.auro-receta-grid div{font-size:11.5px;border:1px solid #f1e4ec;background:#fff;border-radius:10px;padding:5px 7px;min-width:0}.auro-receta-grid span{display:block;color:#8b1e5a;font-weight:850;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:1px}.auro-receta-grid b{display:block;color:#111827;font-size:12px;line-height:1.2;overflow-wrap:anywhere;word-break:normal}
           .modo-paciente .auro-receta-grid{grid-template-columns:repeat(12,minmax(0,1fr));align-items:start;gap:0;background:#fff;border:0;border-bottom:1px solid #cbd5e1;border-radius:0;padding:0 0 6px;margin-bottom:6px}
           .modo-paciente .auro-receta-grid .auro-rx-dato{display:flex;flex-direction:column;justify-content:flex-start;min-height:36px;border:0;border-right:1px solid #e5e7eb;border-radius:0;background:#fff;padding:4px 7px;min-width:0}
@@ -4202,16 +4084,6 @@
       </div>`;
   }
 
-
-  /* =====================================================
-     AUROSANAX RECETA 32 - AJUSTE VISUAL A4 QUIRÚRGICO
-     ---------------------------------------------------------
-     Solo presentación: centra verticalmente medicamento / presentación /
-     cantidad frente a indicaciones extensas y compacta cabecera y
-     diagnósticos para recuperar espacio útil sin invadir firma/sello.
-     NO modifica guardado, edición, Plan, IDs, anti-duplicidad, atención,
-     backend, Google Sheets, Apps Script ni contratos clínicos.
-  ===================================================== */
 
   /*
      AUROSANAX RECETAS 2.7 - ORIGINAL / COPIA A4 FINAL
@@ -4301,16 +4173,16 @@
 
         .auro-media-receta .auro-receta-header{
           grid-template-columns:auto 1fr auto!important;
-          gap:6px!important;
-          padding:0 0 3px!important;
-          margin:0 0 3px!important;
+          gap:8px!important;
+          padding:0 0 5px!important;
+          margin:0 0 5px!important;
           border-bottom-width:2px!important;
           flex:0 0 auto!important;
         }
 
         .auro-media-receta .auro-receta-logo-wrap{
-          width:42px!important;
-          height:42px!important;
+          width:46px!important;
+          height:46px!important;
           border-radius:9px!important;
         }
 
@@ -4320,9 +4192,9 @@
         }
 
         .auro-media-receta .auro-receta-brand small{
-          font-size:10.5px!important;
-          line-height:1.04!important;
-          margin-top:0!important;
+          font-size:11.5px!important;
+          line-height:1.10!important;
+          margin-top:1px!important;
         }
 
         .auro-media-receta .auro-receta-title{
@@ -4330,8 +4202,8 @@
         }
 
         .auro-media-receta .auro-receta-title b{
-          font-size:16.4px!important;
-          line-height:1.02!important;
+          font-size:17.1px!important;
+          line-height:1.04!important;
         }
 
         .auro-media-receta .auro-receta-title small{
@@ -4342,8 +4214,8 @@
         .auro-media-receta .modo-paciente .auro-receta-grid{
           grid-template-columns:repeat(12,minmax(0,1fr))!important;
           gap:0!important;
-          padding:0 0 2px!important;
-          margin:0 0 3px!important;
+          padding:0 0 4px!important;
+          margin:0 0 4px!important;
           border:0!important;
           border-bottom:1px solid #cbd5e1!important;
           border-radius:0!important;
@@ -4352,8 +4224,8 @@
         }
 
         .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-dato{
-          padding:1px 5px!important;
-          min-height:25px!important;
+          padding:2px 5px!important;
+          min-height:28px!important;
           border:0!important;
           border-right:1px solid #e5e7eb!important;
           border-radius:0!important;
@@ -4389,8 +4261,8 @@
         }
 
         .auro-media-receta .auro-rx-alergias-linea{
-          margin:0 0 3px!important;
-          padding:2px 6px!important;
+          margin:0 0 4px!important;
+          padding:3px 6px!important;
           gap:5px!important;
           border-radius:6px!important;
           flex:0 0 auto!important;
@@ -4406,15 +4278,15 @@
         }
 
         .auro-media-receta .auro-receta-section{
-          margin-top:3px!important;
+          margin-top:4px!important;
           flex:0 0 auto!important;
         }
 
         .auro-media-receta .auro-receta-section h4{
-          margin:0 0 2px!important;
-          padding-bottom:1px!important;
-          font-size:12.2px!important;
-          line-height:1.05!important;
+          margin:0 0 3px!important;
+          padding-bottom:2px!important;
+          font-size:12.8px!important;
+          line-height:1.10!important;
         }
 
         .auro-media-receta .auro-receta-box{
@@ -4433,52 +4305,21 @@
         .auro-media-receta .auro-rx-diagnostico-unico-section{
           width:fit-content!important;
           max-width:100%!important;
-          margin-top:2px!important;
+          margin-top:3px!important;
         }
 
         .auro-media-receta .auro-rx-diagnostico-unico{
-          padding:1px 0!important;
+          padding:2px 0!important;
           gap:4px!important;
         }
 
         .auro-media-receta .auro-rx-diagnostico-unico strong{
-          font-size:8.3px!important;
+          font-size:8.7px!important;
         }
 
         .auro-media-receta .auro-rx-diagnostico-unico-name{
-          font-size:7.5px!important;
-          line-height:1.06!important;
-        }
-
-        /* Diagnósticos compactos: conserva código + descripción y reduce
-           únicamente su huella vertical para proteger el área de firma. */
-        .auro-media-receta .auro-rx-diagnosticos-section{
-          margin-top:2px!important;
-        }
-        .auro-media-receta .auro-rx-diagnosticos-section h4{
-          margin-bottom:2px!important;
-          padding-bottom:1px!important;
-          font-size:9.8px!important;
-          line-height:1.04!important;
-        }
-        .auro-media-receta .auro-rx-diagnostico-card{
-          padding:3px 5px 3px 0!important;
-        }
-        .auro-media-receta .auro-rx-diagnostico-card-head{
-          gap:4px!important;
-          margin-bottom:1px!important;
-        }
-        .auro-media-receta .auro-rx-diagnostico-card-head strong{
-          font-size:8.4px!important;
-        }
-        .auro-media-receta .auro-rx-dx-jerarquia,
-        .auro-media-receta .auro-rx-dx-tipo{
-          font-size:6.6px!important;
-          line-height:1!important;
-        }
-        .auro-media-receta .auro-rx-diagnostico-card-name{
-          font-size:7.3px!important;
-          line-height:1.06!important;
+          font-size:7.9px!important;
+          line-height:1.12!important;
         }
 
         .auro-media-receta .auro-rx-table-wrap{
@@ -4508,19 +4349,6 @@
           word-break:normal!important;
         }
 
-        /* AUROSANAX RECETA 32 - alineación visual A4 exclusivamente.
-           Cuando Indicaciones crece a varias líneas, las demás columnas
-           se centran verticalmente dentro de la misma fila. */
-        .auro-media-receta .auro-rx-table td.auro-rx-col-num,
-        .auro-media-receta .auro-rx-table td.auro-rx-col-med,
-        .auro-media-receta .auro-rx-table td.auro-rx-col-pres,
-        .auro-media-receta .auro-rx-table td.auro-rx-col-cant{
-          vertical-align:middle!important;
-        }
-        .auro-media-receta .auro-rx-table td.auro-rx-col-ind{
-          vertical-align:top!important;
-        }
-
         .auro-media-receta .auro-rx-col-med strong{
           font-size:10.8px!important;
           line-height:1.10!important;
@@ -4534,7 +4362,7 @@
 
         .auro-media-receta .auro-receta-footer{
           margin-top:auto!important;
-          padding-top:4px!important;
+          padding-top:5px!important;
           gap:12px!important;
           grid-template-columns:1.1fr .9fr!important;
           align-items:start!important;
@@ -5148,13 +4976,11 @@
     auroRecetaNormalizarMedicamentosEdicionSiSeguro();
     const r = window.obtenerDatosReceta();
     const paciente = auroRecetaCompletarPacienteParaImpresion(r);
-    const atencionActiva = obtenerAtencionActivaSegura();
     return {
       id_receta: recetaEditandoId || crearIdReceta(medicoAtencion?.id_medico),
       id_paciente: r.id_paciente || paciente.id_paciente || paciente.id || '',
       id_historia: r.id_historia || '',
       id_atencion: r.id_atencion || obtenerIdAtencionActivaSeguro() || '',
-      numero_consulta: String(atencionActiva?.numero_consulta || '').trim(),
       id_medico: r.id_medico || obtenerIdMedicoReal(),
       codigo_medico: r.codigo_medico || obtenerCodigoCortoMedico(r.id_medico || obtenerIdMedicoReal()),
       paciente_nombre: paciente.nombre || '',
@@ -5178,9 +5004,6 @@
     recetaModoTrabajo = 'edicion';
     recetaEditandoId = receta.id_receta || receta.id || '';
     recetaAtencionActualId = receta.id_atencion || obtenerIdAtencionActivaSeguro() || '';
-    setTimeout(function(){
-      auroRecetaSincronizarFirmaPersistenteActual(false);
-    }, 0);
     setVal('recFecha', receta.fecha_receta || receta.fecha || fechaHoyReceta());
     setVal('recMedico', receta.medico || obtenerNombreMedicoReal());
     setVal('recCie10', receta.diagnostico_cie10 || receta.cie10 || '');
@@ -5188,7 +5011,7 @@
     setVal('recDiagnostico', receta.diagnostico || receta.motivo || '');
     setVal('recMedicamento', receta.medicamento || receta.medicamentos || '');
     setVal('recIndicaciones', recetaListaParaFormulario(receta.indicaciones || ''));
-    setVal('recRecomendaciones', recetaListaParaFormulario(receta.recomendaciones || receta.observaciones || ''));
+setVal('recRecomendaciones', recetaListaParaFormulario(receta.recomendaciones || receta.observaciones || ''));
     if(!receta.id_atencion) receta.id_atencion = obtenerIdAtencionActivaSeguro();
     actualizarBotonGuardarReceta();
     auroRecetaActualizarCabeceraClinicaPremium();
@@ -5397,47 +5220,58 @@
       }
 
       if(resultado && resultado.success){
-        /*
-          La corrección ya quedó persistida: sale del modo de edición temporal.
-          A partir de aquí la firma evalúa únicamente la versión GUARDADA.
-        */
-        if(estabaEditando){
-          recetaModoTrabajo = 'lectura';
-          recetaNuevaForzada = false;
-          recetaEditandoId = null;
-        }
-
         marcarEstadoRecetaGuardadaVisual(estabaEditando);
 
         /*
-          AUROSANAX RECETAS 3.16 - PREPARACIÓN RÁPIDA AISLADA
-          ----------------------------------------------------
-          El backend ya confirmó el guardado. Se prepara en memoria la versión
-          exacta recién guardada SOLO para el próximo recorrido de firma.
-          Esta preparación NO participa en el cálculo visual/persistente del
-          estado del botón y, por tanto, no puede convertir por sí sola
-          FIRMADA / NUEVA_VERSION / SIN_FIRMA.
-        */
-        const registroFirmaRapida = leerRecetasStorage().find(function(item){
-          return (
-            String(item.id_atencion || '').trim() === String(r.id_atencion || '').trim() &&
-            String(item.id_receta || '').trim() === String(r.id_receta || '').trim()
-          );
-        });
-        auroRecetaPrepararFirmaRapidaPostGuardado_(registroFirmaRapida || null);
+          IASYN FIX ANTIRREGRESIVO — ESTADO DE FIRMA POST-GUARDADO
+          ---------------------------------------------------------
+          El guardado clínico ya fue confirmado por el backend. En este punto
+          Recetas debe publicar inmediatamente el nuevo estado documental, sin
+          depender de que el usuario abra "PDF receta" para provocar un refresco.
 
-        /*
-          Firma versionada 3.14:
-          después de guardar una corrección se invalida la caché persistente y
-          se compara la huella del documento ACTUAL con todas sus firmas.
-          Sin cambios reales => Ver receta firmada ✓.
-          Con cambios reales => Firmar nueva versión.
+          Reglas:
+          - receta corregida que ya tenía firma -> NUEVA_VERSION;
+          - receta sin firma previa -> SIN_FIRMA;
+          - no crea solicitudes de firma, no toca PDF ni motor P12/BER;
+          - la sincronización remota posterior sigue siendo la autoridad final.
         */
-        auroRecetaFirmaPersistenteInvalidar(r.id_atencion, r.id_receta);
-        setTimeout(function(){
-          auroRecetaSincronizarFirmaPersistenteActual(true);
-          auroRecetaSincronizarHistorialFirmasPersistentes(true);
-        }, 0);
+        const idFirmaPostGuardado = String(r.id_receta || '').trim();
+        if(idFirmaPostGuardado){
+          const firmaAnterior = recetaFirmasPorDocumento.get(idFirmaPostGuardado) || null;
+          const teniaFirmaAnterior = !!(
+            firmaAnterior &&
+            (firmaAnterior.documento || String(firmaAnterior.estado || '').toUpperCase()==='FIRMADA')
+          );
+          const estadoPostGuardado = estabaEditando && teniaFirmaAnterior
+            ? 'NUEVA_VERSION'
+            : 'SIN_FIRMA';
+
+          recetaFirmasPorDocumento.set(idFirmaPostGuardado,{
+            estado:estadoPostGuardado,
+            documento:teniaFirmaAnterior ? firmaAnterior.documento : null,
+            sha_actual:'',
+            version_documento:String(r.actualizado_en || r.creado_en || '').trim(),
+            error:''
+          });
+
+          renderHistorialRecetas();
+          auroRecetaFirmaEmitirCambio(idFirmaPostGuardado,estadoPostGuardado,{
+            id_atencion:String(r.id_atencion || '').trim(),
+            motivo:'POST_GUARDADO'
+          });
+
+          /* Verificación asíncrona contra persistencia. No bloquea el guardado
+             ni convierte un fallo de consulta de firma en fallo clínico. */
+          Promise.resolve(auroRecetaFirmaSincronizarPersistencia({silencioso:true}))
+            .then(function(){
+              const confirmado=auroRecetaFirmaEstado(idFirmaPostGuardado);
+              auroRecetaFirmaEmitirCambio(idFirmaPostGuardado,confirmado.estado||estadoPostGuardado,{
+                id_atencion:String(r.id_atencion || '').trim(),
+                motivo:'POST_GUARDADO_CONFIRMADO'
+              });
+            })
+            .catch(function(){});
+        }
       }else{
         actualizarBotonGuardarReceta();
       }
@@ -5991,8 +5825,8 @@
         <td class="auro-receta-consulta-td"><span class="auro-receta-consulta-badge">${r.__consulta ? 'N.º ' + safe(r.__consulta) : '—'}</span></td>
         <td>${safe(pacienteCorto)}<br><small class="text-muted">${safe(r.__paciente_cedula || '')}</small></td>
         <td class="auro-receta-medico-cell"><b>${safe(r.__especialidad || '—')}</b><small>${safe(r.__medico_nombre || '—')}</small></td>
-        <td class="auro-receta-dx-cell"><b>${safe(auroRecetaCodigoCieVisual(r.diagnostico_cie10) || '—')}</b><small>${safe(auroRecetaTextoDiagnosticoVisual(diagnostico))}</small></td>
-        <td><span class="badge-auro ${String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok'}">${safe(r.estado || 'Emitida')}</span></td>
+        <td class="auro-receta-dx-cell"><b>${safe(r.diagnostico_cie10 || '—')}</b><small>${safe(diagnostico)}</small></td>
+        <td><span class="badge-auro ${String(r.estado).toLowerCase().includes('anulada') ? 'badge-danger' : 'badge-ok'}">${safe(r.estado || 'Emitida')}</span>${auroRecetaFirmaResumenHTML(r)}</td>
         <td>
           <button type="button" class="btn-action primary auro-receta-actions-trigger" onclick="toggleAccionesReceta('${menuId}')"><i class="bi bi-three-dots"></i> Acciones</button>
         </td>
@@ -6006,6 +5840,7 @@
               <button type="button" class="btn-action soft" onclick="verRecetaEmitida('${id}')"><i class="bi bi-eye"></i> Vista administrativa</button>
               <button type="button" class="btn-action soft" onclick="editarRecetaEmitida('${id}')"><i class="bi bi-pencil-square"></i> Editar receta</button>
               <button type="button" class="btn-action success" onclick="pdfRecetaEmitida('${id}')"><i class="bi bi-file-earmark-medical"></i> Vista paciente / imprimir</button>
+              ${auroRecetaFirmaBotonesHTML(r,false)}
             </div>
           </div>
         </td>
@@ -6043,15 +5878,17 @@
             '<div><b>' + safe(fechaVisual(r.fecha_receta)) + '</b><br><small class="text-muted">' + idSeguro + '</small></div>' +
             '<span class="badge-auro ' + estadoClase + '">' + safe(r.estado || 'Emitida') + '</span>' +
           '</div>' +
+          auroRecetaFirmaResumenHTML(r) +
           '<div class="small"><b>Consulta:</b> ' + (r.__consulta ? 'N.º ' + safe(r.__consulta) : '—') + '</div>' +
           '<div class="small"><b>Paciente:</b> ' + safe(pacienteCorto) + (r.__paciente_cedula ? '<br><span class="text-muted">' + safe(r.__paciente_cedula) + '</span>' : '') + '</div>' +
           '<div class="small" style="margin-top:6px;"><b>Especialidad / médico:</b><br><span style="font-weight:900;color:#111827;">' + safe(r.__especialidad || '—') + '</span><br><span class="text-muted">' + safe(r.__medico_nombre || '—') + '</span></div>' +
-          '<div class="small"><b>CIE-10:</b> ' + safe(auroRecetaCodigoCieVisual(r.diagnostico_cie10) || '—') + '</div>' +
-          '<div class="small"><b>Diagnóstico:</b> ' + safe(auroRecetaTextoDiagnosticoVisual(diagnostico)) + '</div>' +
+          '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || '—') + '</div>' +
+          '<div class="small"><b>Diagnóstico:</b> ' + safe(diagnostico) + '</div>' +
           '<div class="d-grid gap-2 mt-2">' +
             '<button type="button" class="btn-action soft" onclick="verRecetaEmitida(\'' + idSeguro + '\')"><i class="bi bi-eye me-2"></i>Vista administrativa</button>' +
             '<button type="button" class="btn-action soft" onclick="editarRecetaEmitida(\'' + idSeguro + '\')"><i class="bi bi-pencil-square me-2"></i>Editar receta</button>' +
             '<button type="button" class="btn-action success" onclick="pdfRecetaEmitida(\'' + idSeguro + '\')"><i class="bi bi-file-earmark-medical me-2"></i>Vista paciente / imprimir</button>' +
+            auroRecetaFirmaBotonesHTML(r,true) +
           '</div>' +
         '</div>';
       }).join('');
@@ -6179,6 +6016,7 @@
           recetasPaginaActual = 1;
           auroRecetaSincronizarModoPrimeraReceta();
           renderHistorialRecetas();
+          Promise.resolve(auroRecetaFirmaSincronizarPersistencia({silencioso:true})).catch(()=>{});
         }
       }catch(e){}
     }, 250);
@@ -6198,66 +6036,6 @@
     window[nombre] = nueva;
   }
 
-  /* =====================================================
-     AUROSANAX RECETAS 3.17 - PREPARACIÓN CANÓNICA DE FIRMA AL CAMBIAR ATENCIÓN
-     ---------------------------------------------------------------------------
-     Objetivo antirregresivo:
-     - Reutilizar silenciosamente la MISMA preparación documental que ya
-       ocurría al pulsar "PDF receta", sin abrir PDF ni modificar Plan.
-     - Refrescar la receta persistida de la atención actual desde Sheets.
-     - Completar el diagnóstico de esa misma receta cuando corresponda.
-     - Recalcular después el estado de firma de Recetas y Plan.
-     - Proteger contra respuestas tardías de una atención anterior.
-  ===================================================== */
-  let auroRecetaSecuenciaPreparacionFirmaAtencion = 0;
-
-  async function auroRecetaPrepararFirmaCanonicaPorAtencion(idAtencion){
-    const esperado = String(idAtencion || '').trim();
-    if(!esperado) return null;
-
-    const miSecuencia = ++auroRecetaSecuenciaPreparacionFirmaAtencion;
-
-    try{
-      /* Mismo refresco autoritativo utilizado por auroRecetaDatosOficialesAtencionActual(). */
-      await cargarRecetasDesdeSheets(true);
-
-      const actualTrasCarga = String(obtenerIdAtencionActivaSeguro() || '').trim();
-      if(
-        miSecuencia !== auroRecetaSecuenciaPreparacionFirmaAtencion ||
-        actualTrasCarga !== esperado
-      ){
-        return null;
-      }
-
-      const guardada = buscarRecetaActivaPorAtencion(esperado);
-      if(guardada){
-        /* Mismo enriquecimiento canónico utilizado antes de construir el PDF oficial. */
-        await auroRecetaResolverDiagnosticoPorRecetaGuardada(guardada);
-      }
-
-      const actualTrasDiagnostico = String(obtenerIdAtencionActivaSeguro() || '').trim();
-      if(
-        miSecuencia !== auroRecetaSecuenciaPreparacionFirmaAtencion ||
-        actualTrasDiagnostico !== esperado
-      ){
-        return null;
-      }
-
-      /* Recetas actualiza su propio reflejo persistente. */
-      try{ await auroRecetaSincronizarFirmaPersistenteActual(false); }catch(e){}
-
-      /* Plan 37 conserva la autoridad de su botón; solo se le pide recalcular. */
-      if(typeof window.auroPlanSincronizarEstadoFirmaReceta === 'function'){
-        try{ await window.auroPlanSincronizarEstadoFirmaReceta(); }catch(e){}
-      }
-
-      return guardada || null;
-    }catch(error){
-      console.warn('AUROSANAX RECETAS 3.17: preparación canónica de firma no disponible', error);
-      return null;
-    }
-  }
-
   function manejarCambioAtencionReceta(evento){
     const idEvento = String(
       evento?.detail?.id_atencion ||
@@ -6275,19 +6053,18 @@
 
     recetaAtencionActualId = idEvento;
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
+
+    /* ANTIRRESPUESTA TARDÍA:
+       invalida cualquier lectura de firma iniciada por la atención anterior. */
+    recetaFirmaSyncToken++;
+
     setTimeout(function(){
       try{
         auroRecetaSincronizarModoPrimeraReceta();
         auroRecetaActualizarCabeceraClinicaPremium();
+        Promise.resolve(auroRecetaFirmaSincronizarPersistencia({silencioso:true})).catch(()=>{});
       }catch(e){}
     }, 0);
-
-    /*
-      No abre PDF y no firma nada. Solo deja lista la representación canónica
-      de la receta guardada para que Plan detecte automáticamente FIRMADA vs
-      NUEVA_VERSION con la misma huella que ya funcionaba tras pulsar PDF.
-    */
-    auroRecetaPrepararFirmaCanonicaPorAtencion(idEvento);
   }
 
   function inicializarRecetas(){
@@ -6295,7 +6072,7 @@
     recetaPlanAtencionId = String(window.planState?.atencionActual || '').trim();
     instalarEstilosEdicionRecetaPremium();
     auroRecetaAfinarInterfazPremium();
-    cargarMedicosActivosReceta(false).then(function(){
+cargarMedicosActivosReceta(false).then(function(){
       sincronizarMedicoRecetaDesdeAtencion();
       if(el('recetasHistorialBox')) renderHistorialRecetas();
       if(recetaPreviewVisible && el('recetaPreview')) vistaPreviaReceta();
@@ -6318,6 +6095,7 @@
     cargarRecetasDesdeSheets(false).then(function(){
       auroRecetaSincronizarModoPrimeraReceta();
       renderHistorialRecetas();
+      Promise.resolve(auroRecetaFirmaSincronizarPersistencia({silencioso:true})).catch(()=>{});
     });
 
     envolverRecetasFuncion('showScreen', refrescarRecetasAlEntrar);
@@ -6366,901 +6144,756 @@
   });
 
 
-  /* =====================================================
-     AUROSANAX RECETAS 3.11 - PUENTE DE FIRMA ELECTRÓNICA
-     - Recetas conserva la autoridad documental.
-     - firma_electronica.js conserva la autoridad de transporte/estado.
-     - No firma recetas no guardadas.
-     - No modifica Plan ni persistencia clínica.
-  ===================================================== */
-  function auroRecetaRegistroFirmableActual(){
-    const idAtencion = String(obtenerIdAtencionActivaSeguro() || '').trim();
-    const lista = leerRecetasStorage();
+  /* ============================================================
+     IASYN RECETAS — FIRMA ELECTRÓNICA V1
+     ------------------------------------------------------------
+     REGLAS:
+     - RECETAS es el único propietario del documento.
+     - Solo firma receta persistida y de la atención activa.
+     - Identidad: RECETA + id_atencion + id_receta + SHA-256 HTML.
+     - Requiere 2 firmas digitales.
+     - Consulta de estado NUNCA crea solicitud.
+     - documentos_firmados + Drive = verdad compartida.
+     - Respuestas tardías no pueden repintar otro paciente/atención.
+     - El logo de firma se incrusta como data URI; si falla, no se crea <img>.
+     ============================================================ */
 
-    if(recetaEditandoId){
-      const editando = lista.find(r => String(r.id_receta || '') === String(recetaEditandoId));
-      if(editando && !String(editando.estado || '').toLowerCase().includes('anulada')) return editando;
-    }
-
-    if(!idAtencion) return null;
-
-    const candidatas = lista.filter(r =>
-      String(r.id_atencion || '').trim() === idAtencion &&
-      !String(r.estado || '').toLowerCase().includes('anulada')
-    );
-
-    return candidatas.length ? candidatas[candidatas.length - 1] : null;
+  function auroRecetaFirmaApiUrl(){
+    try{
+      if(typeof API_URL!=='undefined' && API_URL) return String(API_URL).trim();
+    }catch(_e){}
+    return String(window.API_URL || document.getElementById('appsScriptUrl')?.value || '').trim();
   }
 
-  function auroRecetaDocumentoFirmableActual(){
-    const registro = auroRecetaRegistroFirmableActual();
-    if(!registro){
-      return {
-        success:false,
-        message:'Guarde la receta de la atención actual antes de firmarla electrónicamente.'
-      };
+  function auroRecetaFirmaTokenSesion(){
+    try{
+      const s=window.IASYN_SEGURIDAD||window.AUROSANAX_SEGURIDAD;
+      if(s){
+        if(typeof s.obtenerToken==='function') return String(s.obtenerToken()||'').trim();
+        if(typeof s.obtenerTokenSesion==='function') return String(s.obtenerTokenSesion()||'').trim();
+      }
+    }catch(_e){}
+    try{
+      return String(
+        sessionStorage.getItem('iasyn_seguridad_token') ||
+        sessionStorage.getItem('aurosanax_seguridad_token') || ''
+      ).trim();
+    }catch(_e){ return ''; }
+  }
+
+  async function auroRecetaFirmaPost(accion,data){
+    const url=auroRecetaFirmaApiUrl();
+    if(!url) throw new Error('API_URL no está definida.');
+    const token=auroRecetaFirmaTokenSesion();
+    if(!token) throw new Error('No existe una sesión IASYN activa para firmar.');
+
+    const r=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion,data:Object.assign({},data||{},{token})})
+    });
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    if(j && j.success===false) throw new Error(j.message||'La operación de firma no pudo completarse.');
+    return j;
+  }
+
+  async function auroRecetaFirmaRecetasRemotas(){
+    const url=auroRecetaFirmaApiUrl();
+    if(!url) throw new Error('API_URL no está definida.');
+    const r=await fetch(url+'?accion=listarRecetas&_='+Date.now(),{cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j=await r.json();
+    const lista=Array.isArray(j)?j:(Array.isArray(j?.data)?j.data:(Array.isArray(j?.registros)?j.registros:[]));
+    return lista.map(function(r){
+      const n=normalizarRecetaGuardada(r);
+      n.paciente_nombre=String(r?.paciente_nombre||r?.nombre_paciente||n.paciente_nombre||'').trim();
+      n.nombre_paciente=String(r?.nombre_paciente||r?.paciente_nombre||n.paciente_nombre||'').trim();
+      n.numero_consulta=String(r?.numero_consulta||'').trim();
+      n.nombre_medico=String(r?.nombre_medico||r?.medico||n.medico||'').trim();
+      return n;
+    });
+  }
+
+  function auroRecetaFirmaPacienteIdActual(){
+    const p=obtenerPacienteActivoSeguro();
+    return String(p?.id_paciente||p?.id||'').trim();
+  }
+
+  function auroRecetaFirmaAtencionActual(){
+    return String(obtenerIdAtencionActivaSeguro()||'').trim();
+  }
+
+  function auroRecetaFirmaEstado(id){
+    return recetaFirmasPorDocumento.get(String(id||'').trim()) || {
+      estado:'SIN_FIRMA',
+      documento:null,
+      sha_actual:'',
+      error:''
+    };
+  }
+
+  function auroRecetaFirmaProceso(id){
+    return recetaFirmaProcesos.get(String(id||'').trim()) || null;
+  }
+
+  function auroRecetaFirmaResumenHTML(r){
+    const id=String(r?.id_receta||'').trim();
+    if(!id) return '';
+    const proceso=auroRecetaFirmaProceso(id);
+    const estado=auroRecetaFirmaEstado(id);
+    let texto='SIN FIRMA', color='#64748b';
+
+    if(proceso){
+      const op=String(proceso.estado||'').toUpperCase();
+      if(op==='PREPARANDO'){ texto='PREPARANDO…'; color='#9a3412'; }
+      else if(op==='TOMADA'){ texto='EN ADOBE…'; color='#1d4ed8'; }
+      else if(op==='PENDIENTE'){ texto='EN PROCESO…'; color='#1d4ed8'; }
+      else if(op==='ERROR'){ texto='ERROR DE FIRMA'; color='#b91c1c'; }
+      else if(op==='EXPIRADA'){ texto='FIRMA EXPIRADA'; color='#b91c1c'; }
+    }else if(estado.estado==='FIRMADA'){
+      texto='FIRMADO ✓'; color='#166534';
+    }else if(estado.estado==='NUEVA_VERSION'){
+      texto='NUEVA VERSIÓN SIN FIRMAR'; color='#9a3412';
     }
 
-    const r = recetaGuardadaAFormatoPreview(registro);
-    const idReceta = String(registro.id_receta || '').trim();
-    const idAtencion = String(registro.id_atencion || '').trim();
+    return '<div style="font-size:10.5px;font-weight:900;color:'+color+';margin-top:4px">'+safe(texto)+'</div>';
+  }
 
-    if(!idReceta || !idAtencion){
-      return {
-        success:false,
-        message:'La receta guardada no contiene los identificadores clínicos requeridos para firmar.'
-      };
+  function auroRecetaFirmaEmitirCambio(id,estado,extra){
+    const detail=Object.assign({
+      tipo_documento:'RECETA',
+      id_receta:String(id||'').trim(),
+      id_documento_origen:String(id||'').trim(),
+      estado:String(estado||'').trim()
+    },extra||{});
+    try{ window.dispatchEvent(new CustomEvent('aurosanax:receta-firma-estado',{detail})); }catch(_e){}
+  }
+
+  function auroRecetaFirmaBotonesHTML(r,movil){
+    const id=String(r?.id_receta||'').trim();
+    if(!id) return '';
+
+    const estado=auroRecetaFirmaEstado(id);
+    const proceso=auroRecetaFirmaProceso(id);
+    const idAtencion=String(r?.id_atencion||'').trim();
+    const activa=auroRecetaFirmaAtencionActual();
+    const esActiva=!!(activa && idAtencion===activa);
+    const anulada=String(r?.estado||'').toLowerCase().includes('anulada');
+
+    let textoEstado='SIN FIRMA';
+    let color='#64748b';
+    let boton='';
+    let cancelar='';
+
+    if(proceso){
+      const op=String(proceso.estado||'').toUpperCase();
+      if(op==='PREPARANDO'){
+        textoEstado='PREPARANDO FIRMA…'; color='#9a3412';
+        boton='<button type="button" class="btn-action soft" disabled aria-busy="true"><i class="bi bi-hourglass-split me-1"></i>Preparando firma…</button>';
+      }else if(['PENDIENTE','TOMADA'].includes(op)){
+        textoEstado=op==='TOMADA'?'FIRMA EN ADOBE…':'FIRMA EN PROCESO…'; color='#1d4ed8';
+        boton='<button type="button" class="btn-action soft" disabled aria-busy="true"><i class="bi bi-hourglass-split me-1"></i>'+(op==='TOMADA'?'Firma en Adobe…':'Firma en proceso…')+'</button>';
+        cancelar="<button type=\"button\" class=\"btn-action soft\" onclick=\"auroRecetaCancelarFirma('"+safe(id)+"')\"><i class=\"bi bi-x-circle me-1\"></i>Cancelar firma</button>";
+      }else if(['ERROR','EXPIRADA'].includes(op)){
+        textoEstado=op==='ERROR'?'ERROR DE FIRMA':'FIRMA EXPIRADA'; color='#b91c1c';
+        boton="<button type=\"button\" class=\"btn-action soft\" onclick=\"auroRecetaReabrirFirma('"+safe(id)+"')\"><i class=\"bi bi-arrow-repeat me-1\"></i>Reintentar firma</button>";
+      }
+    }else if(estado.estado==='FIRMADA'){
+      textoEstado='FIRMADO ✓'; color='#166534';
+      boton="<button type=\"button\" class=\"btn-action success\" onclick=\"auroRecetaVerFirmada('"+safe(id)+"')\"><i class=\"bi bi-file-earmark-check me-1\"></i>Ver receta firmada ✓</button>";
+    }else if(estado.estado==='NUEVA_VERSION'){
+      textoEstado='VERSIÓN NUEVA SIN FIRMAR'; color='#9a3412';
+      boton=esActiva && !anulada
+        ? "<button type=\"button\" class=\"btn-action primary\" onclick=\"auroRecetaFirmarElectronica('"+safe(id)+"')\"><i class=\"bi bi-pen me-1\"></i>Firmar nueva versión</button>"
+        : '<button type="button" class="btn-action soft" disabled><i class="bi bi-lock me-1"></i>Abra esta consulta para firmar</button>';
+    }else if(anulada){
+      textoEstado='NO FIRMABLE'; color='#64748b';
+      boton='<button type="button" class="btn-action soft" disabled><i class="bi bi-lock me-1"></i>Receta anulada</button>';
+    }else{
+      boton=esActiva
+        ? "<button type=\"button\" class=\"btn-action primary\" onclick=\"auroRecetaFirmarElectronica('"+safe(id)+"')\"><i class=\"bi bi-pen me-1\"></i>Firmar receta</button>"
+        : '<button type="button" class="btn-action soft" disabled><i class="bi bi-lock me-1"></i>Abra esta consulta para firmar</button>';
     }
+
+    const status='<div style="font-size:11px;font-weight:900;color:'+color+';margin-top:4px">Firma: '+safe(textoEstado)+'</div>';
+    return (movil?status:'<span style="display:inline-flex;align-items:center">'+status+'</span>')+boton+cancelar;
+  }
+
+  async function auroRecetaFirmaLogoDataUrl(){
+    if(recetaFirmaLogoCache!==null) return recetaFirmaLogoCache;
+    if(recetaFirmaLogoPromesa) return recetaFirmaLogoPromesa;
+
+    recetaFirmaLogoPromesa=(async function(){
+      try{
+        const r=await auroRecetaFirmaPost('obtenerLogoInstitucionalFirma',{});
+        recetaFirmaLogoCache=(r?.disponible && String(r?.data_url||'').startsWith('data:image/'))
+          ? String(r.data_url)
+          : '';
+      }catch(_e){
+        recetaFirmaLogoCache='';
+      }finally{
+        recetaFirmaLogoPromesa=null;
+      }
+      return recetaFirmaLogoCache;
+    })();
+
+    return recetaFirmaLogoPromesa;
+  }
+
+  function auroRecetaFirmaAplicarLogo(html,dataUrl){
+    let salida=String(html||'');
+    const rx=/<img\b[^>]*class=(["'])[^"']*\bauro-receta-logo\b[^"']*\1[^>]*>/gi;
+
+    if(dataUrl){
+      const tag='<img class="auro-receta-logo" src="'+String(dataUrl).replace(/"/g,'&quot;')+'" alt="">';
+      salida=salida.replace(rx,tag);
+    }else{
+      salida=salida.replace(rx,'');
+    }
+
+    /* El backend de firma rechaza handlers; el PDF no los necesita. */
+    salida=salida.replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*')/gi,'');
+    return salida;
+  }
+
+
+  function auroRecetaFirmaEdadEnFecha(fechaNacimiento,fechaDocumento){
+    const n=String(fechaNacimiento||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const f=String(fechaDocumento||'').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(!n || !f) return '';
+    let edad=Number(f[1])-Number(n[1]);
+    const mesF=Number(f[2]), diaF=Number(f[3]);
+    const mesN=Number(n[2]), diaN=Number(n[3]);
+    if(mesF<mesN || (mesF===mesN && diaF<diaN)) edad--;
+    return edad>=0 && edad<=130 ? (edad+' años') : '';
+  }
+
+  function auroRecetaFirmaVersionDocumento(receta){
+    return String(
+      receta?.actualizado_en ||
+      receta?.creado_en ||
+      receta?.fecha_receta ||
+      ''
+    ).trim();
+  }
+
+  function auroRecetaFirmaVersionDesdeFirmado(doc){
+    try{
+      const d=JSON.parse(String(doc?.detalle_json||'{}'));
+      return String(d?.version_documento||'').trim();
+    }catch(_e){ return ''; }
+  }
+
+  async function auroRecetaFirmaHtmlCanonico(receta){
+    const persistida=normalizarRecetaGuardada(receta||{});
+    if(!persistida.id_receta || !persistida.id_atencion){
+      throw new Error('La receta no tiene identidad clínica completa.');
+    }
+
+    const formato=recetaGuardadaAFormatoPreview(persistida);
+
+    /* La edad del PDF firmado se fija a la fecha de emisión de la receta,
+       no a la fecha actual. Así la misma receta no se convierte en una
+       falsa "nueva versión" cuando el paciente cumple años. */
+    if(formato?.paciente){
+      const edadFirma=auroRecetaFirmaEdadEnFecha(
+        formato.paciente.fecha_nacimiento,
+        persistida.fecha_receta
+      );
+      if(edadFirma) formato.paciente.edad=edadFirma;
+    }
+
+    let cuerpo=construirHTMLRecetaPacienteDobleA4(formato);
+    cuerpo=auroRecetaFirmaAplicarLogo(cuerpo,await auroRecetaFirmaLogoDataUrl());
+
+    return '<!DOCTYPE html><html lang="es"><head>'+
+      '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
+      '<title>Receta médica</title></head><body>'+cuerpo+'</body></html>';
+  }
+
+  async function auroRecetaFirmaSha256(texto){
+    if(!window.crypto?.subtle) return '';
+    const data=new TextEncoder().encode(String(texto||''));
+    const digest=await crypto.subtle.digest('SHA-256',data);
+    return Array.from(new Uint8Array(digest)).map(x=>x.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function auroRecetaFirmaPersistidaExacta(id,idAtencion){
+    const lista=await auroRecetaFirmaRecetasRemotas();
+    return lista.find(x=>
+      String(x.id_receta||'').trim()===String(id||'').trim() &&
+      String(x.id_atencion||'').trim()===String(idAtencion||'').trim() &&
+      !String(x.estado||'').toLowerCase().includes('anulada')
+    ) || null;
+  }
+
+  async function auroRecetaFirmaSincronizarPersistenciaEjecutar(opciones){
+    opciones=opciones||{};
+    const token=++recetaFirmaSyncToken;
+    const pacienteEsperado=auroRecetaFirmaPacienteIdActual();
+    const atencionEsperada=auroRecetaFirmaAtencionActual();
+
+    if(!pacienteEsperado){
+      recetaFirmasPorDocumento.clear();
+      renderHistorialRecetas();
+      return {success:true,documentos:[]};
+    }
+
+    try{
+      const [recetasRemotas,resFirmas]=await Promise.all([
+        auroRecetaFirmaRecetasRemotas(),
+        auroRecetaFirmaPost('consultarDocumentosFirmados',{
+          tipo_documento:'RECETA',
+          id_paciente:pacienteEsperado
+        })
+      ]);
+
+      if(token!==recetaFirmaSyncToken) return {success:false,descartada:true};
+      if(auroRecetaFirmaPacienteIdActual()!==pacienteEsperado) return {success:false,descartada:true};
+      if(atencionEsperada && auroRecetaFirmaAtencionActual()!==atencionEsperada) return {success:false,descartada:true};
+
+      const docs=Array.isArray(resFirmas?.documentos)?resFirmas.documentos:[];
+      const recetasPaciente=recetasRemotas.filter(r=>String(r.id_paciente||'').trim()===pacienteEsperado);
+
+      for(const receta of recetasPaciente){
+        if(token!==recetaFirmaSyncToken) return {success:false,descartada:true};
+
+        const id=String(receta.id_receta||'').trim();
+        const idAtn=String(receta.id_atencion||'').trim();
+        if(!id || !idAtn) continue;
+
+        const candidatos=docs.filter(d=>
+          String(d.tipo_documento||'').trim().toUpperCase()==='RECETA' &&
+          String(d.id_documento_origen||d.id_receta||'').trim()===id &&
+          String(d.id_atencion||'').trim()===idAtn &&
+          String(d.estado_firma||'').trim().toUpperCase()==='FIRMADO'
+        );
+
+        if(!candidatos.length){
+          recetaFirmasPorDocumento.set(id,{estado:'SIN_FIRMA',documento:null,sha_actual:'',error:''});
+          continue;
+        }
+
+        try{
+          const versionActual=auroRecetaFirmaVersionDocumento(receta);
+          let exacto=versionActual
+            ? candidatos.find(d=>auroRecetaFirmaVersionDesdeFirmado(d)===versionActual)
+            : null;
+
+          let sha='';
+          if(!exacto){
+            const html=await auroRecetaFirmaHtmlCanonico(receta);
+            sha=await auroRecetaFirmaSha256(html);
+            exacto=sha
+              ? candidatos.find(d=>String(d.sha256_origen||'').trim().toLowerCase()===sha.toLowerCase())
+              : null;
+          }
+
+          recetaFirmasPorDocumento.set(id,{
+            estado:exacto?'FIRMADA':'NUEVA_VERSION',
+            documento:exacto||candidatos[0],
+            sha_actual:sha,
+            version_documento:versionActual,
+            error:''
+          });
+        }catch(error){
+          /* Si no se pudo recalcular hash, se conserva el firmado histórico como
+             referencia, sin autorizar automáticamente una nueva firma. */
+          recetaFirmasPorDocumento.set(id,{
+            estado:'FIRMADA',
+            documento:candidatos[0],
+            sha_actual:'',
+            error:String(error?.message||error||'')
+          });
+        }
+      }
+
+      if(token===recetaFirmaSyncToken){
+        renderHistorialRecetas();
+        actualizarBotonGuardarReceta();
+      }
+
+      return {success:true,documentos:docs};
+    }catch(error){
+      if(!opciones.silencioso){
+        mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> No se pudo sincronizar el estado de firma. La receta clínica sigue disponible.', '');
+      }
+      return {success:false,error:String(error?.message||error||'')};
+    }
+  }
+
+  async function auroRecetaFirmaSincronizarPersistencia(opciones){
+    opciones=opciones||{};
+    const paciente=auroRecetaFirmaPacienteIdActual();
+    const atencion=auroRecetaFirmaAtencionActual();
+    const clave=[paciente,atencion].join('|');
+    const ahora=Date.now();
+
+    if(!opciones.forzar){
+      if(recetaFirmaSyncPromesa && recetaFirmaSyncClave===clave){
+        return recetaFirmaSyncPromesa;
+      }
+      if(
+        recetaFirmaSyncUltimoResultado &&
+        recetaFirmaSyncClave===clave &&
+        ahora-recetaFirmaSyncUltimoFin<RECETA_FIRMA_SYNC_REUSO_MS
+      ){
+        return recetaFirmaSyncUltimoResultado;
+      }
+    }
+
+    const promesa=auroRecetaFirmaSincronizarPersistenciaEjecutar(opciones);
+    recetaFirmaSyncPromesa=promesa;
+    recetaFirmaSyncClave=clave;
+
+    try{
+      const resultado=await promesa;
+      recetaFirmaSyncUltimoResultado=resultado;
+      recetaFirmaSyncUltimoFin=Date.now();
+      return resultado;
+    }finally{
+      if(recetaFirmaSyncPromesa===promesa) recetaFirmaSyncPromesa=null;
+    }
+  }
+
+  async function auroRecetaFirmaObtenerDocumento(id){
+    const rid=String(id||'').trim();
+    if(!rid) return {success:false,estado:'RECETA_NO_GUARDADA',message:'No se identificó la receta.'};
+
+    const local=buscarRecetaPorId(rid);
+    const idAtn=String(local?.id_atencion||'').trim();
+    if(!local || !idAtn){
+      return {success:false,estado:'RECETA_NO_GUARDADA',message:'La receta debe estar guardada antes de firmarse.'};
+    }
+
+    const activa=auroRecetaFirmaAtencionActual();
+    if(!activa || activa!==idAtn){
+      return {success:false,estado:'RECETA_NO_GUARDADA',message:'Abra la consulta a la que pertenece esta receta antes de firmarla.'};
+    }
+
+    if(recetaModoTrabajo==='edicion' && String(recetaEditandoId||'').trim()===rid){
+      return {success:false,estado:'EDICION_PENDIENTE',message:'Guarde la corrección de la receta antes de firmar.'};
+    }
+
+    const persistida=await auroRecetaFirmaPersistidaExacta(rid,idAtn);
+    if(!persistida){
+      return {success:false,estado:'RECETA_NO_GUARDADA',message:'La receta no está persistida en Google Sheets.'};
+    }
+
+    const html=await auroRecetaFirmaHtmlCanonico(persistida);
+    const sha=await auroRecetaFirmaSha256(html);
 
     return {
       success:true,
+      estado:'LISTA',
       tipo_documento:'RECETA',
-      id_documento_clinico:idReceta,
-      id_receta:idReceta,
-      id_atencion:idAtencion,
-      id_paciente:String(registro.id_paciente || r.id_paciente || r.paciente?.id_paciente || '').trim(),
-      id_historia:String(registro.id_historia || r.id_historia || '').trim(),
-      id_medico:String(registro.id_medico || r.id_medico || '').trim(),
-      nombre_archivo:'RECETA_' + idReceta + '_FIRMADA.pdf',
-      html_documento:construirHTMLRecetaPacienteDobleA4(
-        auroRecetaPrepararDatosParaRepresentacion(r)
-      )
+      id_documento_origen:rid,
+      id_receta:rid,
+      id_atencion:idAtn,
+      id_paciente:String(persistida.id_paciente||'').trim(),
+      nombre_paciente:String(persistida.nombre_paciente||'').trim(),
+      id_historia:String(persistida.id_historia||'').trim(),
+      numero_consulta:String(persistida.numero_consulta||'').trim(),
+      id_medico:String(persistida.id_medico||'').trim(),
+      nombre_medico:String(persistida.nombre_medico||persistida.medico||'').trim(),
+      nombre_archivo:'RECETA_'+String(persistida.numero_consulta||'CONSULTA').trim()+'_'+rid+'.pdf',
+      firmas_requeridas:2,
+      version_documento:auroRecetaFirmaVersionDocumento(persistida),
+      html_documento:html,
+      sha256_origen:sha,
+      receta:persistida
     };
   }
 
-  /*
-    AUROSANAX RECETAS 3.16 - CACHÉ RÁPIDA EXCLUSIVA DE FIRMA
-    ---------------------------------------------------------
-    V3.15 aceleró correctamente el documento post-guardado, pero reutilizaba
-    esa caché desde auroRecetaDocumentoFirmableActual(), función que también
-    consume la sincronización de estados y Plan. V3.16 vuelve a dejar esa API
-    canónica exactamente en su recorrido V3.14 y aísla la optimización aquí.
-  */
-  let auroRecetaFirmaRapidaPostGuardadoCache = null;
-
-  function auroRecetaPrepararFirmaRapidaPostGuardado_(registroGuardado){
-    const registro = registroGuardado || auroRecetaRegistroFirmableActual();
-    if(!registro){
-      auroRecetaFirmaRapidaPostGuardadoCache = null;
-      return null;
-    }
-
-    const documento = auroRecetaDocumentoFirmableActual();
-    if(!documento || !documento.success){
-      auroRecetaFirmaRapidaPostGuardadoCache = null;
-      return documento;
-    }
-
-    if(
-      String(documento.id_atencion || '').trim() !== String(registro.id_atencion || '').trim() ||
-      String(documento.id_receta || '').trim() !== String(registro.id_receta || '').trim()
-    ){
-      auroRecetaFirmaRapidaPostGuardadoCache = null;
-      return null;
-    }
-
-    auroRecetaFirmaRapidaPostGuardadoCache = {
-      id_atencion:String(registro.id_atencion || '').trim(),
-      id_receta:String(registro.id_receta || '').trim(),
-      actualizado_en:String(registro.actualizado_en || '').trim(),
-      documento:documento
-    };
-    return documento;
+  async function auroRecetaFirmaObtenerDocumentoActual(){
+    const id=String(recetaEditandoId||'').trim() ||
+      String(buscarRecetaActivaPorAtencion(auroRecetaFirmaAtencionActual())?.id_receta||'').trim();
+    return auroRecetaFirmaObtenerDocumento(id);
   }
 
-  function auroRecetaDocumentoParaFirmaRapida_(){
-    const registro = auroRecetaRegistroFirmableActual();
-    if(!registro){
-      auroRecetaFirmaRapidaPostGuardadoCache = null;
-      return auroRecetaDocumentoFirmableActual();
+  async function auroRecetaFirmaObtenerEstadoActual(){
+    const doc=await auroRecetaFirmaObtenerDocumentoActual();
+    if(!doc.success) return doc;
+    await auroRecetaFirmaSincronizarPersistencia({silencioso:true});
+    return Object.assign({},doc,{estado_firma:auroRecetaFirmaEstado(doc.id_receta)});
+  }
+
+  async function auroRecetaFirmaFirmarActual(){
+    const doc=await auroRecetaFirmaObtenerDocumentoActual();
+    if(!doc.success){
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(doc.message||'La receta no está lista para firmar.'), '');
+      return doc;
+    }
+    return auroRecetaFirmaFirmar(doc.id_receta);
+  }
+
+  async function auroRecetaFirmaFirmar(id){
+    const rid=String(id||'').trim();
+    if(!rid) return null;
+
+    const existente=auroRecetaFirmaProceso(rid);
+    if(existente && ['PREPARANDO','PENDIENTE','TOMADA'].includes(String(existente.estado||'').toUpperCase())){
+      mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Esta receta ya tiene una firma en proceso.', '');
+      return existente;
+    }
+    if(existente && ['ERROR','EXPIRADA'].includes(String(existente.estado||'').toUpperCase())){
+      return auroRecetaFirmaReabrir(rid);
     }
 
-    const cache = auroRecetaFirmaRapidaPostGuardadoCache;
-    if(
-      cache && cache.documento && cache.documento.success &&
-      cache.id_atencion === String(registro.id_atencion || '').trim() &&
-      cache.id_receta === String(registro.id_receta || '').trim() &&
-      cache.actualizado_en === String(registro.actualizado_en || '').trim()
-    ){
-      return cache.documento;
+    const doc=await auroRecetaFirmaObtenerDocumento(rid);
+    if(!doc.success){
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(doc.message||'La receta no está lista para firmar.'), '');
+      return doc;
     }
 
-    auroRecetaFirmaRapidaPostGuardadoCache = null;
-    return auroRecetaDocumentoFirmableActual();
-  }
-
-  /*
-    AUROSANAX RECETAS 3.12 - FIRMA ELECTRÓNICA ANTIRREGRESIVA
-    ---------------------------------------------------------
-    Alcance exclusivo de este bloque:
-    - Firma únicamente una receta YA GUARDADA.
-    - Aísla por id_atencion + id_receta + contenido exacto del documento.
-    - No crea recetas, no llama guardarRecetaERP(), no modifica Plan.
-    - Impide doble clic / doble solicitud durante una firma en curso.
-    - Reutiliza en la misma sesión el PDF ya firmado si la receta no cambió.
-    - Si la receta cambia conservando su id_receta, permite firmar la nueva versión.
-    - Valida que la respuesta FIRMADO corresponda a la misma atención/receta.
-    - No descarga automáticamente: abre el PDF firmado para visualización.
-    - Al cambiar de atención/paciente, el estado visual del botón se recalcula
-      y nunca reutiliza el PDF firmado de otra atención o receta.
-  ===================================================== */
-
-  const auroRecetaFirmasSesion = new Map();
-  let auroRecetaFirmaEnCurso = null;
-
-  function auroRecetaClaveBaseFirma(documento){
-    if(!documento || !documento.success) return '';
-    return [
-      String(documento.id_atencion || '').trim(),
-      String(documento.id_receta || '').trim()
-    ].join('|');
-  }
-
-  function auroRecetaFirmaSesionCoincide(entrada, documento){
-    if(!entrada || !documento || !documento.success) return false;
-
-    return (
-      String(entrada.id_atencion || '') === String(documento.id_atencion || '') &&
-      String(entrada.id_receta || '') === String(documento.id_receta || '') &&
-      String(entrada.html_documento || '') === String(documento.html_documento || '')
-    );
-  }
-
-  function auroRecetaPintarBotonFirmaNormal(btn){
-    if(!btn) return;
-    btn.disabled = false;
-    btn.removeAttribute('aria-busy');
-    btn.removeAttribute('data-auro-firma-estado');
-    btn.title = 'Firmar electrónicamente la receta guardada de esta atención';
-    btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
-  }
-
-  function auroRecetaPintarBotonFirmaEnCurso(btn){
-    if(!btn) return;
-    btn.disabled = true;
-    btn.setAttribute('aria-busy','true');
-    btn.setAttribute('data-auro-firma-estado','FIRMANDO');
-    btn.title = 'Firma electrónica en proceso';
-    btn.innerHTML = '<i class="bi bi-arrow-repeat"></i> Firmando…';
-  }
-
-  function auroRecetaPintarBotonFirmaConfirmada(btn){
-    if(!btn) return;
-    btn.disabled = false;
-    btn.removeAttribute('aria-busy');
-    btn.setAttribute('data-auro-firma-estado','FIRMADO');
-    btn.title = 'Ver PDF firmado de esta receta';
-    btn.innerHTML = '<i class="bi bi-patch-check-fill"></i> Firmada ✓';
-  }
-
-  function auroRecetaSincronizarEstadoFirmaVisual(){
-    const btn = el('btnFirmaElectronicaReceta');
-    if(!btn) return;
-
-    const documento = auroRecetaDocumentoFirmableActual();
-    if(!documento || !documento.success){
-      auroRecetaPintarBotonFirmaNormal(btn);
-      return;
-    }
-
-    if(
-      auroRecetaFirmaEnCurso &&
-      auroRecetaFirmaSesionCoincide(auroRecetaFirmaEnCurso, documento)
-    ){
-      auroRecetaPintarBotonFirmaEnCurso(btn);
-      return;
-    }
-
-    const clave = auroRecetaClaveBaseFirma(documento);
-    const firmada = clave ? auroRecetaFirmasSesion.get(clave) : null;
-
-    if(auroRecetaFirmaSesionCoincide(firmada, documento)){
-      auroRecetaPintarBotonFirmaConfirmada(btn);
-      return;
-    }
-
-    auroRecetaPintarBotonFirmaNormal(btn);
-  }
-
-  function auroRecetaAbrirPdfFirmadoSeguro(resultado, documento){
-    if(
-      !window.auroFirmaElectronica ||
-      typeof window.auroFirmaElectronica.abrirPdfFirmado !== 'function'
-    ){
-      return false;
-    }
-
-    return window.auroFirmaElectronica.abrirPdfFirmado(
-      resultado,
-      documento?.nombre_archivo || 'RECETA_FIRMADA.pdf'
-    ) === true;
-  }
-
-  async function auroRecetaFirmarElectronicaActual(){
-    if(recetaModoTrabajo === 'edicion'){
-      mostrarMensajeReceta(
-        '<i class="bi bi-info-circle me-1"></i> Guarde primero la corrección. Después podrá firmar la nueva versión.',
-        ''
+    /* Comprobación solo lectura ANTES del POST creador.
+       Si ya existe exactamente esta versión firmada, no crea solicitud. */
+    try{
+      const q=await auroRecetaFirmaPost('consultarDocumentosFirmados',{
+        tipo_documento:'RECETA',
+        id_documento_origen:rid,
+        id_receta:rid,
+        id_atencion:doc.id_atencion
+      });
+      const docs=Array.isArray(q?.documentos)?q.documentos:[];
+      const exacto=docs.find(x=>
+        String(x.estado_firma||'').toUpperCase()==='FIRMADO' &&
+        (
+          (doc.version_documento && auroRecetaFirmaVersionDesdeFirmado(x)===doc.version_documento) ||
+          String(x.sha256_origen||'').toLowerCase()===String(doc.sha256_origen||'').toLowerCase()
+        )
       );
-      auroRecetaSincronizarFirmaPersistenteActual(false);
-      return null;
-    }
+      if(exacto){
+        recetaFirmasPorDocumento.set(rid,{estado:'FIRMADA',documento:exacto,sha_actual:doc.sha256_origen,error:''});
+        renderHistorialRecetas();
+        mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Esta versión de la receta ya está firmada.', 'ok');
+        return exacto;
+      }
+    }catch(_e){}
 
-    const documento = auroRecetaDocumentoParaFirmaRapida_();
-
-    if(!documento.success){
-      mostrarMensajeReceta(
-        '<i class="bi bi-exclamation-triangle me-1"></i> ' + safe(documento.message),
-        'error'
-      );
-      auroRecetaSincronizarEstadoFirmaVisual();
-      return null;
-    }
-
-    /*
-      Antes de crear una nueva solicitud, comprueba si esta versión EXACTA
-      ya fue firmada en la sesión actual. No reutiliza firmas de otra receta,
-      otra atención ni una versión anterior del mismo documento.
-    */
-    const clave = auroRecetaClaveBaseFirma(documento);
-    const firmada = clave ? auroRecetaFirmasSesion.get(clave) : null;
-
-    if(auroRecetaFirmaSesionCoincide(firmada, documento)){
-      const abierta = auroRecetaAbrirPdfFirmadoSeguro(firmada.resultado, documento);
-      auroRecetaPintarBotonFirmaConfirmada(el('btnFirmaElectronicaReceta'));
-
-      mostrarMensajeReceta(
-        abierta
-          ? '<i class="bi bi-patch-check me-1"></i> Esta versión de la receta ya está firmada. Se abrió el PDF firmado.'
-          : '<i class="bi bi-patch-check me-1"></i> Esta versión de la receta ya está firmada. Presione “Firmada ✓” para verla.',
-        'ok'
-      );
-      return firmada.resultado;
-    }
-
-    /*
-      Una sola firma clínica en curso desde este módulo.
-      Evita doble clic y evita que un cambio rápido de contexto lance
-      dos solicitudes simultáneas desde Recetas.
-    */
-    if(auroRecetaFirmaEnCurso){
-      mostrarMensajeReceta(
-        '<i class="bi bi-hourglass-split me-1"></i> Ya existe una firma electrónica en proceso. Espere a que termine antes de iniciar otra.',
-        'error'
-      );
-      auroRecetaSincronizarEstadoFirmaVisual();
-      return null;
-    }
-
-    if(
-      !window.auroFirmaElectronica ||
-      typeof window.auroFirmaElectronica.firmarDocumento !== 'function'
-    ){
-      mostrarMensajeReceta(
-        '<i class="bi bi-shield-exclamation me-1"></i> El módulo de firma electrónica no se encuentra disponible.',
-        'error'
-      );
-      auroRecetaSincronizarEstadoFirmaVisual();
-      return null;
-    }
-
-    const btn = el('btnFirmaElectronicaReceta');
-    auroRecetaFirmaEnCurso = {
-      id_atencion:String(documento.id_atencion || '').trim(),
-      id_receta:String(documento.id_receta || '').trim(),
-      html_documento:String(documento.html_documento || '')
-    };
-    auroRecetaPintarBotonFirmaEnCurso(btn);
+    recetaFirmaProcesos.set(rid,{estado:'PREPARANDO',id_solicitud:'',id_atencion:doc.id_atencion});
+    renderHistorialRecetas();
+    mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Preparando receta para firma electrónica. Esta receta requiere 2 firmas digitales.', '');
 
     try{
-      const resultado = await window.auroFirmaElectronica.firmarDocumento(documento);
-      const estado = String(resultado?.estado_firma || '').trim().toUpperCase();
-
-      if(estado === 'CANCELADA'){
-        mostrarMensajeReceta(
-          '<i class="bi bi-check-circle me-1"></i> Firma cancelada. La receta se conserva sin cambios y puede iniciar una nueva firma.',
-          'ok'
-        );
-        return resultado;
-      }
-
-      if(estado !== 'FIRMADO'){
-        throw new Error('El servidor no confirmó la receta como FIRMADA.');
-      }
-
-      /*
-        Blindaje de identidad clínica.
-        Si el backend devuelve identificadores, deben corresponder exactamente
-        a la receta y atención que originaron esta solicitud.
-      */
-      const idAtencionResultado = String(resultado?.id_atencion || '').trim();
-      const idRecetaResultado = String(
-        resultado?.id_receta ||
-        resultado?.id_documento_clinico ||
-        ''
-      ).trim();
-
-      if(
-        idAtencionResultado &&
-        idAtencionResultado !== String(documento.id_atencion || '').trim()
-      ){
-        throw new Error('La firma devuelta no corresponde a la atención que originó la solicitud.');
-      }
-
-      if(
-        idRecetaResultado &&
-        idRecetaResultado !== String(documento.id_receta || '').trim()
-      ){
-        throw new Error('La firma devuelta no corresponde a la receta que originó la solicitud.');
-      }
-
-      /*
-        Cache de sesión exclusivamente para la MISMA versión documental.
-        No se persiste en localStorage ni modifica datos clínicos.
-      */
-      auroRecetaFirmasSesion.set(clave, {
-        id_atencion:String(documento.id_atencion || '').trim(),
-        id_receta:String(documento.id_receta || '').trim(),
-        html_documento:String(documento.html_documento || ''),
-        resultado:resultado
+      const r=await auroRecetaFirmaPost('firmarDocumento',{
+        tipo_documento:'RECETA',
+        id_documento_origen:rid,
+        id_receta:rid,
+        id_atencion:doc.id_atencion,
+        id_paciente:doc.id_paciente,
+        nombre_paciente:doc.nombre_paciente,
+        id_historia:doc.id_historia,
+        numero_consulta:doc.numero_consulta,
+        id_medico:doc.id_medico,
+        nombre_medico:doc.nombre_medico,
+        nombre_archivo:doc.nombre_archivo,
+        firmas_requeridas:2,
+        version_documento:doc.version_documento,
+        html_documento:doc.html_documento
       });
 
-      const abierta = auroRecetaAbrirPdfFirmadoSeguro(resultado, documento);
+      if(String(r?.estado_firma||'').toUpperCase()==='FIRMADO'){
+        recetaFirmaProcesos.delete(rid);
+        await auroRecetaFirmaSincronizarPersistencia({silencioso:true,forzar:true});
+        mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Esta versión de la receta ya estaba firmada.', 'ok');
+        return r;
+      }
 
+      const solicitud=String(r?.id_solicitud||'').trim();
+      if(!solicitud) throw new Error('IASYN no devolvió id_solicitud.');
+
+      recetaFirmaProcesos.set(rid,{
+        estado:String(r.estado_firma||'PENDIENTE').toUpperCase(),
+        id_solicitud:solicitud,
+        id_atencion:doc.id_atencion,
+        poll_token:Date.now()
+      });
+      renderHistorialRecetas();
       mostrarMensajeReceta(
-        abierta
-          ? '<i class="bi bi-patch-check me-1"></i> Receta firmada electrónicamente. Se abrió el PDF firmado.'
-          : '<i class="bi bi-patch-check me-1"></i> Receta firmada electrónicamente. Si el navegador bloqueó la ventana, presione “Firmada ✓” para ver el PDF.',
+        '<i class="bi bi-pen me-1"></i> Solicitud enviada. En Adobe aplique las 2 firmas digitales requeridas y guarde el PDF.',
         'ok'
       );
 
-      return resultado;
-
+      return await auroRecetaFirmaEsperar(rid,solicitud,doc.id_atencion);
     }catch(error){
-      mostrarMensajeReceta(
-        '<i class="bi bi-shield-exclamation me-1"></i> ' +
-        safe(error?.message || 'No fue posible firmar la receta.'),
-        'error'
-      );
-      return null;
-
-    }finally{
-      auroRecetaFirmaEnCurso = null;
-
-      /*
-        Recalcula contra la atención y receta ACTUAL en pantalla.
-        Si el usuario cambió de paciente/atención mientras se firmaba,
-        nunca deja “Firmada ✓” sobre el nuevo contexto.
-      */
-      auroRecetaSincronizarEstadoFirmaVisual();
+      recetaFirmaProcesos.delete(rid);
+      renderHistorialRecetas();
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo iniciar la firma.'), '');
+      return {success:false,error:String(error?.message||error||'')};
     }
   }
 
-  /* =====================================================
-     AUROSANAX RECETAS 3.14 - FIRMA PERSISTENTE VERSIONADA MULTIDISPOSITIVO
-     ---------------------------------------------------------
-     Adhesión quirúrgica sobre Recetas:
-     - documentos_firmados es la fuente persistente autoritativa.
-     - La memoria de esta pestaña es solo caché de rendimiento.
-     - Clave clínica: tipo_documento + id_atencion + id_receta.
-     - No escribe localStorage ni datos clínicos.
-     - No modifica Plan, guardado, PDF clínico ni Apps Script.
-     - Refleja FIRMADA ✓ en historial y en la receta de la atención activa.
-     - Ver/Descargar recuperan el MISMO PDF firmado archivado.
-     - Responsive: escritorio, iPhone, Android y navegadores táctiles.
-  ===================================================== */
+  async function auroRecetaFirmaEsperar(id,idSolicitud,idAtencion){
+    const proceso=auroRecetaFirmaProceso(id);
+    const pollToken=(proceso?.poll_token||Date.now());
+    const inicio=Date.now();
 
-  const auroRecetaFirmasPersistentesCache = new Map();
-  const auroRecetaFirmasPersistentesEnCurso = new Map();
+    while(Date.now()-inicio<35*60*1000){
+      await new Promise(r=>setTimeout(r,2000));
 
-  function auroRecetaFirmaPersistenteClave(idAtencion, idReceta){
-    return [
-      'RECETA',
-      String(idAtencion || '').trim(),
-      String(idReceta || '').trim()
-    ].join('|');
-  }
+      const actual=auroRecetaFirmaProceso(id);
+      if(!actual || actual.poll_token!==pollToken || actual.id_solicitud!==idSolicitud) return null;
 
-  function auroRecetaFirmaPersistenteApiDisponible(){
-    return !!(
-      window.auroFirmaElectronica &&
-      typeof window.auroFirmaElectronica.consultarDocumentosFirmados === 'function'
-    );
-  }
-
-  async function auroRecetaSha256TextoPersistente(valor){
-    const datos = new TextEncoder().encode(String(valor || ''));
-    const hash = await crypto.subtle.digest('SHA-256', datos);
-    return Array.from(new Uint8Array(hash))
-      .map(function(b){ return b.toString(16).padStart(2, '0'); })
-      .join('');
-  }
-
-  async function auroRecetaObtenerFirmasPersistentes(idAtencion, idReceta, forzar){
-    const atencion = String(idAtencion || '').trim();
-    const receta = String(idReceta || '').trim();
-    if(!atencion || !receta) return [];
-    if(!auroRecetaFirmaPersistenteApiDisponible()) return [];
-
-    const clave = auroRecetaFirmaPersistenteClave(atencion, receta);
-
-    if(!forzar && auroRecetaFirmasPersistentesCache.has(clave)){
-      const cache = auroRecetaFirmasPersistentesCache.get(clave);
-      return Array.isArray(cache) ? cache : (cache ? [cache] : []);
-    }
-
-    if(auroRecetaFirmasPersistentesEnCurso.has(clave)){
-      return auroRecetaFirmasPersistentesEnCurso.get(clave);
-    }
-
-    const consulta = (async function(){
+      let r;
       try{
-        const respuesta = await window.auroFirmaElectronica.consultarDocumentosFirmados({
-          tipo_documento:'RECETA',
-          id_atencion:atencion,
-          id_receta:receta
-        });
-
-        const documentos = Array.isArray(respuesta?.documentos)
-          ? respuesta.documentos
-          : [];
-
-        const validos = documentos.filter(function(doc){
-          if(!doc) return false;
-          const idAtencionDoc = String(doc.id_atencion || '').trim();
-          const idRecetaDoc = String(
-            doc.id_receta || doc.id_documento_origen || ''
-          ).trim();
-
-          if(idAtencionDoc && idAtencionDoc !== atencion) return false;
-          if(idRecetaDoc && idRecetaDoc !== receta) return false;
-          return String(doc.estado_firma || '').trim().toUpperCase() === 'FIRMADO';
-        });
-
-        auroRecetaFirmasPersistentesCache.set(clave, validos);
-        return validos;
-      }finally{
-        auroRecetaFirmasPersistentesEnCurso.delete(clave);
-      }
-    })();
-
-    auroRecetaFirmasPersistentesEnCurso.set(clave, consulta);
-    return consulta;
-  }
-
-  async function auroRecetaObtenerFirmaPersistente(idAtencion, idReceta, forzar){
-    const docs = await auroRecetaObtenerFirmasPersistentes(
-      idAtencion,
-      idReceta,
-      forzar
-    );
-    return docs.length ? docs[0] : null;
-  }
-
-  async function auroRecetaBuscarFirmaDeVersionActual(documento, forzar){
-    if(!documento || !documento.success) return null;
-
-    const idAtencion = String(documento.id_atencion || '').trim();
-    const idReceta = String(documento.id_receta || '').trim();
-    const html = String(documento.html_documento || '');
-
-    if(!idAtencion || !idReceta || !html) return null;
-
-    const huellaActual = await auroRecetaSha256TextoPersistente(html);
-    const docs = await auroRecetaObtenerFirmasPersistentes(
-      idAtencion,
-      idReceta,
-      forzar
-    );
-
-    return docs.find(function(doc){
-      return String(doc?.sha256_origen || '').trim().toLowerCase() === huellaActual;
-    }) || null;
-  }
-
-  function auroRecetaFirmaPersistenteInvalidar(idAtencion, idReceta){
-    const clave = auroRecetaFirmaPersistenteClave(idAtencion, idReceta);
-    auroRecetaFirmasPersistentesCache.delete(clave);
-  }
-
-  function auroRecetaFirmaPersistenteDatosDesdeId(idReceta){
-    const receta = buscarRecetaPorId(idReceta);
-    if(!receta) return null;
-
-    const idAtencion = String(receta.id_atencion || '').trim();
-    const recetaId = String(receta.id_receta || idReceta || '').trim();
-    if(!idAtencion || !recetaId) return null;
-
-    return {
-      tipo_documento:'RECETA',
-      id_atencion:idAtencion,
-      id_receta:recetaId
-    };
-  }
-
-  async function auroRecetaVerPdfFirmadoPersistente(idReceta, idFirmaDocumento){
-    const datos = auroRecetaFirmaPersistenteDatosDesdeId(idReceta);
-    if(datos && idFirmaDocumento){
-      datos.id_firma_documento = String(idFirmaDocumento || '').trim();
-    }
-    if(!datos){
-      mostrarMensajeReceta(
-        '<i class="bi bi-exclamation-triangle me-1"></i> No se pudo identificar la atención de esta receta.',
-        'error'
-      );
-      return null;
-    }
-
-    if(
-      !window.auroFirmaElectronica ||
-      typeof window.auroFirmaElectronica.abrirPdfFirmadoPersistente !== 'function'
-    ){
-      mostrarMensajeReceta(
-        '<i class="bi bi-shield-exclamation me-1"></i> El visor persistente de firma electrónica no está disponible.',
-        'error'
-      );
-      return null;
-    }
-
-    try{
-      return await window.auroFirmaElectronica.abrirPdfFirmadoPersistente(datos);
-    }catch(error){
-      mostrarMensajeReceta(
-        '<i class="bi bi-shield-exclamation me-1"></i> ' +
-        safe(error?.message || 'No fue posible abrir el PDF firmado.'),
-        'error'
-      );
-      return null;
-    }
-  }
-
-  async function auroRecetaDescargarPdfFirmadoPersistente(idReceta, idFirmaDocumento){
-    const datos = auroRecetaFirmaPersistenteDatosDesdeId(idReceta);
-    if(datos && idFirmaDocumento){
-      datos.id_firma_documento = String(idFirmaDocumento || '').trim();
-    }
-    if(!datos){
-      mostrarMensajeReceta(
-        '<i class="bi bi-exclamation-triangle me-1"></i> No se pudo identificar la atención de esta receta.',
-        'error'
-      );
-      return null;
-    }
-
-    if(
-      !window.auroFirmaElectronica ||
-      typeof window.auroFirmaElectronica.descargarPdfFirmadoPersistente !== 'function'
-    ){
-      mostrarMensajeReceta(
-        '<i class="bi bi-shield-exclamation me-1"></i> La descarga persistente de firma electrónica no está disponible.',
-        'error'
-      );
-      return null;
-    }
-
-    try{
-      return await window.auroFirmaElectronica.descargarPdfFirmadoPersistente(
-        datos,
-        'RECETA_FIRMADA_' + String(idReceta || '').trim() + '.pdf'
-      );
-    }catch(error){
-      mostrarMensajeReceta(
-        '<i class="bi bi-shield-exclamation me-1"></i> ' +
-        safe(error?.message || 'No fue posible descargar el PDF firmado.'),
-        'error'
-      );
-      return null;
-    }
-  }
-
-  function auroRecetaInstalarEstilosFirmaPersistente(){
-    if(document.getElementById('auro-receta-firma-persistente-style')) return;
-
-    const style = document.createElement('style');
-    style.id = 'auro-receta-firma-persistente-style';
-    style.textContent = `
-      #recetasHistorialBox .auro-receta-firma-persistente-badge{
-        display:inline-flex;align-items:center;gap:5px;margin-top:6px;
-        padding:5px 8px;border-radius:999px;border:1px solid #bbf7d0;
-        background:#f0fdf4;color:#166534;font-size:11px;font-weight:900;
-        line-height:1;white-space:nowrap;
-      }
-      #recetasHistorialBox .auro-receta-firma-persistente-actions{
-        display:flex;gap:8px;flex-wrap:wrap;width:100%;
-      }
-      #recetasHistorialBox .auro-receta-firma-persistente-actions .btn-action{
-        min-height:38px;
-      }
-      #recetas .auro-receta-firma-persistente-reflejo{
-        display:inline-flex;align-items:center;gap:6px;
-      }
-      @media (max-width:900px){
-        #recetasHistorialBox .auro-receta-firma-persistente-actions{
-          display:grid;grid-template-columns:1fr;width:100%;
-        }
-        #recetasHistorialBox .auro-receta-firma-persistente-actions .btn-action{
-          width:100%;justify-content:center;white-space:normal;
-        }
-        #recetas .auro-receta-firma-persistente-reflejo{
-          width:100%;justify-content:center;white-space:normal;
-        }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  function auroRecetaEscaparSelectorAtributo(valor){
-    if(window.CSS && typeof window.CSS.escape === 'function'){
-      return window.CSS.escape(String(valor || ''));
-    }
-    return String(valor || '').replace(/["\\]/g, '\\$&');
-  }
-
-  function auroRecetaHistorialNodosPorId(idReceta){
-    const id = String(idReceta || '').trim();
-    if(!id) return [];
-
-    const escapado = auroRecetaEscaparSelectorAtributo(id);
-    const selectores = [
-      'button[onclick*="verRecetaEmitida"][onclick*="' + escapado + '"]',
-      'button[onclick*="editarRecetaEmitida"][onclick*="' + escapado + '"]',
-      'button[onclick*="pdfRecetaEmitida"][onclick*="' + escapado + '"]'
-    ];
-
-    const vistos = new Set();
-    const nodos = [];
-    selectores.forEach(selector => {
-      document.querySelectorAll(selector).forEach(btn => {
-        const contenedor = btn.closest('.auro-receta-actions-panel, .auro-receta-mobile-card');
-        if(contenedor && !vistos.has(contenedor)){
-          vistos.add(contenedor);
-          nodos.push(contenedor);
-        }
-      });
-    });
-    return nodos;
-  }
-
-  function auroRecetaPintarFirmaEnHistorial(idReceta, doc){
-    if(!doc) return;
-    auroRecetaInstalarEstilosFirmaPersistente();
-
-    const id = String(idReceta || '').trim();
-    auroRecetaHistorialNodosPorId(id).forEach(contenedor => {
-      if(contenedor.querySelector('.auro-receta-firma-persistente-actions')) return;
-
-      const acciones = contenedor.querySelector(
-        '.auro-receta-actions-buttons, .d-grid.gap-2.mt-2'
-      );
-      if(!acciones) return;
-
-      const badge = document.createElement('span');
-      badge.className = 'auro-receta-firma-persistente-badge';
-      badge.innerHTML = '<i class="bi bi-patch-check-fill"></i> FIRMADA ✓';
-
-      if(contenedor.classList.contains('auro-receta-mobile-card')){
-        const cabecera = contenedor.querySelector('.auro-receta-mobile-head');
-        if(cabecera) cabecera.insertAdjacentElement('afterend', badge);
-        else contenedor.insertBefore(badge, acciones);
-      }else{
-        const titulo = contenedor.querySelector('.auro-receta-actions-title');
-        if(titulo) titulo.insertAdjacentElement('afterend', badge);
-        else contenedor.insertBefore(badge, acciones);
-      }
-
-      const bloque = document.createElement('div');
-      bloque.className = 'auro-receta-firma-persistente-actions';
-      bloque.innerHTML =
-        '<button type="button" class="btn-action success" ' +
-          'onclick="auroRecetaVerPdfFirmadoPersistente(\'' + safe(id) + '\')">' +
-          '<i class="bi bi-file-earmark-check"></i> Ver PDF firmado' +
-        '</button>' +
-        '<button type="button" class="btn-action soft" ' +
-          'onclick="auroRecetaDescargarPdfFirmadoPersistente(\'' + safe(id) + '\')">' +
-          '<i class="bi bi-download"></i> Descargar firmado' +
-        '</button>';
-
-      acciones.insertAdjacentElement('afterend', bloque);
-    });
-  }
-
-  async function auroRecetaSincronizarHistorialFirmasPersistentes(forzar){
-    if(!auroRecetaFirmaPersistenteApiDisponible()) return;
-
-    const recetas = obtenerRecetasPacienteActivo();
-    if(!recetas.length) return;
-
-    /*
-      Solo consulta recetas que están actualmente representadas en el DOM.
-      Evita trabajo innecesario y conserva paginación/filtros existentes.
-    */
-    for(const receta of recetas){
-      const idReceta = String(receta.id_receta || '').trim();
-      const idAtencion = String(receta.id_atencion || '').trim();
-      if(!idReceta || !idAtencion) continue;
-      if(!auroRecetaHistorialNodosPorId(idReceta).length) continue;
-
-      try{
-        const doc = await auroRecetaObtenerFirmaPersistente(
-          idAtencion,
-          idReceta,
-          !!forzar
-        );
-        if(doc) auroRecetaPintarFirmaEnHistorial(idReceta, doc);
+        r=await auroRecetaFirmaPost('obtenerEstadoFirmaElectronica',{id_solicitud:idSolicitud});
       }catch(error){
-        console.warn(
-          'AUROSANAX RECETAS 3.13: no se pudo consultar firma histórica',
-          idReceta,
-          error
-        );
+        /* Error de transporte no se confunde con error de firma. */
+        continue;
+      }
+
+      const estado=String(r?.estado_firma||r?.estado||'').trim().toUpperCase();
+      actual.estado=estado||actual.estado;
+      recetaFirmaProcesos.set(id,actual);
+      renderHistorialRecetas();
+
+      if(estado==='FIRMADO'){
+        recetaFirmaProcesos.delete(id);
+        await auroRecetaFirmaSincronizarPersistencia({silencioso:true,forzar:true});
+        renderHistorialRecetas();
+        mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Receta firmada electrónicamente y archivada en IASYN.', 'ok');
+        try{
+          window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada',{
+            detail:{tipo_documento:'RECETA',id_receta:id,id_documento_origen:id,id_atencion:idAtencion,id_solicitud:idSolicitud}
+          }));
+        }catch(_e){}
+        auroRecetaFirmaEmitirCambio(id,'FIRMADA',{id_atencion:idAtencion,id_solicitud:idSolicitud});
+        return r;
+      }
+
+      if(estado==='ERROR' || estado==='EXPIRADA'){
+        actual.estado=estado;
+        actual.error=String(r?.error||'').trim();
+        recetaFirmaProcesos.set(id,actual);
+        renderHistorialRecetas();
+        mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(actual.error||('La solicitud quedó '+estado+'. Puede reintentar.')), '');
+        return r;
+      }
+
+      if(estado==='CANCELADA'){
+        recetaFirmaProcesos.delete(id);
+        renderHistorialRecetas();
+        auroRecetaFirmaEmitirCambio(id,'CANCELADA',{id_atencion:idAtencion,id_solicitud:idSolicitud});
+        return r;
+      }
+
+      if(estado==='TOMADA'){
+        mostrarMensajeReceta('<i class="bi bi-pen me-1"></i> Adobe está abierto. Aplique las 2 firmas digitales de la receta y guarde el PDF.', '');
       }
     }
+
+    const actual=auroRecetaFirmaProceso(id);
+    if(actual){
+      actual.estado='EXPIRADA';
+      recetaFirmaProcesos.set(id,actual);
+      renderHistorialRecetas();
+    }
+    return {success:false,estado_firma:'EXPIRADA'};
   }
 
-  async function auroRecetaSincronizarFirmaPersistenteActual(forzar){
-    const btn = el('btnFirmaElectronicaReceta');
-    if(!btn || !auroRecetaFirmaPersistenteApiDisponible()) return null;
-
-    /*
-      Nunca se firma contenido temporal del formulario.
-      Primero se guarda la corrección y después se evalúa la versión persistida.
-    */
-    if(recetaModoTrabajo === 'edicion'){
-      btn.classList.remove('auro-receta-firma-persistente-reflejo');
-      btn.disabled = true;
-      btn.setAttribute('data-auro-firma-estado','EDICION_PENDIENTE');
-      btn.title = 'Guarde la corrección antes de firmar una nueva versión';
-      btn.innerHTML = '<i class="bi bi-save"></i> Guarde corrección para firmar';
-      btn.onclick = function(ev){
-        ev?.preventDefault?.();
-        mostrarMensajeReceta(
-          '<i class="bi bi-info-circle me-1"></i> Guarde primero la corrección. Después podrá firmar la versión actualizada.',
-          ''
-        );
-        return false;
-      };
+  async function auroRecetaFirmaCancelar(id){
+    const rid=String(id||'').trim();
+    const proceso=auroRecetaFirmaProceso(rid);
+    if(!proceso?.id_solicitud){
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> No existe una solicitud activa para cancelar.', '');
       return null;
     }
-
-    const documento = auroRecetaDocumentoFirmableActual();
-    if(!documento || !documento.success) return null;
-
-    const idAtencion = String(documento.id_atencion || '').trim();
-    const idReceta = String(documento.id_receta || '').trim();
-    if(!idAtencion || !idReceta) return null;
 
     try{
-      const docs = await auroRecetaObtenerFirmasPersistentes(
-        idAtencion,
-        idReceta,
-        !!forzar
-      );
-      const docVersionActual = await auroRecetaBuscarFirmaDeVersionActual(
-        documento,
-        false
-      );
-
-      const actual = auroRecetaDocumentoFirmableActual();
-      if(
-        !actual || !actual.success ||
-        String(actual.id_atencion || '').trim() !== idAtencion ||
-        String(actual.id_receta || '').trim() !== idReceta
-      ){
-        return docVersionActual;
-      }
-
-      if(docVersionActual){
-        auroRecetaPintarBotonFirmaConfirmada(btn);
-        btn.classList.add('auro-receta-firma-persistente-reflejo');
-        btn.title = 'Ver esta versión firmada de la receta';
-        btn.innerHTML = '<i class="bi bi-patch-check-fill"></i> Ver receta firmada ✓';
-        btn.onclick = function(ev){
-          ev?.preventDefault?.();
-          auroRecetaVerPdfFirmadoPersistente(
-            idReceta,
-            String(docVersionActual.id_firma_documento || '').trim()
-          );
-          return false;
-        };
-      }else{
-        btn.classList.remove('auro-receta-firma-persistente-reflejo');
-        btn.disabled = false;
-        btn.removeAttribute('aria-busy');
-        btn.removeAttribute('data-auro-firma-estado');
-
-        if(docs.length){
-          btn.title = 'La receta fue corregida. Firmar la nueva versión guardada';
-          btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar nueva versión';
-        }else{
-          btn.title = 'Firmar electrónicamente la receta guardada de esta atención';
-          btn.innerHTML = '<i class="bi bi-patch-check"></i> Firmar electrónicamente';
-        }
-
-        btn.onclick = function(ev){
-          ev?.preventDefault?.();
-          auroRecetaFirmarElectronicaActual();
-          return false;
-        };
-      }
-      return docVersionActual;
+      const r=await auroRecetaFirmaPost('firmarDocumento',{
+        operacion_frontend:'CANCELAR',
+        id_solicitud:proceso.id_solicitud,
+        tipo_documento:'RECETA',
+        id_documento_origen:rid,
+        id_receta:rid,
+        id_atencion:proceso.id_atencion
+      });
+      recetaFirmaProcesos.delete(rid);
+      renderHistorialRecetas();
+      mostrarMensajeReceta('<i class="bi bi-x-circle me-1"></i> Firma de receta cancelada.', '');
+      try{
+        window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-cancelada',{
+          detail:{tipo_documento:'RECETA',id_receta:rid,id_documento_origen:rid,id_atencion:proceso.id_atencion,id_solicitud:proceso.id_solicitud}
+        }));
+      }catch(_e){}
+      auroRecetaFirmaEmitirCambio(rid,'CANCELADA',{id_atencion:proceso.id_atencion,id_solicitud:proceso.id_solicitud});
+      return r;
     }catch(error){
-      console.warn('AUROSANAX RECETAS 3.14: consulta persistente versionada no disponible', error);
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo cancelar la firma.'), '');
       return null;
     }
   }
 
-  /*
-    Se envuelve el render ya validado: primero renderiza exactamente como antes
-    y luego añade únicamente el reflejo visual de firma persistente.
-  */
-  const auroRecetaRenderHistorialBase313 = window.renderHistorialRecetas;
-  window.renderHistorialRecetas = function(){
-    const salida = auroRecetaRenderHistorialBase313.apply(this, arguments);
-    setTimeout(function(){
-      auroRecetaSincronizarHistorialFirmasPersistentes(false);
-      auroRecetaSincronizarFirmaPersistenteActual(false);
-    }, 0);
-    return salida;
-  };
+  async function auroRecetaFirmaReabrir(id){
+    const rid=String(id||'').trim();
+    const proceso=auroRecetaFirmaProceso(rid);
+    if(!proceso?.id_solicitud) return auroRecetaFirmaFirmar(rid);
 
-  /*
-    Cuando se completa una firma en ESTE dispositivo se invalida la caché y
-    se vuelve a leer el registro persistente. Otros dispositivos lo obtendrán
-    al abrir/recargar/focalizar la misma atención.
-  */
-  window.addEventListener('aurosanax:firma-electronica-completada', function(ev){
-    const d = ev?.detail || {};
-    if(String(d.tipo_documento || '').toUpperCase() !== 'RECETA') return;
+    try{
+      const r=await auroRecetaFirmaPost('firmarDocumento',{
+        operacion_frontend:'REABRIR',
+        id_solicitud:proceso.id_solicitud,
+        tipo_documento:'RECETA',
+        id_documento_origen:rid,
+        id_receta:rid,
+        id_atencion:proceso.id_atencion
+      });
 
-    auroRecetaFirmaPersistenteInvalidar(d.id_atencion, d.id_receta);
-    setTimeout(function(){
-      auroRecetaSincronizarFirmaPersistenteActual(true);
-      auroRecetaSincronizarHistorialFirmasPersistentes(true);
-    }, 250);
-  });
-
-  /*
-    Refresco ligero al volver a la pestaña: permite que un segundo PC/teléfono
-    refleje una firma realizada en otro dispositivo sin depender de memoria local.
-  */
-  let auroRecetaFirmaPersistenteUltimoRefresco = 0;
-  function auroRecetaRefrescarFirmasAlRetomar(){
-    const ahora = Date.now();
-    if(ahora - auroRecetaFirmaPersistenteUltimoRefresco < 3000) return;
-    auroRecetaFirmaPersistenteUltimoRefresco = ahora;
-    auroRecetaSincronizarFirmaPersistenteActual(true);
-    auroRecetaSincronizarHistorialFirmasPersistentes(true);
+      proceso.estado='PENDIENTE';
+      proceso.poll_token=Date.now();
+      recetaFirmaProcesos.set(rid,proceso);
+      renderHistorialRecetas();
+      mostrarMensajeReceta('<i class="bi bi-arrow-repeat me-1"></i> Solicitud de firma reabierta.', 'ok');
+      return auroRecetaFirmaEsperar(rid,proceso.id_solicitud,proceso.id_atencion);
+    }catch(error){
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo reabrir la firma.'), '');
+      return null;
+    }
   }
 
-  window.addEventListener('focus', auroRecetaRefrescarFirmasAlRetomar);
-  document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'visible'){
-      auroRecetaRefrescarFirmasAlRetomar();
-    }
-  });
+  function auroRecetaFirmaBlobPDF(base64){
+    const bin=atob(String(base64||''));
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    return new Blob([bytes],{type:'application/pdf'});
+  }
 
-  window.auroRecetaVerPdfFirmadoPersistente = auroRecetaVerPdfFirmadoPersistente;
-  window.auroRecetaDescargarPdfFirmadoPersistente = auroRecetaDescargarPdfFirmadoPersistente;
+  async function auroRecetaFirmaVerFirmada(id){
+    const rid=String(id||'').trim();
+    const rLocal=buscarRecetaPorId(rid);
+    if(!rid || !rLocal){
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> No se pudo identificar la receta.', '');
+      return null;
+    }
+
+    const ventana=window.open('','_blank');
+    try{
+      const r=await auroRecetaFirmaPost('obtenerDocumentoFirmado',{
+        tipo_documento:'RECETA',
+        id_documento_origen:rid,
+        id_receta:rid,
+        id_atencion:String(rLocal.id_atencion||'').trim()
+      });
+      if(!r?.pdf_firmado_base64) throw new Error(r?.message||'No se encontró el PDF firmado.');
+      const url=URL.createObjectURL(auroRecetaFirmaBlobPDF(r.pdf_firmado_base64));
+      if(ventana) ventana.location.href=url;
+      else window.open(url,'_blank');
+      setTimeout(()=>URL.revokeObjectURL(url),120000);
+      return r;
+    }catch(error){
+      if(ventana) ventana.close();
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo abrir la receta firmada.'), '');
+      return null;
+    }
+  }
+
+  /* Puentes globales mínimos para botones HTML existentes. */
+  window.auroRecetaFirmarElectronica=auroRecetaFirmaFirmar;
+  window.auroRecetaCancelarFirma=auroRecetaFirmaCancelar;
+  window.auroRecetaReabrirFirma=auroRecetaFirmaReabrir;
+  window.auroRecetaVerFirmada=auroRecetaFirmaVerFirmada;
 
   /*
     API PÚBLICA OFICIAL DE RECETAS
@@ -7269,7 +6902,7 @@
     No expone funciones de guardado nuevas ni duplica lógica clínica.
   */
   window.auroRecetas = Object.assign({}, window.auroRecetas || {}, {
-    version:'3.0 editor tabulado espejo del PDF oficial',
+    version:'3.9-IASYN-FIRMA-RECETA-V1',
     abrirVistaPacienteOficial:auroRecetaAbrirVistaPacienteOficial,
     cerrarVistaPaciente:auroRecetaCerrarVistaPaciente,
     toggleVistaPaciente:auroRecetaToggleVistaPaciente,
@@ -7278,42 +6911,16 @@
     imprimirActual:function(){
       return auroRecetaAbrirVistaPacienteOficial();
     },
-    obtenerDocumentoFirmableActual:auroRecetaDocumentoFirmableActual,
-    /*
-      IASYN 3.18 - ESTADO OFICIAL LIGERO PARA PLAN
-      Plan consume esta lectura; Recetas sigue siendo la única autoridad.
-      Reutiliza la caché persistente/in-flight y NO fuerza una segunda consulta.
-    */
-    obtenerEstadoFirmaActual:async function(){
-      if(recetaModoTrabajo === 'edicion'){
-        return {success:false,estado:'EDICION_PENDIENTE',id_atencion:String(obtenerIdAtencionActivaSeguro() || '').trim(),message:'Guarde los cambios de la receta antes de firmar.'};
-      }
 
-      const documento = auroRecetaDocumentoFirmableActual();
-      if(!documento || !documento.success){
-        return Object.assign({estado:'RECETA_NO_GUARDADA'}, documento || {success:false,message:'No existe una receta guardada para esta atención.'});
-      }
-
-      const idAtencion = String(documento.id_atencion || '').trim();
-      const idReceta = String(documento.id_receta || '').trim();
-      const docs = await auroRecetaObtenerFirmasPersistentes(idAtencion,idReceta,false);
-      const docVersionActual = await auroRecetaBuscarFirmaDeVersionActual(documento,false);
-      const estado = docVersionActual ? 'FIRMADA' : (docs.length ? 'NUEVA_VERSION' : 'SIN_FIRMA');
-
-      return {
-        success:true,
-        tipo_documento:'RECETA',
-        id_atencion:idAtencion,
-        id_receta:idReceta,
-        estado_firma:{estado:estado},
-        documento_firmado:docVersionActual || null
-      };
-    },
-    firmarElectronicaActual:auroRecetaFirmarElectronicaActual,
-    obtenerFirmaPersistenteActual:auroRecetaSincronizarFirmaPersistenteActual,
-    sincronizarFirmasPersistentesHistorial:auroRecetaSincronizarHistorialFirmasPersistentes,
-    verPdfFirmadoPersistente:auroRecetaVerPdfFirmadoPersistente,
-    descargarPdfFirmadoPersistente:auroRecetaDescargarPdfFirmadoPersistente
+    /* Contrato público único de firma. Plan se conectará después como espejo. */
+    obtenerDocumentoFirmableActual:auroRecetaFirmaObtenerDocumentoActual,
+    obtenerEstadoFirmaActual:auroRecetaFirmaObtenerEstadoActual,
+    firmarElectronicaActual:auroRecetaFirmaFirmarActual,
+    firmarReceta:auroRecetaFirmaFirmar,
+    cancelarFirma:auroRecetaFirmaCancelar,
+    reabrirFirma:auroRecetaFirmaReabrir,
+    abrirDocumentoFirmado:auroRecetaFirmaVerFirmada,
+    sincronizarEstadoFirma:auroRecetaFirmaSincronizarPersistencia
   });
 
   window.cargarRecetasDesdeSheets = cargarRecetasDesdeSheets;
@@ -7495,130 +7102,3 @@
      Plan, Google Sheets, Apps Script, IDs y eventos.
    - Responsive: escritorio, Android, iPhone y iPad.
 ===================================================== */
-/* =====================================================
-   AUROSANAX RECETAS 38.2 - UX PREMIUM DE FIRMA
-   -----------------------------------------------------
-   ADHESIÓN VISUAL APPEND-ONLY ANTIRREGRESIVA SOBRE 38.1.
-   - Conserva íntegro Recetas 38.1 validado.
-   - NO modifica Plan 37.
-   - NO modifica firma_electronica.js, Apps Script, motor, Drive ni BD.
-   - NO crea POST/fetch, NO cambia identidad documental, NO cambia estados.
-   - Envuelve únicamente la API pública firmarElectronicaActual para reflejar
-     visualmente el resultado REAL devuelto por el flujo existente.
-===================================================== */
-(function auroRecetasUxPremiumFirmaV382(){
-  'use strict';
-
-  const api = window.auroRecetas;
-  if(!api || typeof api.firmarElectronicaActual !== 'function'){
-    console.warn('AUROSANAX RECETAS 38.2 UX: API de firma de Recetas no disponible.');
-    return;
-  }
-  if(api.__auroUxPremiumFirma382 === true) return;
-
-  const firmarBase = api.firmarElectronicaActual.bind(api);
-  let toast = null;
-  let timer = null;
-  let secuencia = 0;
-
-  const PALETA = Object.freeze({
-    preparando:'#8B1E5A',
-    ok:'#059669',
-    cancelada:'#B7791F',
-    error:'#B42318'
-  });
-
-  function asegurarToast(){
-    if(toast && toast.isConnected) return toast;
-
-    toast = document.getElementById('auroRecetaFirmaUxPremiumToast');
-    if(toast) return toast;
-
-    toast = document.createElement('div');
-    toast.id = 'auroRecetaFirmaUxPremiumToast';
-    toast.setAttribute('role','status');
-    toast.setAttribute('aria-live','polite');
-    toast.style.position = 'fixed';
-    toast.style.top = '18px';
-    toast.style.left = '50%';
-    toast.style.transform = 'translate(-50%, -10px)';
-    toast.style.zIndex = '2147483000';
-    toast.style.maxWidth = 'min(92vw, 560px)';
-    toast.style.padding = '12px 18px';
-    toast.style.borderRadius = '14px';
-    toast.style.boxShadow = '0 12px 34px rgba(31, 18, 27, .20)';
-    toast.style.color = '#ffffff';
-    toast.style.fontSize = '14px';
-    toast.style.fontWeight = '700';
-    toast.style.lineHeight = '1.35';
-    toast.style.letterSpacing = '.01em';
-    toast.style.textAlign = 'center';
-    toast.style.pointerEvents = 'none';
-    toast.style.opacity = '0';
-    toast.style.transition = 'opacity .22s ease, transform .22s ease';
-    toast.style.display = 'none';
-    document.body.appendChild(toast);
-    return toast;
-  }
-
-  function mostrar(mensaje, tipo, duracion){
-    const miSecuencia = ++secuencia;
-    if(timer){ clearTimeout(timer); timer = null; }
-
-    const box = asegurarToast();
-    box.textContent = String(mensaje || '');
-    box.style.background = PALETA[tipo] || PALETA.preparando;
-    box.style.display = 'block';
-    box.style.opacity = '0';
-    box.style.transform = 'translate(-50%, -10px)';
-
-    requestAnimationFrame(function(){
-      if(miSecuencia !== secuencia) return;
-      box.style.opacity = '1';
-      box.style.transform = 'translate(-50%, 0)';
-    });
-
-    if(Number(duracion) > 0){
-      timer = setTimeout(function(){
-        if(miSecuencia !== secuencia) return;
-        box.style.opacity = '0';
-        box.style.transform = 'translate(-50%, -8px)';
-        setTimeout(function(){
-          if(miSecuencia === secuencia) box.style.display = 'none';
-        }, 230);
-      }, Number(duracion));
-    }
-  }
-
-  async function firmarConUxPremium(){
-    /* Solo comunicación visual. La autoridad sigue siendo firmarBase(). */
-    mostrar('Preparando firma electrónica de la receta…', 'preparando', 0);
-
-    try{
-      const resultado = await firmarBase();
-      const estado = String(resultado?.estado_firma || '').trim().toUpperCase();
-
-      if(estado === 'FIRMADO'){
-        mostrar('Receta firmada correctamente ✓', 'ok', 3600);
-      }else if(estado === 'CANCELADA'){
-        mostrar('Firma de receta cancelada', 'cancelada', 3600);
-      }else if(resultado === null || resultado === undefined){
-        /* El flujo base ya mostró el detalle del error/validación en Recetas. */
-        mostrar('No fue posible completar la firma de la receta', 'error', 3600);
-      }else{
-        /* No inventa un estado clínico que el flujo base no haya confirmado. */
-        mostrar('La firma de la receta no fue confirmada', 'error', 3600);
-      }
-
-      return resultado;
-    }catch(error){
-      mostrar('No fue posible completar la firma de la receta', 'error', 3600);
-      throw error;
-    }
-  }
-
-  window.auroRecetas = Object.assign({}, api, {
-    firmarElectronicaActual:firmarConUxPremium,
-    __auroUxPremiumFirma382:true
-  });
-})();
