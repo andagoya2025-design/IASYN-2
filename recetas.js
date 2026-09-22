@@ -5192,7 +5192,6 @@ setVal('recRecomendaciones', recetaListaParaFormulario(receta.recomendaciones ||
 
       if(resultado && resultado.success){
         mostrarMensajeReceta(`<i class="bi bi-check-circle me-1"></i> Receta ${estabaEditando ? 'actualizada' : 'guardada'} correctamente. Ya fue asociada a la consulta activa.`, 'ok');
-        Promise.resolve(auroRecetaFirmaSincronizarPersistencia({silencioso:true})).catch(()=>{});
       }else{
         /* El backend es la autoridad. Si bloquea una corrección o falla el POST,
            se revierte únicamente la copia local recién escrita para no mostrar
@@ -5217,6 +5216,57 @@ setVal('recRecomendaciones', recetaListaParaFormulario(receta.recomendaciones ||
 
       if(resultado && resultado.success){
         marcarEstadoRecetaGuardadaVisual(estabaEditando);
+
+        /*
+          IASYN FIX ANTIRREGRESIVO — ESTADO DE FIRMA POST-GUARDADO
+          ---------------------------------------------------------
+          El guardado clínico ya fue confirmado por el backend. En este punto
+          Recetas debe publicar inmediatamente el nuevo estado documental, sin
+          depender de que el usuario abra "PDF receta" para provocar un refresco.
+
+          Reglas:
+          - receta corregida que ya tenía firma -> NUEVA_VERSION;
+          - receta sin firma previa -> SIN_FIRMA;
+          - no crea solicitudes de firma, no toca PDF ni motor P12/BER;
+          - la sincronización remota posterior sigue siendo la autoridad final.
+        */
+        const idFirmaPostGuardado = String(r.id_receta || '').trim();
+        if(idFirmaPostGuardado){
+          const firmaAnterior = recetaFirmasPorDocumento.get(idFirmaPostGuardado) || null;
+          const teniaFirmaAnterior = !!(
+            firmaAnterior &&
+            (firmaAnterior.documento || String(firmaAnterior.estado || '').toUpperCase()==='FIRMADA')
+          );
+          const estadoPostGuardado = estabaEditando && teniaFirmaAnterior
+            ? 'NUEVA_VERSION'
+            : 'SIN_FIRMA';
+
+          recetaFirmasPorDocumento.set(idFirmaPostGuardado,{
+            estado:estadoPostGuardado,
+            documento:teniaFirmaAnterior ? firmaAnterior.documento : null,
+            sha_actual:'',
+            version_documento:String(r.actualizado_en || r.creado_en || '').trim(),
+            error:''
+          });
+
+          renderHistorialRecetas();
+          auroRecetaFirmaEmitirCambio(idFirmaPostGuardado,estadoPostGuardado,{
+            id_atencion:String(r.id_atencion || '').trim(),
+            motivo:'POST_GUARDADO'
+          });
+
+          /* Verificación asíncrona contra persistencia. No bloquea el guardado
+             ni convierte un fallo de consulta de firma en fallo clínico. */
+          Promise.resolve(auroRecetaFirmaSincronizarPersistencia({silencioso:true}))
+            .then(function(){
+              const confirmado=auroRecetaFirmaEstado(idFirmaPostGuardado);
+              auroRecetaFirmaEmitirCambio(idFirmaPostGuardado,confirmado.estado||estadoPostGuardado,{
+                id_atencion:String(r.id_atencion || '').trim(),
+                motivo:'POST_GUARDADO_CONFIRMADO'
+              });
+            })
+            .catch(function(){});
+        }
       }else{
         actualizarBotonGuardarReceta();
       }
