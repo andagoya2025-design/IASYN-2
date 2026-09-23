@@ -5137,8 +5137,27 @@ setVal('recRecomendaciones', recetaListaParaFormulario(receta.recomendaciones ||
         - No modifica Plan, Atenciones, medicamentos, diagnóstico ni PDF.
       */
       if(!recetaEditandoId && !recetaNuevaForzada){
-        await cargarRecetasDesdeSheets(true);
-        const existenteAtencion = buscarRecetaActivaPorAtencion(idAtencionGuardar);
+        /*
+          IASYN FIX ANTIRREGRESIVO — GUARDADO RÁPIDO DE RECETA
+          ----------------------------------------------------
+          Primero reutiliza la receta ya conocida de la atención activa.
+          Solo consulta Google Sheets como respaldo cuando el estado local
+          no permite identificar una receta existente.
+
+          Conserva:
+          - protección contra recetas duplicadas;
+          - id_receta / id_atencion;
+          - edición vs. nueva receta;
+          - autoridad final del backend;
+          - versión documental, SHA y firma electrónica.
+        */
+        let existenteAtencion = buscarRecetaActivaPorAtencion(idAtencionGuardar);
+
+        if(!(existenteAtencion && existenteAtencion.id_receta)){
+          await cargarRecetasDesdeSheets(true);
+          existenteAtencion = buscarRecetaActivaPorAtencion(idAtencionGuardar);
+        }
+
         if(existenteAtencion && existenteAtencion.id_receta){
           recetaEditandoId = String(existenteAtencion.id_receta);
         }
