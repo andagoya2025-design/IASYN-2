@@ -3748,3 +3748,205 @@
   }catch(_e){}
 })();
 
+
+/* ============================================================
+   IASYN 2 — FIRMA ELECTRÓNICA 4.1
+   CORRECCIÓN QUIRÚRGICA — VER / DESCARGAR RECETA FIRMADA
+   Fecha: 2026-09-24
+   ------------------------------------------------------------
+   ANTIRREGRESIVO:
+   - Conserva íntegro todo el baseline anterior.
+   - NO altera Firmar, Cancelar, Reabrir, polling ni estados.
+   - NO altera Certificados ni otros documentos.
+   - Para RECETA usa el contrato REAL del SCRIB actual:
+       accion = obtenerDocumentoFirmado
+     El backend devuelve pdf_firmado_base64 tras validar Drive + SHA.
+   - Evita llamar a obtenerPdfFirmadoPersistente, acción que no existe
+     en el SCRIB actual de IASYN 2.
+============================================================ */
+(function iasynFirmaRecetaVerFirmadaV41(){
+  'use strict';
+
+  const anterior=window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento!=='function') return;
+
+  const VERSION='4.1-IASYN2-RECETA-VER-FIRMADA';
+
+  function texto(v){
+    return String(v===null || v===undefined ? '' : v).trim();
+  }
+
+  function tipo(data){
+    return texto(data && data.tipo_documento).toUpperCase();
+  }
+
+  function esReceta(data){
+    const d=data||{};
+    return tipo(d)==='RECETA' || (!!texto(d.id_receta || d.id_documento_origen) && !texto(d.id_certificado));
+  }
+
+  function apiUrl(){
+    try{
+      if(typeof API_URL!=='undefined' && API_URL) return texto(API_URL);
+    }catch(_e){}
+    if(window.API_URL) return texto(window.API_URL);
+    if(window.IASYN_CONFIG && window.IASYN_CONFIG.apiUrl) return texto(window.IASYN_CONFIG.apiUrl);
+    const input=document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
+  }
+
+  function tokenSesion(){
+    try{
+      const s=window.IASYN_SEGURIDAD||window.AUROSANAX_SEGURIDAD;
+      if(s){
+        if(typeof s.obtenerToken==='function'){
+          const t=texto(s.obtenerToken());
+          if(t) return t;
+        }
+        if(typeof s.obtenerTokenSesion==='function'){
+          const t=texto(s.obtenerTokenSesion());
+          if(t) return t;
+        }
+      }
+    }catch(_e){}
+    try{
+      return texto(
+        sessionStorage.getItem('iasyn_seguridad_token') ||
+        sessionStorage.getItem('aurosanax_seguridad_token') || ''
+      );
+    }catch(_e){ return ''; }
+  }
+
+  async function postObtenerDocumentoFirmado(data){
+    const url=apiUrl();
+    if(!url) throw new Error('IASYN no encontró la conexión del ERP.');
+    const token=tokenSesion();
+    if(!token) throw new Error('No existe una sesión IASYN activa.');
+
+    const d=Object.assign({},data||{});
+    d.tipo_documento='RECETA';
+    d.id_receta=texto(d.id_receta||d.id_documento_origen||d.id_documento_clinico);
+    d.id_documento_origen=d.id_receta;
+    d.id_atencion=texto(d.id_atencion);
+    d.id_firma_documento=texto(d.id_firma_documento);
+
+    if(!d.id_firma_documento && (!d.id_atencion || !d.id_receta)){
+      throw new Error('Para ver la receta firmada se requiere id_firma_documento o id_atencion + id_receta.');
+    }
+
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({
+        accion:'obtenerDocumentoFirmado',
+        data:Object.assign({},d,{token:token})
+      }),
+      cache:'no-store'
+    });
+
+    if(!res.ok) throw new Error('El servidor respondió HTTP '+res.status+'.');
+    const json=await res.json();
+    if(!json || json.success!==true){
+      throw new Error(texto(json && json.message) || 'No fue posible recuperar la receta firmada.');
+    }
+    return json;
+  }
+
+  function base64PDF(resultado){
+    return texto(resultado && (resultado.pdf_firmado_base64 || resultado.archivo_base64));
+  }
+
+  function base64ABlob(base64){
+    const limpio=texto(base64).replace(/^data:[^;]+;base64,/, '');
+    const bin=atob(limpio);
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    return new Blob([bytes],{type:'application/pdf'});
+  }
+
+  async function obtenerPdfFirmadoPersistente(data){
+    if(!esReceta(data)){
+      if(typeof anterior.obtenerPdfFirmadoPersistente==='function'){
+        return anterior.obtenerPdfFirmadoPersistente(data);
+      }
+      throw new Error('La recuperación persistente no está disponible para este documento.');
+    }
+    return postObtenerDocumentoFirmado(data);
+  }
+
+  async function abrirPdfFirmadoPersistente(data){
+    if(!esReceta(data)){
+      if(typeof anterior.abrirPdfFirmadoPersistente==='function'){
+        return anterior.abrirPdfFirmadoPersistente(data);
+      }
+      throw new Error('La visualización persistente no está disponible para este documento.');
+    }
+
+    // Abrir la pestaña dentro del gesto del clic evita que el navegador la bloquee
+    // mientras se espera la lectura segura del PDF desde Drive.
+    const ventana=window.open('', '_blank');
+    if(!ventana){
+      throw new Error('El navegador bloqueó la nueva pestaña. Habilite ventanas emergentes para ver el PDF firmado.');
+    }
+
+    try{
+      ventana.document.title='Cargando receta firmada…';
+      ventana.document.body.innerHTML='<p style="font-family:Arial,sans-serif;padding:20px">Cargando receta firmada…</p>';
+
+      const r=await postObtenerDocumentoFirmado(data);
+      const b64=base64PDF(r);
+      if(!b64) throw new Error('El servidor no devolvió el PDF firmado.');
+
+      const blob=base64ABlob(b64);
+      const url=URL.createObjectURL(blob);
+      ventana.location.replace(url);
+      setTimeout(function(){ URL.revokeObjectURL(url); },5*60*1000);
+      return r;
+    }catch(error){
+      try{
+        ventana.document.body.innerHTML='<p style="font-family:Arial,sans-serif;padding:20px;color:#991b1b">No fue posible abrir la receta firmada.</p>';
+        setTimeout(function(){ try{ventana.close();}catch(_e){} },800);
+      }catch(_e){}
+      throw error;
+    }
+  }
+
+  async function descargarPdfFirmadoPersistente(data,nombrePreferido){
+    if(!esReceta(data)){
+      if(typeof anterior.descargarPdfFirmadoPersistente==='function'){
+        return anterior.descargarPdfFirmadoPersistente(data,nombrePreferido);
+      }
+      throw new Error('La descarga persistente no está disponible para este documento.');
+    }
+
+    const r=await postObtenerDocumentoFirmado(data);
+    const b64=base64PDF(r);
+    if(!b64) throw new Error('El servidor no devolvió el PDF firmado.');
+
+    const blob=base64ABlob(b64);
+    const url=URL.createObjectURL(blob);
+    const nombre=texto(r.nombre_archivo||nombrePreferido||'receta_firmada.pdf');
+    const a=document.createElement('a');
+    a.href=url;
+    a.download=nombre.toLowerCase().endsWith('.pdf')?nombre:nombre+'.pdf';
+    a.rel='noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(url); },60000);
+    return r;
+  }
+
+  window.auroFirmaElectronica=Object.freeze(Object.assign({},anterior,{
+    version:VERSION,
+    obtenerPdfFirmadoPersistente:obtenerPdfFirmadoPersistente,
+    abrirPdfFirmadoPersistente:abrirPdfFirmadoPersistente,
+    descargarPdfFirmadoPersistente:descargarPdfFirmadoPersistente
+  }));
+
+  try{
+    window.dispatchEvent(new CustomEvent('iasyn:firma-receta-ver-firmada-lista',{
+      detail:{version:VERSION,accion_backend:'obtenerDocumentoFirmado'}
+    }));
+  }catch(_e){}
+})();
