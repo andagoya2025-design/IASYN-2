@@ -6308,6 +6308,20 @@ cargarMedicosActivosReceta(false).then(function(){
     return recetaFirmaProcesos.get(String(id||'').trim()) || null;
   }
 
+function auroRecetaFirmaMotor(){
+    const motor=window.auroFirmaElectronica;
+    return motor && typeof motor==='object' ? motor : null;
+  }
+
+  async function auroRecetaFirmaConsultarFirmados(data){
+    const motor=auroRecetaFirmaMotor();
+    if(motor && typeof motor.consultarDocumentosFirmados==='function'){
+      return motor.consultarDocumentosFirmados(data||{});
+    }
+    return auroRecetaFirmaPost('consultarDocumentosFirmados',data||{});
+  }
+
+
   function auroRecetaFirmaResumenHTML(r){
     const id=String(r?.id_receta||'').trim();
     if(!id) return '';
@@ -6318,7 +6332,7 @@ cargarMedicosActivosReceta(false).then(function(){
     if(proceso){
       const op=String(proceso.estado||'').toUpperCase();
       if(op==='PREPARANDO'){ texto='PREPARANDO…'; color='#9a3412'; }
-      else if(op==='TOMADA'){ texto='EN ADOBE…'; color='#1d4ed8'; }
+      else if(op==='TOMADA'){ texto='IASYN PREPARANDO FIRMA…'; color='#1d4ed8'; }
       else if(op==='PENDIENTE'){ texto='EN PROCESO…'; color='#1d4ed8'; }
       else if(op==='ERROR'){ texto='ERROR DE FIRMA'; color='#b91c1c'; }
       else if(op==='EXPIRADA'){ texto='FIRMA EXPIRADA'; color='#b91c1c'; }
@@ -6340,6 +6354,55 @@ cargarMedicosActivosReceta(false).then(function(){
     },extra||{});
     try{ window.dispatchEvent(new CustomEvent('aurosanax:receta-firma-estado',{detail})); }catch(_e){}
   }
+
+function auroRecetaFirmaInstalarEventosMotor(){
+    if(window.__iasynRecetaFirmaEventosMotorV1) return;
+    window.__iasynRecetaFirmaEventosMotorV1=true;
+
+    window.addEventListener('aurosanax:firma-electronica-estado',function(ev){
+      const d=ev?.detail||{};
+      if(String(d.tipo_documento||'').trim().toUpperCase()!=='RECETA') return;
+      const rid=String(d.id_receta||d.id_documento_origen||'').trim();
+      if(!rid) return;
+      const estado=String(d.estado_firma||d.estado||'').trim().toUpperCase();
+      if(!estado) return;
+
+      const anterior=recetaFirmaProcesos.get(rid)||null;
+      const previo=String(anterior?.estado||'').toUpperCase();
+
+      if(estado==='FIRMADO' || estado==='CANCELADA'){
+        recetaFirmaProcesos.delete(rid);
+      }else if(estado==='DEGRADADO'){
+        /* Un fallo transitorio de transporte no reemplaza el estado clínico/operativo.
+           Se conserva PENDIENTE/TOMADA/PREPARANDO y solo se anota el error técnico. */
+        recetaFirmaProcesos.set(rid,Object.assign({},anterior||{}, {
+          estado:String(anterior?.estado||'PENDIENTE').toUpperCase(),
+          id_solicitud:String(d.id_solicitud||anterior?.id_solicitud||'').trim(),
+          id_atencion:String(d.id_atencion||anterior?.id_atencion||'').trim(),
+          error:String(d.error||anterior?.error||'').trim()
+        }));
+      }else if(['PREPARANDO','PENDIENTE','TOMADA','ERROR','EXPIRADA'].includes(estado)){
+        recetaFirmaProcesos.set(rid,Object.assign({},anterior||{}, {
+          estado:estado,
+          id_solicitud:String(d.id_solicitud||anterior?.id_solicitud||'').trim(),
+          id_atencion:String(d.id_atencion||anterior?.id_atencion||'').trim(),
+          error:String(d.error||'').trim()
+        }));
+      }
+
+      if(previo!==estado){
+        if(estado==='TOMADA'){
+          mostrarMensajeReceta('<i class="bi bi-shield-lock me-1"></i> IASYN recibió la solicitud. Preparando el PDF y la clave de firma…','');
+        }else if(estado==='PENDIENTE'){
+          mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Solicitud enviada al motor IASYN…','');
+        }
+      }
+      renderHistorialRecetas();
+    });
+  }
+
+  auroRecetaFirmaInstalarEventosMotor();
+
 
   function auroRecetaFirmaBotonesHTML(r,movil){
     const id=String(r?.id_receta||'').trim();
@@ -6363,8 +6426,8 @@ cargarMedicosActivosReceta(false).then(function(){
         textoEstado='PREPARANDO FIRMA…'; color='#9a3412';
         boton='<button type="button" class="btn-action soft" disabled aria-busy="true"><i class="bi bi-hourglass-split me-1"></i>Preparando firma…</button>';
       }else if(['PENDIENTE','TOMADA'].includes(op)){
-        textoEstado=op==='TOMADA'?'FIRMA EN ADOBE…':'FIRMA EN PROCESO…'; color='#1d4ed8';
-        boton='<button type="button" class="btn-action soft" disabled aria-busy="true"><i class="bi bi-hourglass-split me-1"></i>'+(op==='TOMADA'?'Firma en Adobe…':'Firma en proceso…')+'</button>';
+        textoEstado=op==='TOMADA'?'IASYN PREPARANDO FIRMA…':'FIRMA EN PROCESO…'; color='#1d4ed8';
+        boton='<button type="button" class="btn-action soft" disabled aria-busy="true"><i class="bi bi-hourglass-split me-1"></i>'+(op==='TOMADA'?'IASYN preparando firma…':'Firma en proceso…')+'</button>';
         cancelar="<button type=\"button\" class=\"btn-action soft\" onclick=\"auroRecetaCancelarFirma('"+safe(id)+"')\"><i class=\"bi bi-x-circle me-1\"></i>Cancelar firma</button>";
       }else if(['ERROR','EXPIRADA'].includes(op)){
         textoEstado=op==='ERROR'?'ERROR DE FIRMA':'FIRMA EXPIRADA'; color='#b91c1c';
@@ -6514,7 +6577,7 @@ cargarMedicosActivosReceta(false).then(function(){
     try{
       const [recetasRemotas,resFirmas]=await Promise.all([
         auroRecetaFirmaRecetasRemotas(),
-        auroRecetaFirmaPost('consultarDocumentosFirmados',{
+        auroRecetaFirmaConsultarFirmados({
           tipo_documento:'RECETA',
           id_paciente:pacienteEsperado
         })
@@ -6705,7 +6768,7 @@ cargarMedicosActivosReceta(false).then(function(){
 
     const existente=auroRecetaFirmaProceso(rid);
     if(existente && ['PREPARANDO','PENDIENTE','TOMADA'].includes(String(existente.estado||'').toUpperCase())){
-      mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Esta receta ya tiene una firma en proceso.', '');
+      mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Esta receta ya tiene una firma en proceso.','');
       auroRecetaToastPremium('info','Esta receta ya tiene una firma electrónica en proceso.');
       return existente;
     }
@@ -6715,14 +6778,23 @@ cargarMedicosActivosReceta(false).then(function(){
 
     const doc=await auroRecetaFirmaObtenerDocumento(rid);
     if(!doc.success){
-      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(doc.message||'La receta no está lista para firmar.'), '');
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(doc.message||'La receta no está lista para firmar.'),'');
       return doc;
     }
 
-    /* Comprobación solo lectura ANTES del POST creador.
-       Si ya existe exactamente esta versión firmada, no crea solicitud. */
+    const motor=auroRecetaFirmaMotor();
+    if(!motor || typeof motor.firmarDocumento!=='function'){
+      const msg='firma_electronica.js no está cargado. IASYN no inició el puente de firma.';
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(msg),'');
+      auroRecetaToastPremium('error',msg);
+      return {success:false,error:msg};
+    }
+
+    /* Verificación persistente previa conservada: evita crear una nueva solicitud
+       cuando la versión/hash exactos ya están firmados. El transporte pertenece
+       ahora a firma_electronica.js. */
     try{
-      const q=await auroRecetaFirmaPost('consultarDocumentosFirmados',{
+      const q=await auroRecetaFirmaConsultarFirmados({
         tipo_documento:'RECETA',
         id_documento_origen:rid,
         id_receta:rid,
@@ -6739,7 +6811,7 @@ cargarMedicosActivosReceta(false).then(function(){
       if(exacto){
         recetaFirmasPorDocumento.set(rid,{estado:'FIRMADA',documento:exacto,sha_actual:doc.sha256_origen,error:''});
         renderHistorialRecetas();
-        mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Esta versión de la receta ya está firmada.', 'ok');
+        mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Esta versión de la receta ya está firmada.','ok');
         auroRecetaToastPremium('ok','Esta versión de la receta ya se encuentra firmada.');
         return exacto;
       }
@@ -6747,11 +6819,11 @@ cargarMedicosActivosReceta(false).then(function(){
 
     recetaFirmaProcesos.set(rid,{estado:'PREPARANDO',id_solicitud:'',id_atencion:doc.id_atencion});
     renderHistorialRecetas();
-    mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Preparando receta para firma electrónica. Esta receta requiere 2 firmas digitales.', '');
-    auroRecetaToastPremium('info','Receta enviada a firma. Preparando Adobe…');
+    mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Preparando receta para firma electrónica con IASYN…','');
+    auroRecetaToastPremium('info','Receta enviada al motor IASYN. Preparando firma…');
 
     try{
-      const r=await auroRecetaFirmaPost('firmarDocumento',{
+      const r=await motor.firmarDocumento({
         tipo_documento:'RECETA',
         id_documento_origen:rid,
         id_receta:rid,
@@ -6765,147 +6837,104 @@ cargarMedicosActivosReceta(false).then(function(){
         nombre_archivo:doc.nombre_archivo,
         firmas_requeridas:2,
         version_documento:doc.version_documento,
-        html_documento:doc.html_documento
+        html_documento:doc.html_documento,
+        sha256_origen:doc.sha256_origen
       });
 
-      if(String(r?.estado_firma||'').toUpperCase()==='FIRMADO'){
+      const estado=String(r?.estado_firma||r?.estado||'').trim().toUpperCase();
+      if(estado==='FIRMADO'){
         recetaFirmaProcesos.delete(rid);
         await auroRecetaFirmaSincronizarPersistencia({silencioso:true,forzar:true});
-        mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Esta versión de la receta ya estaba firmada.', 'ok');
-        auroRecetaToastPremium('ok','Esta versión de la receta ya se encuentra firmada.');
+        renderHistorialRecetas();
+        mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Receta firmada electrónicamente y archivada en IASYN.','ok');
+        auroRecetaToastPremium('ok','Receta firmada correctamente y archivada en IASYN.');
+        auroRecetaFirmaEmitirCambio(rid,'FIRMADA',{id_atencion:doc.id_atencion,id_solicitud:String(r?.id_solicitud||'')});
         return r;
       }
 
-      const solicitud=String(r?.id_solicitud||'').trim();
-      if(!solicitud) throw new Error('IASYN no devolvió id_solicitud.');
+      if(estado==='CANCELADA'){
+        recetaFirmaProcesos.delete(rid);
+        renderHistorialRecetas();
+        mostrarMensajeReceta('<i class="bi bi-x-circle me-1"></i> Firma de receta cancelada.','');
+        auroRecetaToastPremium('warn','Firma cancelada correctamente. La receta está disponible nuevamente.');
+        auroRecetaFirmaEmitirCambio(rid,'CANCELADA',{id_atencion:doc.id_atencion,id_solicitud:String(r?.id_solicitud||'')});
+        return r;
+      }
 
-      recetaFirmaProcesos.set(rid,{
-        estado:String(r.estado_firma||'PENDIENTE').toUpperCase(),
-        id_solicitud:solicitud,
-        id_atencion:doc.id_atencion,
-        poll_token:Date.now()
-      });
-      renderHistorialRecetas();
-      mostrarMensajeReceta(
-        '<i class="bi bi-pen me-1"></i> Solicitud enviada. En Adobe aplique las 2 firmas digitales requeridas y guarde el PDF.',
-        'ok'
-      );
-      auroRecetaToastPremium('info',r?.agente_online===false
-        ? 'Solicitud creada. El motor IASYN debe estar activo en el computador autorizado.'
-        : 'Firma en proceso. Adobe se abrirá automáticamente.');
+      if(estado==='ERROR' || estado==='EXPIRADA'){
+        const actual=auroRecetaFirmaProceso(rid)||{};
+        actual.estado=estado;
+        actual.error=String(r?.error||'').trim();
+        recetaFirmaProcesos.set(rid,actual);
+        renderHistorialRecetas();
+        auroRecetaToastPremium('error',actual.error||('La solicitud quedó '+estado+'. Puede reintentar.'));
+        return r;
+      }
 
-      return await auroRecetaFirmaEsperar(rid,solicitud,doc.id_atencion);
+      throw new Error('IASYN terminó la operación sin un estado final válido.');
     }catch(error){
-      recetaFirmaProcesos.delete(rid);
+      const actual=auroRecetaFirmaProceso(rid);
+      if(!actual || !['ERROR','EXPIRADA'].includes(String(actual.estado||'').toUpperCase())){
+        recetaFirmaProcesos.delete(rid);
+      }
       renderHistorialRecetas();
-      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo iniciar la firma.'), '');
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo iniciar la firma.'),'');
       auroRecetaToastPremium('error',error?.message||'No se pudo iniciar la firma de la receta.');
       return {success:false,error:String(error?.message||error||'')};
     }
   }
 
   async function auroRecetaFirmaEsperar(id,idSolicitud,idAtencion){
-    const proceso=auroRecetaFirmaProceso(id);
-    const pollToken=(proceso?.poll_token||Date.now());
-    const inicio=Date.now();
-
-    while(Date.now()-inicio<35*60*1000){
-      await new Promise(r=>setTimeout(r,2000));
-
-      const actual=auroRecetaFirmaProceso(id);
-      if(!actual || actual.poll_token!==pollToken || actual.id_solicitud!==idSolicitud) return null;
-
-      let r;
-      try{
-        r=await auroRecetaFirmaPost('obtenerEstadoFirmaElectronica',{id_solicitud:idSolicitud});
-      }catch(error){
-        /* Error de transporte no se confunde con error de firma. */
-        continue;
-      }
-
-      const estado=String(r?.estado_firma||r?.estado||'').trim().toUpperCase();
-      actual.estado=estado||actual.estado;
-      recetaFirmaProcesos.set(id,actual);
-      renderHistorialRecetas();
-
-      if(estado==='FIRMADO'){
-        recetaFirmaProcesos.delete(id);
-        await auroRecetaFirmaSincronizarPersistencia({silencioso:true,forzar:true});
-        renderHistorialRecetas();
-        mostrarMensajeReceta('<i class="bi bi-check-circle me-1"></i> Receta firmada electrónicamente y archivada en IASYN.', 'ok');
-        auroRecetaToastPremium('ok','Receta firmada correctamente y archivada en IASYN.');
-        try{
-          window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada',{
-            detail:{tipo_documento:'RECETA',id_receta:id,id_documento_origen:id,id_atencion:idAtencion,id_solicitud:idSolicitud}
-          }));
-        }catch(_e){}
-        auroRecetaFirmaEmitirCambio(id,'FIRMADA',{id_atencion:idAtencion,id_solicitud:idSolicitud});
-        return r;
-      }
-
-      if(estado==='ERROR' || estado==='EXPIRADA'){
-        actual.estado=estado;
-        actual.error=String(r?.error||'').trim();
-        recetaFirmaProcesos.set(id,actual);
-        renderHistorialRecetas();
-        mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(actual.error||('La solicitud quedó '+estado+'. Puede reintentar.')), '');
-        auroRecetaToastPremium('error',actual.error||('La solicitud quedó '+estado+'. Puede reintentar.'));
-        return r;
-      }
-
-      if(estado==='CANCELADA'){
-        recetaFirmaProcesos.delete(id);
-        renderHistorialRecetas();
-        auroRecetaFirmaEmitirCambio(id,'CANCELADA',{id_atencion:idAtencion,id_solicitud:idSolicitud});
-        return r;
-      }
-
-      if(estado==='TOMADA'){
-        mostrarMensajeReceta('<i class="bi bi-pen me-1"></i> Adobe está abierto. Aplique las 2 firmas digitales de la receta y guarde el PDF.', '');
-      }
+    const motor=auroRecetaFirmaMotor();
+    if(!motor || typeof motor.esperarSolicitud!=='function'){
+      return {success:false,estado_firma:'ERROR',error:'firma_electronica.js no expone esperarSolicitud.'};
     }
-
-    const actual=auroRecetaFirmaProceso(id);
-    if(actual){
-      actual.estado='EXPIRADA';
-      recetaFirmaProcesos.set(id,actual);
-      renderHistorialRecetas();
-    }
-    return {success:false,estado_firma:'EXPIRADA'};
+    const rid=String(id||'').trim();
+    const doc=await auroRecetaFirmaObtenerDocumento(rid);
+    if(!doc.success) return doc;
+    return motor.esperarSolicitud(Object.assign({},doc,{
+      id_solicitud:String(idSolicitud||'').trim(),
+      id_atencion:String(idAtencion||doc.id_atencion||'').trim()
+    }));
   }
 
   async function auroRecetaFirmaCancelar(id){
     const rid=String(id||'').trim();
     const proceso=auroRecetaFirmaProceso(rid);
     if(!proceso?.id_solicitud){
-      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> No existe una solicitud activa para cancelar.', '');
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> No existe una solicitud activa para cancelar.','');
       auroRecetaToastPremium('warn','No existe una solicitud activa de firma para cancelar.');
       return null;
     }
-
+    const motor=auroRecetaFirmaMotor();
+    if(!motor || typeof motor.cancelarFirmaDocumento!=='function'){
+      auroRecetaToastPremium('error','firma_electronica.js no expone la cancelación de receta.');
+      return null;
+    }
     try{
       auroRecetaToastPremium('info','Cancelando firma de la receta…');
-      const r=await auroRecetaFirmaPost('firmarDocumento',{
-        operacion_frontend:'CANCELAR',
+      const r=await motor.cancelarFirmaDocumento({
         id_solicitud:proceso.id_solicitud,
         tipo_documento:'RECETA',
         id_documento_origen:rid,
         id_receta:rid,
         id_atencion:proceso.id_atencion
       });
+      const estado=String(r?.estado_firma||r?.estado||'').toUpperCase();
+      if(estado==='FIRMADO'){
+        recetaFirmaProcesos.delete(rid);
+        await auroRecetaFirmaSincronizarPersistencia({silencioso:true,forzar:true});
+        renderHistorialRecetas();
+        return r;
+      }
       recetaFirmaProcesos.delete(rid);
       renderHistorialRecetas();
-      mostrarMensajeReceta('<i class="bi bi-x-circle me-1"></i> Firma de receta cancelada.', '');
+      mostrarMensajeReceta('<i class="bi bi-x-circle me-1"></i> Firma de receta cancelada.','');
       auroRecetaToastPremium('warn','Firma cancelada correctamente. La receta está disponible nuevamente.');
-      try{
-        window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-cancelada',{
-          detail:{tipo_documento:'RECETA',id_receta:rid,id_documento_origen:rid,id_atencion:proceso.id_atencion,id_solicitud:proceso.id_solicitud}
-        }));
-      }catch(_e){}
       auroRecetaFirmaEmitirCambio(rid,'CANCELADA',{id_atencion:proceso.id_atencion,id_solicitud:proceso.id_solicitud});
       return r;
     }catch(error){
-      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo cancelar la firma.'), '');
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo cancelar la firma.'),'');
       auroRecetaToastPremium('error',error?.message||'No se pudo cancelar la firma de la receta.');
       return null;
     }
@@ -6915,26 +6944,42 @@ cargarMedicosActivosReceta(false).then(function(){
     const rid=String(id||'').trim();
     const proceso=auroRecetaFirmaProceso(rid);
     if(!proceso?.id_solicitud) return auroRecetaFirmaFirmar(rid);
-
+    const motor=auroRecetaFirmaMotor();
+    if(!motor || typeof motor.reabrirFirmaDocumento!=='function'){
+      return auroRecetaFirmaFirmar(rid);
+    }
+    const doc=await auroRecetaFirmaObtenerDocumento(rid);
+    if(!doc.success) return doc;
     try{
-      const r=await auroRecetaFirmaPost('firmarDocumento',{
-        operacion_frontend:'REABRIR',
-        id_solicitud:proceso.id_solicitud,
-        tipo_documento:'RECETA',
-        id_documento_origen:rid,
-        id_receta:rid,
-        id_atencion:proceso.id_atencion
-      });
-
       proceso.estado='PENDIENTE';
-      proceso.poll_token=Date.now();
       recetaFirmaProcesos.set(rid,proceso);
       renderHistorialRecetas();
-      mostrarMensajeReceta('<i class="bi bi-arrow-repeat me-1"></i> Solicitud de firma reabierta.', 'ok');
       auroRecetaToastPremium('info','Solicitud de firma reabierta. IASYN retomará el proceso.');
-      return auroRecetaFirmaEsperar(rid,proceso.id_solicitud,proceso.id_atencion);
+      const r=await motor.reabrirFirmaDocumento(Object.assign({},doc,{
+        id_solicitud:proceso.id_solicitud
+      }));
+      const estado=String(r?.estado_firma||r?.estado||'').toUpperCase();
+      if(estado==='FIRMADO'){
+        recetaFirmaProcesos.delete(rid);
+        await auroRecetaFirmaSincronizarPersistencia({silencioso:true,forzar:true});
+        renderHistorialRecetas();
+        auroRecetaToastPremium('ok','Receta firmada correctamente y archivada en IASYN.');
+      }else if(estado==='CANCELADA'){
+        recetaFirmaProcesos.delete(rid);
+        renderHistorialRecetas();
+      }else if(estado==='ERROR' || estado==='EXPIRADA'){
+        proceso.estado=estado;
+        proceso.error=String(r?.error||'').trim();
+        recetaFirmaProcesos.set(rid,proceso);
+        renderHistorialRecetas();
+      }
+      return r;
     }catch(error){
-      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo reabrir la firma.'), '');
+      proceso.estado='ERROR';
+      proceso.error=String(error?.message||error||'');
+      recetaFirmaProcesos.set(rid,proceso);
+      renderHistorialRecetas();
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(proceso.error||'No se pudo reabrir la firma.'),'');
       return null;
     }
   }
@@ -6950,27 +6995,23 @@ cargarMedicosActivosReceta(false).then(function(){
     const rid=String(id||'').trim();
     const rLocal=buscarRecetaPorId(rid);
     if(!rid || !rLocal){
-      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> No se pudo identificar la receta.', '');
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> No se pudo identificar la receta.','');
       return null;
     }
-
-    const ventana=window.open('','_blank');
+    const motor=auroRecetaFirmaMotor();
+    if(!motor || typeof motor.abrirPdfFirmadoPersistente!=='function'){
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> firma_electronica.js no dispone de apertura persistente.','');
+      return null;
+    }
     try{
-      const r=await auroRecetaFirmaPost('obtenerDocumentoFirmado',{
+      return await motor.abrirPdfFirmadoPersistente({
         tipo_documento:'RECETA',
         id_documento_origen:rid,
         id_receta:rid,
         id_atencion:String(rLocal.id_atencion||'').trim()
       });
-      if(!r?.pdf_firmado_base64) throw new Error(r?.message||'No se encontró el PDF firmado.');
-      const url=URL.createObjectURL(auroRecetaFirmaBlobPDF(r.pdf_firmado_base64));
-      if(ventana) ventana.location.href=url;
-      else window.open(url,'_blank');
-      setTimeout(()=>URL.revokeObjectURL(url),120000);
-      return r;
     }catch(error){
-      if(ventana) ventana.close();
-      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo abrir la receta firmada.'), '');
+      mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(error?.message||'No se pudo abrir la receta firmada.'),'');
       return null;
     }
   }
@@ -6988,7 +7029,7 @@ cargarMedicosActivosReceta(false).then(function(){
     No expone funciones de guardado nuevas ni duplica lógica clínica.
   */
   window.auroRecetas = Object.assign({}, window.auroRecetas || {}, {
-    version:'3.9-IASYN-FIRMA-RECETA-V1',
+    version:'4.0-IASYN2-FIRMA-UNIFICADA',
     abrirVistaPacienteOficial:auroRecetaAbrirVistaPacienteOficial,
     cerrarVistaPaciente:auroRecetaCerrarVistaPaciente,
     toggleVistaPaciente:auroRecetaToggleVistaPaciente,
