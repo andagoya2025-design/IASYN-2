@@ -3375,3 +3375,376 @@
     }));
   }catch(_e){}
 })();
+
+/* ============================================================
+   IASYN 2 — FIRMA ELECTRÓNICA 4.0
+   PUENTE ÚNICO RECETA → SCRIB → MOTOR WINDOWS
+   ------------------------------------------------------------
+   ACTIVACIÓN ARQUITECTÓNICA ANTIRREGRESIVA
+   - Este bloque es la API EFECTIVA FINAL para RECETA.
+   - Conserva todo el baseline histórico anterior para Certificado
+     y compatibilidad persistente, pero RECETA ya no usa sus flujos
+     antiguos de polling/UI.
+   - Un solo propietario del transporte/polling: firma_electronica.js.
+   - Recetas prepara el documento y refleja estado; no vuelve a
+     crear ni a consultar una segunda solicitud por su cuenta.
+   - Compatible con IASYN Firma V4.x, id_equipo y P12/PFX local.
+   - Acepta token IASYN actual y fallback AUROSANAX histórico.
+   - No contiene ni recibe contraseña del certificado.
+============================================================ */
+(function iasynFirmaElectronicaUnificadaV40(){
+  'use strict';
+
+  const anterior = window.auroFirmaElectronica || null;
+  const VERSION = '4.0-IASYN2-RECETA-UNIFICADA';
+  const INTERVALO_CONSULTA_MS = 1000;
+  const operaciones = new Map();
+
+  function texto(v){
+    return String(v === null || v === undefined ? '' : v).trim();
+  }
+
+  function tipo(data){
+    return texto(data && data.tipo_documento).toUpperCase();
+  }
+
+  function esReceta(data){
+    const d=data||{};
+    return tipo(d)==='RECETA' || (!!texto(d.id_receta) && !texto(d.id_certificado));
+  }
+
+  function apiUrl(){
+    try{
+      if(typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    }catch(_e){}
+    if(window.API_URL) return texto(window.API_URL);
+    if(window.IASYN_CONFIG && window.IASYN_CONFIG.apiUrl) return texto(window.IASYN_CONFIG.apiUrl);
+    const input=document.getElementById('appsScriptUrl');
+    return input ? texto(input.value) : '';
+  }
+
+  function tokenSesion(){
+    try{
+      const s=window.IASYN_SEGURIDAD||window.AUROSANAX_SEGURIDAD;
+      if(s){
+        if(typeof s.obtenerToken==='function'){
+          const t=texto(s.obtenerToken());
+          if(t) return t;
+        }
+        if(typeof s.obtenerTokenSesion==='function'){
+          const t=texto(s.obtenerTokenSesion());
+          if(t) return t;
+        }
+      }
+    }catch(_e){}
+    try{
+      return texto(
+        sessionStorage.getItem('iasyn_seguridad_token') ||
+        sessionStorage.getItem('aurosanax_seguridad_token') || ''
+      );
+    }catch(_e){ return ''; }
+  }
+
+  async function post(accion,data){
+    const url=apiUrl();
+    if(!url) throw new Error('IASYN no encontró la conexión del ERP.');
+    const token=tokenSesion();
+    if(!token) throw new Error('No existe una sesión IASYN activa para firmar.');
+
+    const res=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion,data:Object.assign({},data||{},{token:token})}),
+      cache:'no-store'
+    });
+    if(!res.ok) throw new Error('El servidor de firma respondió HTTP '+res.status+'.');
+    const json=await res.json();
+    if(!json || json.success===false){
+      throw new Error(texto(json && json.message) || 'IASYN no confirmó la operación de firma.');
+    }
+    return json;
+  }
+
+  function normalizarReceta(data){
+    const d=Object.assign({},data||{});
+    d.tipo_documento='RECETA';
+    d.id_receta=texto(d.id_receta||d.id_documento_origen||d.id_documento_clinico);
+    d.id_documento_origen=d.id_receta;
+    d.id_atencion=texto(d.id_atencion);
+    d.id_paciente=texto(d.id_paciente);
+    d.id_historia=texto(d.id_historia);
+    d.id_medico=texto(d.id_medico);
+    d.nombre_medico=texto(d.nombre_medico);
+    d.nombre_paciente=texto(d.nombre_paciente);
+    d.numero_consulta=texto(d.numero_consulta);
+    d.version_documento=texto(d.version_documento);
+    d.nombre_archivo=texto(d.nombre_archivo);
+    d.html_documento=texto(d.html_documento);
+    d.firmas_requeridas=Number(d.firmas_requeridas||2);
+    if(!d.id_receta) throw new Error('Guarde la receta antes de firmarla electrónicamente.');
+    if(!d.id_atencion) throw new Error('No existe una atención clínica válida para firmar.');
+    if(!d.html_documento) throw new Error('No fue posible preparar el documento oficial de la receta.');
+    return d;
+  }
+
+  async function sha256Texto(valor){
+    if(!window.crypto || !window.crypto.subtle) return '';
+    const datos=new TextEncoder().encode(texto(valor));
+    const hash=await crypto.subtle.digest('SHA-256',datos);
+    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+
+  async function claveReceta(d){
+    const sha=await sha256Texto(d.html_documento);
+    return d.id_atencion+'|'+d.id_receta+'|'+sha;
+  }
+
+  function detalleBase(solicitud,estado,idSolicitud,extra){
+    return Object.assign({
+      tipo_documento:'RECETA',
+      id_documento_origen:solicitud.id_receta,
+      id_receta:solicitud.id_receta,
+      id_atencion:solicitud.id_atencion,
+      id_solicitud:texto(idSolicitud),
+      estado:estado,
+      estado_firma:estado
+    },extra||{});
+  }
+
+  function emitirEstado(estado,solicitud,idSolicitud,extra){
+    const d=detalleBase(solicitud,estado,idSolicitud,extra);
+    try{
+      window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-estado',{detail:d}));
+    }catch(_e){}
+    return d;
+  }
+
+  function emitirTerminal(resultado,solicitud){
+    const estado=texto(resultado && (resultado.estado_firma||resultado.estado)).toUpperCase();
+    const idSolicitud=texto(resultado && resultado.id_solicitud);
+    emitirEstado(estado||'NORMAL',solicitud,idSolicitud,{
+      error:texto(resultado && resultado.error),
+      id_firma_documento:texto(resultado && resultado.id_firma_documento)
+    });
+
+    if(estado==='FIRMADO'){
+      try{
+        window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-completada',{
+          detail:detalleBase(solicitud,'FIRMADO',idSolicitud,{
+            id_firma_documento:texto(resultado && resultado.id_firma_documento),
+            sha256_pdf_firmado:texto(resultado && resultado.sha256_pdf_firmado),
+            firmado_en:texto(resultado && resultado.firmado_en)
+          })
+        }));
+      }catch(_e){}
+    }else if(estado==='CANCELADA'){
+      try{
+        window.dispatchEvent(new CustomEvent('aurosanax:firma-electronica-cancelada',{
+          detail:detalleBase(solicitud,'CANCELADA',idSolicitud,{})
+        }));
+      }catch(_e){}
+    }
+    return resultado;
+  }
+
+  function esperar(ms){ return new Promise(resolve=>setTimeout(resolve,ms)); }
+
+  async function esperarSolicitudInterna(solicitud,idSolicitud){
+    let ultimo='';
+    while(true){
+      let r;
+      try{
+        r=await post('obtenerEstadoFirmaElectronica',{
+          id_solicitud:idSolicitud,
+          id_atencion:solicitud.id_atencion,
+          id_receta:solicitud.id_receta
+        });
+      }catch(error){
+        emitirEstado('DEGRADADO',solicitud,idSolicitud,{error:texto(error&&error.message)});
+        await esperar(1500);
+        continue;
+      }
+
+      const estado=texto(r.estado_firma||r.estado).toUpperCase();
+      if(estado && estado!==ultimo){
+        ultimo=estado;
+        emitirEstado(estado,solicitud,idSolicitud,{error:texto(r.error)});
+      }
+
+      if(['FIRMADO','CANCELADA','ERROR','EXPIRADA'].includes(estado)){
+        return emitirTerminal(r,solicitud);
+      }
+      if(estado && !['PENDIENTE','TOMADA'].includes(estado)){
+        throw new Error('IASYN devolvió un estado de firma no reconocido: '+estado+'.');
+      }
+      await esperar(INTERVALO_CONSULTA_MS);
+    }
+  }
+
+  async function esperarSolicitud(data){
+    const d=normalizarReceta(data);
+    const id=texto(data && data.id_solicitud);
+    if(!id) throw new Error('No existe id_solicitud para continuar la firma.');
+    return esperarSolicitudInterna(d,id);
+  }
+
+  async function firmarReceta(data){
+    const solicitud=normalizarReceta(data);
+    const clave=await claveReceta(solicitud);
+    const activa=operaciones.get(clave);
+    if(activa && activa.promesa){
+      emitirEstado(activa.id_solicitud?'PENDIENTE':'PREPARANDO',solicitud,activa.id_solicitud,{
+        reutilizada:true
+      });
+      return activa.promesa;
+    }
+
+    const op={id_solicitud:'',promesa:null,solicitud:solicitud};
+    const promesa=(async function(){
+      emitirEstado('PREPARANDO',solicitud,'',{});
+      const creada=await post('firmarDocumento',solicitud);
+      const estadoInicial=texto(creada.estado_firma||creada.estado).toUpperCase();
+
+      if(estadoInicial==='FIRMADO') return emitirTerminal(creada,solicitud);
+      if(estadoInicial==='CANCELADA') return emitirTerminal(creada,solicitud);
+      if(!['PENDIENTE','TOMADA'].includes(estadoInicial)){
+        throw new Error('IASYN no creó correctamente la solicitud de firma.');
+      }
+
+      const idSolicitud=texto(creada.id_solicitud);
+      if(!idSolicitud) throw new Error('IASYN no devolvió id_solicitud.');
+      op.id_solicitud=idSolicitud;
+      emitirEstado(estadoInicial,solicitud,idSolicitud,{
+        reutilizada:!!creada.reutilizada,
+        id_equipo_destino:texto(creada.id_equipo_destino),
+        agente_online:creada.agente_online
+      });
+      return esperarSolicitudInterna(solicitud,idSolicitud);
+    })();
+
+    op.promesa=promesa;
+    operaciones.set(clave,op);
+    try{
+      return await promesa;
+    }catch(error){
+      emitirEstado('ERROR',solicitud,op.id_solicitud,{error:texto(error&&error.message)});
+      throw error;
+    }finally{
+      if(operaciones.get(clave)===op) operaciones.delete(clave);
+    }
+  }
+
+  async function firmarDocumento(data){
+    if(!esReceta(data)){
+      if(!anterior || typeof anterior.firmarDocumento!=='function'){
+        throw new Error('El módulo de firma no está disponible para este documento.');
+      }
+      return anterior.firmarDocumento(data);
+    }
+    return firmarReceta(data);
+  }
+
+  async function cancelarFirmaDocumento(data){
+    if(!esReceta(data)){
+      if(anterior && typeof anterior.cancelarFirmaDocumento==='function') return anterior.cancelarFirmaDocumento(data);
+      if(anterior && typeof anterior.cancelarFirmaElectronica==='function') return anterior.cancelarFirmaElectronica(data);
+      throw new Error('La cancelación no está disponible para este documento.');
+    }
+
+    const d=Object.assign({},data||{});
+    const idSolicitud=texto(d.id_solicitud);
+    const idReceta=texto(d.id_receta||d.id_documento_origen);
+    const idAtencion=texto(d.id_atencion);
+    if(!idSolicitud) throw new Error('No existe una solicitud activa para cancelar.');
+
+    const r=await post('firmarDocumento',{
+      operacion_frontend:'CANCELAR',
+      id_solicitud:idSolicitud,
+      tipo_documento:'RECETA',
+      id_documento_origen:idReceta,
+      id_receta:idReceta,
+      id_atencion:idAtencion
+    });
+
+    const estado=texto(r.estado_firma||r.estado).toUpperCase();
+    if(estado!=='CANCELADA' && estado!=='FIRMADO'){
+      throw new Error('IASYN no confirmó la cancelación de la solicitud.');
+    }
+    const s={tipo_documento:'RECETA',id_receta:idReceta,id_atencion:idAtencion,html_documento:'_cancelacion_'};
+    return emitirTerminal(r,s);
+  }
+
+  async function reabrirFirmaDocumento(data){
+    if(!esReceta(data)) throw new Error('Reabrir está habilitado aquí únicamente para Receta.');
+    const idSolicitud=texto(data && data.id_solicitud);
+    const idReceta=texto(data && (data.id_receta||data.id_documento_origen));
+    const idAtencion=texto(data && data.id_atencion);
+    if(!idSolicitud) throw new Error('No existe una solicitud para reabrir.');
+    if(!idReceta || !idAtencion) throw new Error('Falta identidad clínica para reabrir la firma.');
+
+    const solicitud=Object.assign({},data||{}, {
+      tipo_documento:'RECETA',
+      id_receta:idReceta,
+      id_documento_origen:idReceta,
+      id_atencion:idAtencion,
+      html_documento:texto((data&&data.html_documento)||'_reabrir_')
+    });
+
+    const r=await post('firmarDocumento',{
+      operacion_frontend:'REABRIR',
+      id_solicitud:idSolicitud,
+      tipo_documento:'RECETA',
+      id_documento_origen:idReceta,
+      id_receta:idReceta,
+      id_atencion:idAtencion
+    });
+    const estado=texto(r.estado_firma||r.estado).toUpperCase();
+    if(estado==='FIRMADO' || estado==='CANCELADA') return emitirTerminal(r,solicitud);
+    if(estado!=='PENDIENTE') throw new Error('IASYN no confirmó la reapertura de la solicitud.');
+    emitirEstado('PENDIENTE',solicitud,idSolicitud,{reabierta:true});
+    return esperarSolicitudInterna(solicitud,idSolicitud);
+  }
+
+  async function obtenerEstado(data){
+    if(esReceta(data)) return post('obtenerEstadoFirmaElectronica',data||{});
+    if(anterior && typeof anterior.obtenerEstado==='function') return anterior.obtenerEstado(data||{});
+    return post('obtenerEstadoFirmaElectronica',data||{});
+  }
+
+  async function consultarDocumentosFirmados(data){
+    if(esReceta(data) || tipo(data)==='RECETA') return post('consultarDocumentosFirmados',data||{});
+    if(anterior && typeof anterior.consultarDocumentosFirmados==='function') return anterior.consultarDocumentosFirmados(data||{});
+    return post('consultarDocumentosFirmados',data||{});
+  }
+
+  async function cancelarFirmaElectronica(data){
+    if(esReceta(data)) return cancelarFirmaDocumento(data);
+    if(anterior && typeof anterior.cancelarFirmaElectronica==='function') return anterior.cancelarFirmaElectronica(data);
+    if(anterior && typeof anterior.cancelarFirma==='function') return anterior.cancelarFirma(data);
+    throw new Error('La cancelación no está disponible para este documento.');
+  }
+
+  async function cancelarFirma(data){ return cancelarFirmaElectronica(data); }
+  async function cancelarDocumento(data){ return cancelarFirmaElectronica(data); }
+
+  const api=Object.assign({},anterior||{}, {
+    version:VERSION,
+    firmarDocumento:firmarDocumento,
+    esperarSolicitud:esperarSolicitud,
+    reabrirFirmaDocumento:reabrirFirmaDocumento,
+    cancelarFirmaDocumento:cancelarFirmaDocumento,
+    cancelarFirmaElectronica:cancelarFirmaElectronica,
+    cancelarFirma:cancelarFirma,
+    cancelarDocumento:cancelarDocumento,
+    obtenerEstado:obtenerEstado,
+    consultarDocumentosFirmados:consultarDocumentosFirmados
+  });
+
+  window.auroFirmaElectronica=Object.freeze(api);
+  try{
+    window.dispatchEvent(new CustomEvent('iasyn:firma-electronica-lista',{
+      detail:{version:VERSION,propietario_flujo:'firma_electronica.js'}
+    }));
+  }catch(_e){}
+})();
+
