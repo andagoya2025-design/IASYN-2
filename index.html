@@ -151,37 +151,10 @@
       flex:0 0 auto;
     }
 
-    /* IASYN 2 — estado visual del contexto derivado únicamente del contexto clínico real.
-       data-mode es PRESENTACIÓN; nunca es fuente de verdad clínica. */
-    .auro-patient-context[data-mode="actual"]{
-      border-color:#22c55e;
-      background:linear-gradient(135deg,#dcfce7 0%,#f0fdf4 100%);
-      box-shadow:0 12px 28px rgba(22,163,74,.24);
-    }
-    .auro-patient-context[data-mode="historica"]{
-      border-color:#fca5a5;
-      background:linear-gradient(135deg,#fee2e2 0%,#fff1f2 100%);
-      box-shadow:0 10px 24px rgba(185,28,28,.12);
-    }
-    .auro-patient-context[data-mode="historia"],
-    .auro-patient-context[data-mode="seleccionada"]{
-      border-color:#d1d5db;
-      background:linear-gradient(135deg,#f8fafc 0%,#ffffff 100%);
-      box-shadow:0 9px 22px rgba(71,85,105,.10);
-    }
-
-    .auro-patient-context-status[data-mode="actual"]{color:#047857;font-weight:950;letter-spacing:.015em}
-    .auro-patient-context-status[data-mode="actual"]::before{
-      width:9px;height:9px;background:#00c853;box-shadow:0 0 0 4px rgba(0,200,83,.16);
-    }
-    .auro-patient-context-status[data-mode="historica"]{color:#b91c1c;font-weight:900}
-    .auro-patient-context-status[data-mode="historica"]::before{
-      background:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,.10);
-    }
-    .auro-patient-context-status[data-mode="historia"],
-    .auro-patient-context-status[data-mode="seleccionada"]{color:#64748b;font-weight:850}
-    .auro-patient-context-status[data-mode="historia"]::before,
-    .auro-patient-context-status[data-mode="seleccionada"]::before{background:#94a3b8}
+    .auro-patient-context-status[data-mode="actual"]::before{background:#16a34a}
+    .auro-patient-context-status[data-mode="historica"]::before{background:#64748b}
+    .auro-patient-context-status[data-mode="historia"]::before{background:#8b1e5a}
+    .auro-patient-context-status[data-mode="seleccionada"]::before{background:#2563eb}
 
     .auro-patient-context-separator{
       color:#cbd5e1;
@@ -4848,7 +4821,7 @@
     </div>
     <div class="modalx-body">
       <div class="history-modal-grid">
-        <input id="historiaSearch" class="form-control" type="search" role="searchbox" name="iasyn_historia_search_no_autofill" autocomplete="off" aria-autocomplete="none" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Buscar por paciente, cédula o diagnóstico" oninput="renderHistoriasClinicas()">
+        <input id="historiaSearch" class="form-control" placeholder="Buscar por paciente, cédula o diagnóstico" oninput="renderHistoriasClinicas()">
         <select id="historiaPacienteFiltro" class="form-select" onchange="renderHistoriasClinicas()">
           <option value="">Todos los pacientes</option>
         </select>
@@ -5459,96 +5432,6 @@ function calcAge(){const v=document.getElementById('hcNacimiento')?.value;if(!v)
 function calcIMC(){const p=parseFloat((document.getElementById('hcPeso')?.value||'').replace(',','.'));const tc=parseFloat((document.getElementById('hcTalla')?.value||'').replace(',','.'));if(!p||!tc)return;const t=tc/100;const imc=(p/(t*t)).toFixed(1);document.getElementById('hcIMC').value=imc;document.getElementById('hcImcResumen').textContent=imc;setTextIfExists('hcCardIMC', imc)}
 function calcObstetricia(){const fur=document.getElementById('hcFUR')?.value;if(!fur)return;const d=new Date(fur+'T00:00:00');const f=new Date(d);f.setDate(f.getDate()+280);document.getElementById('hcFPP').value=f.toISOString().slice(0,10);const h=new Date();const diff=Math.floor((h-d)/(1000*60*60*24));if(diff>=0){document.getElementById('hcEG').value=Math.floor(diff/7)+' sem + '+(diff%7)+' días'}}
 
-/* ============================================================
-   IASYN 2 — SINCRONIZACIÓN MULTISESIÓN / MULTICOMPUTADOR V1
-   SOLO LECTURA. INDEX COORDINA; CADA MÓDULO PROPIETARIO RELEE.
-   - Sin POST ni mutación clínica desde Index.
-   - No cambia paciente, historia ni atención seleccionada.
-   - Cooldown para focus/visibility/pageshow.
-   - Una sola promesa de refresco en curso.
-============================================================ */
-let iasynUltimoRefrescoMultisesion = 0;
-let iasynRefrescoMultisesionEnCurso = null;
-const IASYN_REFRESCO_MULTISESION_COOLDOWN_MS = 15000;
-
-function iasynPantallaActivaId(){
-  const activa = document.querySelector('.screen.active');
-  return activa ? String(activa.id || '').trim() : '';
-}
-
-async function iasynRefrescarMultisesionIndex(motivo, forzar){
-  const ahora = Date.now();
-
-  if(iasynRefrescoMultisesionEnCurso){
-    return iasynRefrescoMultisesionEnCurso;
-  }
-
-  if(
-    !forzar &&
-    iasynUltimoRefrescoMultisesion &&
-    (ahora - iasynUltimoRefrescoMultisesion) < IASYN_REFRESCO_MULTISESION_COOLDOWN_MS
-  ){
-    return;
-  }
-
-  iasynUltimoRefrescoMultisesion = ahora;
-  const pantalla = iasynPantallaActivaId();
-
-  iasynRefrescoMultisesionEnCurso = (async function(){
-    try{
-      const tareas = [];
-
-      if(
-        pantalla === 'pacientes' &&
-        typeof window.cargarPacientesDesdeSheets === 'function'
-      ){
-        tareas.push(
-          Promise.resolve(window.cargarPacientesDesdeSheets())
-            .then(function(){
-              if(typeof window.renderPatients === 'function') window.renderPatients();
-            })
-        );
-      }
-
-      if(
-        pantalla === 'agenda' &&
-        typeof window.cargarCitasAgendaWeb === 'function'
-      ){
-        tareas.push(Promise.resolve(window.cargarCitasAgendaWeb()));
-      }
-
-      if(
-        pantalla === 'historia' &&
-        typeof window.refrescarAtencionesDesdeSheets === 'function'
-      ){
-        tareas.push(Promise.resolve(window.refrescarAtencionesDesdeSheets()));
-      }
-
-      if(tareas.length) await Promise.allSettled(tareas);
-    }catch(error){
-      console.warn('IASYN INDEX: refresco multisesión no completado.', motivo || '', error);
-    }finally{
-      iasynRefrescoMultisesionEnCurso = null;
-    }
-  })();
-
-  return iasynRefrescoMultisesionEnCurso;
-}
-
-document.addEventListener('visibilitychange', function(){
-  if(document.visibilityState === 'visible'){
-    iasynRefrescarMultisesionIndex('visibilitychange', false);
-  }
-});
-
-window.addEventListener('focus', function(){
-  iasynRefrescarMultisesionIndex('focus', false);
-});
-
-window.addEventListener('pageshow', function(){
-  iasynRefrescarMultisesionIndex('pageshow', false);
-});
-
 function showScreen(id, btn){
   if(id !== 'historia' && typeof auroLimpiarVistaInformeActiva === 'function') auroLimpiarVistaInformeActiva();
   document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
@@ -5576,16 +5459,8 @@ function showScreen(id, btn){
   document.getElementById('screenTitle').textContent=titles[id]?.[0] || 'IASYN';
   document.getElementById('screenSubtitle').textContent=titles[id]?.[1] || '';
   document.getElementById('sidebar').classList.remove('show');
-
-  /* Propiedad modular estricta:
-     Pacientes -> Pacientes; Agenda -> Agenda; Historia -> Atenciones. */
-  if(['pacientes','agenda','historia'].includes(id)){
-    Promise.resolve(iasynRefrescarMultisesionIndex('entrada:' + id, true))
-      .catch(function(error){
-        console.warn('IASYN INDEX: no se pudo refrescar el módulo al entrar.', id, error);
-      });
-  }
-
+  if(id === 'agenda') cargarCitasAgendaWeb();
+  if(id === 'pacientes') cargarCitasAgendaWeb();
   if(['ginecologia','obstetricia','estetica','bioimpedancia','procedimientos','consentimientos','recetas'].includes(id)) renderModulePatientCards();
 }
 
@@ -11431,69 +11306,48 @@ function auroTextoDiagnosticoHistoria(dx){
   return [codigo, nombre].filter(Boolean).join(' - ') || 'Sin diagnóstico';
 }
 
-function iasynNormalizarBusquedaHistorias(valor){
-  return String(valor || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 function renderHistoriasClinicas(){
-  const q = iasynNormalizarBusquedaHistorias(
-    document.getElementById('historiaSearch')?.value || ''
-  );
+  const q = (document.getElementById('historiaSearch')?.value || '').toLowerCase();
   const idPaciente = document.getElementById('historiaPacienteFiltro')?.value || '';
   const fecha = document.getElementById('historiaFechaFiltro')?.value || '';
   const list = document.getElementById('historiasList');
   if(!list) return;
 
-  /* IASYN 2 — búsqueda de Historias, solo lectura.
-     Normaliza únicamente la comparación; nunca altera nombres/datos persistidos.
-     Paciente, última atención y diagnóstico se calculan una sola vez por fila. */
-  const rows = historiasClinicas.map(function(h, idx){
+  const rows = historiasClinicas.filter(function(h){
     const p = obtenerPacientePorHistoria(h);
     const ultimaAtencion = auroUltimaAtencionParaHistoria(h);
     const fechaAtencion = String(ultimaAtencion?.fecha_atencion || '').slice(0,10);
     const dx = auroDiagnosticoPrimeroAtencionHistoria(ultimaAtencion);
-    const diagnostico = auroTextoDiagnosticoHistoria(dx);
-    const titulo = p?.nombre || h.nombre_paciente || 'Paciente no identificado';
+    const diagnosticoTexto = auroTextoDiagnosticoHistoria(dx);
 
-    const textoBusqueda = iasynNormalizarBusquedaHistorias([
-      titulo,
+    const texto = [
+      p?.nombre,
       p?.cedula,
       fechaAtencion,
-      diagnostico,
+      diagnosticoTexto,
       h.estado
-    ].join(' '));
+    ].join(' ').toLowerCase();
 
-    return {
-      h,
-      idx,
-      titulo,
-      fechaAtencion,
-      diagnostico,
-      coincide:
-        (!q || textoBusqueda.includes(q)) &&
-        (!idPaciente || String(h.id_paciente || '') === String(idPaciente)) &&
-        (!fecha || fechaAtencion === fecha)
-    };
-  }).filter(function(row){
-    return row.coincide;
+    return (!q || texto.includes(q)) &&
+           (!idPaciente || String(h.id_paciente || '') === String(idPaciente)) &&
+           (!fecha || fechaAtencion === fecha);
   });
 
-  list.innerHTML = rows.map(function(row){
-    const h = row.h;
-    const idx = row.idx;
+  list.innerHTML = rows.map(function(h, idx){
+    const p = obtenerPacientePorHistoria(h);
+    const titulo = p?.nombre || h.nombre_paciente || 'Paciente no identificado';
+    const ultimaAtencion = auroUltimaAtencionParaHistoria(h);
+    const fechaAtencion = String(ultimaAtencion?.fecha_atencion || '').slice(0,10);
+    const dx = auroDiagnosticoPrimeroAtencionHistoria(ultimaAtencion);
+    const diagnostico = auroTextoDiagnosticoHistoria(dx);
 
     return `
       <div class="history-row">
         <div class="history-row-top">
           <div class="auro-history-three-lines">
-            <div class="auro-history-name">${row.titulo}</div>
-            <div class="auro-history-date">${row.fechaAtencion ? formatearFechaVisual(row.fechaAtencion) : 'Sin atención registrada'}</div>
-            <div class="auro-history-dx">${row.diagnostico}</div>
+            <div class="auro-history-name">${titulo}</div>
+            <div class="auro-history-date">${fechaAtencion ? formatearFechaVisual(fechaAtencion) : 'Sin atención registrada'}</div>
+            <div class="auro-history-dx">${diagnostico}</div>
           </div>
           ${h.id_paciente ? `<button class="btn-action primary" onclick="editarHistoriaClinicaModal('${h.id_historia || h.id || idx}')"><i class="bi bi-pencil-square me-1"></i> Abrir / editar</button>` : `<span class="badge-auro badge-warn">Sin paciente vinculado</span>`}
         </div>
@@ -11782,7 +11636,9 @@ if(typeof showScreen==='function'){
   <!-- AUROSANAX - Módulo CIE-10 Inteligente -->
   <script src="cie10_inteligente.js?v=20260824_1"></script>
   <script src="consentimientos.js?v=20260824_1"></script>
-  <script src="recetas.js?v=20260824_1"></script>
+  <!-- IASYN 2 - Propietario único del transporte/polling de firma electrónica -->
+  <script src="firma_electronica.js?v=20260924_IASYN2_FIRMA_V40"></script>
+  <script src="recetas.js?v=20260924_IASYN2_FIRMA_V40"></script>
 
 <script>
 /* =====================================================
@@ -13463,17 +13319,8 @@ if(typeof showScreen==='function'){
     );
   }
 
-  function estadoAtencionReal(atencion){
-    /* IASYN 2: estado_atencion es la fuente real; estado queda como fallback legacy. */
-    return texto(
-      atencion?.estado_atencion ||
-      atencion?.estado ||
-      ''
-    ).toLowerCase();
-  }
-
   function esConsultaHistorica(atencion){
-    const estado = estadoAtencionReal(atencion);
+    const estado = texto(atencion?.estado).toLowerCase();
     return /finaliz|cerrad|complet|atendid/.test(estado);
   }
 
@@ -13496,19 +13343,19 @@ if(typeof showScreen==='function'){
       }
 
       const numero = texto(atencion.numero_consulta);
-      const estadoTecnico = estadoAtencionReal(atencion);
+      const estadoTecnico = texto(atencion.estado).toLowerCase();
       const historica = esConsultaHistorica(atencion);
       const actual = /abiert|activ|en curso|iniciad/.test(estadoTecnico);
 
       return {
         nombre,
         modo: historica ? 'historica' : (actual ? 'actual' : 'seleccionada'),
-        estado: historica ? 'CONSULTA HISTÓRICA' : (actual ? 'ATENCIÓN ACTIVA' : 'CONSULTA SELECCIONADA'),
+        estado: historica ? 'Consulta histórica' : (actual ? 'Atención actual' : 'Consulta seleccionada'),
         consulta: numero ? ('Consulta #' + numero) : ''
       };
     }
 
-    return { nombre, modo:'historia', estado:'SIN ATENCIÓN ACTIVA', consulta:'' };
+    return { nombre, modo:'historia', estado:'Historia clínica', consulta:'' };
   }
 
   function pintarContenedor(el, contexto){
@@ -13521,7 +13368,6 @@ if(typeof showScreen==='function'){
 
     if(!contexto){
       el.classList.remove('is-visible');
-      el.removeAttribute('data-mode');
       if(nombreEl) nombreEl.textContent = '';
       if(estadoEl){ estadoEl.textContent = ''; estadoEl.removeAttribute('data-mode'); }
       if(consultaEl) consultaEl.textContent = '';
@@ -13529,7 +13375,6 @@ if(typeof showScreen==='function'){
       return;
     }
 
-    el.dataset.mode = contexto.modo;
     if(nombreEl) nombreEl.textContent = contexto.nombre;
     if(estadoEl){
       estadoEl.textContent = contexto.estado;
@@ -13553,7 +13398,6 @@ if(typeof showScreen==='function'){
     'aurosanax:paciente-seleccionado',
     'aurosanax:atencion-seleccionada',
     'aurosanax:atencion-limpiada',
-    'aurosanax:atencion-finalizada',
     'aurosanax:historia-nueva'
   ].forEach(function(evento){
     window.addEventListener(evento, refrescar);
