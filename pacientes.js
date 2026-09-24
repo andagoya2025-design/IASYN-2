@@ -480,9 +480,25 @@ function auroUltimaAtencionPaciente(p){
   return {fecha: '', ts: 0, fuente: 'sin_atencion'};
 }
 
+/* ============================================================
+   IASYN PACIENTES 09 - BÚSQUEDA ANTIRREGRESIVA
+   Referencia estable: Aurosanax Prueba.
+   - Ignora mayúsculas/minúsculas.
+   - Ignora tildes y diacríticos solo para comparar.
+   - NO modifica nombres, cédulas, teléfonos ni datos persistidos.
+============================================================ */
+function auroNormalizarBusquedaPacientes(valor){
+  return String(valor || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function renderPatients(){
   auroInyectarEstiloAccionesPacientes();
-  const q=(document.getElementById('patientSearch')?.value||'').toLowerCase();
+  const q=auroNormalizarBusquedaPacientes(document.getElementById('patientSearch')?.value||'');
   const f=document.getElementById('patientFilter')?.value||'';
   const rows=patients.map(p => {
     const ultimaInfo = auroUltimaAtencionPaciente(p);
@@ -492,7 +508,7 @@ function renderPatients(){
       ultima_atencion_ts: ultimaInfo.ts
     };
   }).filter(p=>{
-    const txt=[p.nombre,p.cedula,p.telefono,p.email,p.servicio,p.ciudad].join(' ').toLowerCase();
+    const txt=auroNormalizarBusquedaPacientes([p.nombre,p.cedula,p.telefono,p.email,p.servicio,p.ciudad].join(' '));
     return (!q || txt.includes(q)) && (!f || p.servicio===f);
   }).sort((a,b)=>{
     const ta = Number(a.ultima_atencion_ts || 0);
