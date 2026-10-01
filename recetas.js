@@ -6759,10 +6759,13 @@ function auroRecetaFirmaInstalarEventosMotor(){
       mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(doc.message||'La receta no está lista para firmar.'), '');
       return doc;
     }
-    return auroRecetaFirmaFirmar(doc.id_receta);
+    /* Antirregresión de velocidad: este documento ya fue validado, persistido,
+       canonizado y hasheado por auroRecetaFirmaObtenerDocumentoActual().
+       Se reutiliza únicamente en esta misma delegación para no repetir ese trabajo. */
+    return auroRecetaFirmaFirmar(doc.id_receta, doc);
   }
 
-  async function auroRecetaFirmaFirmar(id){
+  async function auroRecetaFirmaFirmar(id, documentoPreparado){
     const rid=String(id||'').trim();
     if(!rid) return null;
 
@@ -6776,7 +6779,18 @@ function auroRecetaFirmaInstalarEventosMotor(){
       return auroRecetaFirmaReabrir(rid);
     }
 
-    const doc=await auroRecetaFirmaObtenerDocumento(rid);
+    /* Si el flujo oficial ya preparó exactamente esta receta y atención, reutilizarlo.
+       Las llamadas directas/históricas siguen ejecutando la preparación completa. */
+    const atencionActiva=auroRecetaFirmaAtencionActual();
+    const docPreparadoValido=!!(
+      documentoPreparado &&
+      documentoPreparado.success &&
+      String(documentoPreparado.id_receta||'').trim()===rid &&
+      String(documentoPreparado.id_atencion||'').trim()===String(atencionActiva||'').trim()
+    );
+    const doc=docPreparadoValido
+      ? documentoPreparado
+      : await auroRecetaFirmaObtenerDocumento(rid);
     if(!doc.success){
       mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(doc.message||'La receta no está lista para firmar.'),'');
       return doc;
