@@ -47,6 +47,21 @@
   let recetaFirmaLogoCache = null;
   let recetaFirmaLogoPromesa = null;
 
+  /*
+    IASYN OPTIMIZACIÓN QUIRÚRGICA — CACHÉ PRIVADO DE PREPARACIÓN DE FIRMA
+    ---------------------------------------------------------------------
+    No cambia contratos públicos ni omite validaciones clínicas.
+    Reutiliza por pocos segundos únicamente datos que YA fueron obtenidos
+    desde persistencia y/o un documento firmable YA validado para la misma:
+      id_receta + id_atencion + version_documento.
+    Cualquier guardado confirmado invalida estos datos.
+  */
+  let recetaFirmaRecetasRemotasCache = null;
+  let recetaFirmaRecetasRemotasCacheEn = 0;
+  let recetaFirmaRecetasRemotasPromesa = null;
+  const RECETA_FIRMA_CACHE_MS = 10000;
+  const recetaFirmaDocumentoCache = new Map();
+
   /* ============================================================
      IASYN RECETAS — NOTIFICACIÓN PREMIUM ANTIRREGRESIVA
      ------------------------------------------------------------
@@ -2706,6 +2721,22 @@ if(!lista.length) return `<b>${safe(r?.diagnostico || '—')}</b>`;
       const remotas = Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []);
 
       const mezcladas = mezclarRecetasLocalesYSheets(remotas);
+
+      /* La carga oficial acaba de confirmar datos remotos frescos.
+         Se comparte SOLO esa lectura con la preparación de firma para evitar
+         descargar inmediatamente la misma colección otra vez. */
+      try{
+        recetaFirmaRecetasRemotasCache = (Array.isArray(remotas) ? remotas : []).map(function(item){
+          const n = normalizarRecetaGuardada(item);
+          n.paciente_nombre = String(item?.paciente_nombre||item?.nombre_paciente||n.paciente_nombre||'').trim();
+          n.nombre_paciente = String(item?.nombre_paciente||item?.paciente_nombre||n.paciente_nombre||'').trim();
+          n.numero_consulta = String(item?.numero_consulta||'').trim();
+          n.nombre_medico = String(item?.nombre_medico||item?.medico||n.medico||'').trim();
+          return n;
+        });
+        recetaFirmaRecetasRemotasCacheEn = Date.now();
+      }catch(_e){}
+
       recetasSheetsCargadas = true;
       recetasSheetsCargando = false;
 
@@ -5293,6 +5324,10 @@ setVal('recRecomendaciones', recetaListaParaFormulario(receta.recomendaciones ||
       if(resultado && resultado.success){
         marcarEstadoRecetaGuardadaVisual(estabaEditando);
 
+        /* Un guardado confirmado puede crear una nueva versión documental.
+           Se invalida cualquier preparación anterior antes de sincronizar firma. */
+        auroRecetaFirmaInvalidarCachePreparacion(r.id_receta);
+
         /*
           IASYN FIX ANTIRREGRESIVO — ESTADO DE FIRMA POST-GUARDADO
           ---------------------------------------------------------
@@ -6270,20 +6305,57 @@ cargarMedicosActivosReceta(false).then(function(){
   }
 
   async function auroRecetaFirmaRecetasRemotas(){
-    const url=auroRecetaFirmaApiUrl();
-    if(!url) throw new Error('API_URL no está definida.');
-    const r=await fetch(url+'?accion=listarRecetas&_='+Date.now(),{cache:'no-store'});
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const j=await r.json();
-    const lista=Array.isArray(j)?j:(Array.isArray(j?.data)?j.data:(Array.isArray(j?.registros)?j.registros:[]));
-    return lista.map(function(r){
-      const n=normalizarRecetaGuardada(r);
-      n.paciente_nombre=String(r?.paciente_nombre||r?.nombre_paciente||n.paciente_nombre||'').trim();
-      n.nombre_paciente=String(r?.nombre_paciente||r?.paciente_nombre||n.paciente_nombre||'').trim();
-      n.numero_consulta=String(r?.numero_consulta||'').trim();
-      n.nombre_medico=String(r?.nombre_medico||r?.medico||n.medico||'').trim();
-      return n;
-    });
+    const ahora=Date.now();
+
+    if(
+      Array.isArray(recetaFirmaRecetasRemotasCache) &&
+      ahora-recetaFirmaRecetasRemotasCacheEn<RECETA_FIRMA_CACHE_MS
+    ){
+      return recetaFirmaRecetasRemotasCache;
+    }
+
+    if(recetaFirmaRecetasRemotasPromesa){
+      return recetaFirmaRecetasRemotasPromesa;
+    }
+
+    recetaFirmaRecetasRemotasPromesa=(async function(){
+      const url=auroRecetaFirmaApiUrl();
+      if(!url) throw new Error('API_URL no está definida.');
+      const r=await fetch(url+'?accion=listarRecetas&_='+Date.now(),{cache:'no-store'});
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const j=await r.json();
+      const lista=Array.isArray(j)?j:(Array.isArray(j?.data)?j.data:(Array.isArray(j?.registros)?j.registros:[]));
+      const normalizadas=lista.map(function(r){
+        const n=normalizarRecetaGuardada(r);
+        n.paciente_nombre=String(r?.paciente_nombre||r?.nombre_paciente||n.paciente_nombre||'').trim();
+        n.nombre_paciente=String(r?.nombre_paciente||r?.paciente_nombre||n.paciente_nombre||'').trim();
+        n.numero_consulta=String(r?.numero_consulta||'').trim();
+        n.nombre_medico=String(r?.nombre_medico||r?.medico||n.medico||'').trim();
+        return n;
+      });
+      recetaFirmaRecetasRemotasCache=normalizadas;
+      recetaFirmaRecetasRemotasCacheEn=Date.now();
+      return normalizadas;
+    })();
+
+    try{
+      return await recetaFirmaRecetasRemotasPromesa;
+    }finally{
+      recetaFirmaRecetasRemotasPromesa=null;
+    }
+  }
+
+  function auroRecetaFirmaInvalidarCachePreparacion(idReceta){
+    const rid=String(idReceta||'').trim();
+    recetaFirmaRecetasRemotasCache=null;
+    recetaFirmaRecetasRemotasCacheEn=0;
+    if(!rid){
+      recetaFirmaDocumentoCache.clear();
+      return;
+    }
+    for(const clave of Array.from(recetaFirmaDocumentoCache.keys())){
+      if(String(clave).startsWith(rid+'|')) recetaFirmaDocumentoCache.delete(clave);
+    }
   }
 
   function auroRecetaFirmaPacienteIdActual(){
@@ -6710,6 +6782,22 @@ function auroRecetaFirmaInstalarEventosMotor(){
       return {success:false,estado:'EDICION_PENDIENTE',message:'Guarde la corrección de la receta antes de firmar.'};
     }
 
+    /*
+      Reutilización segura: solo si la copia local conserva exactamente la misma
+      versión que el documento previamente validado contra persistencia.
+      Si no coincide, se ejecuta íntegramente el flujo estable original.
+    */
+    const versionLocal=auroRecetaFirmaVersionDocumento(local);
+    const claveCache=[rid,idAtn,versionLocal].join('|');
+    const cacheDoc=recetaFirmaDocumentoCache.get(claveCache);
+    if(
+      cacheDoc &&
+      cacheDoc.documento &&
+      Date.now()-Number(cacheDoc.creado_en||0)<RECETA_FIRMA_CACHE_MS
+    ){
+      return cacheDoc.documento;
+    }
+
     const persistida=await auroRecetaFirmaPersistidaExacta(rid,idAtn);
     if(!persistida){
       return {success:false,estado:'RECETA_NO_GUARDADA',message:'La receta no está persistida en Google Sheets.'};
@@ -6718,7 +6806,7 @@ function auroRecetaFirmaInstalarEventosMotor(){
     const html=await auroRecetaFirmaHtmlCanonico(persistida);
     const sha=await auroRecetaFirmaSha256(html);
 
-    return {
+    const documentoFirmable={
       success:true,
       estado:'LISTA',
       tipo_documento:'RECETA',
@@ -6738,6 +6826,18 @@ function auroRecetaFirmaInstalarEventosMotor(){
       sha256_origen:sha,
       receta:persistida
     };
+
+    const claveDocumento=[
+      rid,
+      idAtn,
+      documentoFirmable.version_documento
+    ].join('|');
+    recetaFirmaDocumentoCache.set(claveDocumento,{
+      creado_en:Date.now(),
+      documento:documentoFirmable
+    });
+
+    return documentoFirmable;
   }
 
   async function auroRecetaFirmaObtenerDocumentoActual(){
@@ -6759,13 +6859,10 @@ function auroRecetaFirmaInstalarEventosMotor(){
       mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(doc.message||'La receta no está lista para firmar.'), '');
       return doc;
     }
-    /* Antirregresión de velocidad: este documento ya fue validado, persistido,
-       canonizado y hasheado por auroRecetaFirmaObtenerDocumentoActual().
-       Se reutiliza únicamente en esta misma delegación para no repetir ese trabajo. */
-    return auroRecetaFirmaFirmar(doc.id_receta, doc);
+    return auroRecetaFirmaFirmar(doc.id_receta);
   }
 
-  async function auroRecetaFirmaFirmar(id, documentoPreparado){
+  async function auroRecetaFirmaFirmar(id){
     const rid=String(id||'').trim();
     if(!rid) return null;
 
@@ -6779,18 +6876,7 @@ function auroRecetaFirmaInstalarEventosMotor(){
       return auroRecetaFirmaReabrir(rid);
     }
 
-    /* Si el flujo oficial ya preparó exactamente esta receta y atención, reutilizarlo.
-       Las llamadas directas/históricas siguen ejecutando la preparación completa. */
-    const atencionActiva=auroRecetaFirmaAtencionActual();
-    const docPreparadoValido=!!(
-      documentoPreparado &&
-      documentoPreparado.success &&
-      String(documentoPreparado.id_receta||'').trim()===rid &&
-      String(documentoPreparado.id_atencion||'').trim()===String(atencionActiva||'').trim()
-    );
-    const doc=docPreparadoValido
-      ? documentoPreparado
-      : await auroRecetaFirmaObtenerDocumento(rid);
+    const doc=await auroRecetaFirmaObtenerDocumento(rid);
     if(!doc.success){
       mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(doc.message||'La receta no está lista para firmar.'),'');
       return doc;
