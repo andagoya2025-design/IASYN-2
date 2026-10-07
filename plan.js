@@ -803,7 +803,7 @@ function auroPlanInstalarLimpiarMedicamentoPrincipal(){
     boton.className = 'auro-plan-limpiar-rapido auro-plan-limpiar-medicamento-principal';
     boton.setAttribute('aria-label', 'Limpiar medicamento');
     boton.title = 'Limpiar únicamente el medicamento en preparación';
-    boton.innerHTML = '<i class="bi bi-x-circle me-1"></i> Limpiar medicamento';
+    boton.innerHTML = '<i class="bi bi-x-circle me-1"></i> Limpiar';
     boton.addEventListener('click', function(){
         limpiarFormularioMedicamento();
         campo.focus();
@@ -813,38 +813,21 @@ function auroPlanInstalarLimpiarMedicamentoPrincipal(){
     return boton;
 }
 
-function auroPlanInstalarCantidadesRapidas(){
-    const campo = document.getElementById('hcMedCantidad');
-    if(!campo) return null;
+function auroPlanInstalarCantidadRapida(){
+    auroPlanInstalarDatalist(
+        'hcMedCantidad',
+        'auroPlanCantidadesLista',
+        AURO_PLAN_CANTIDADES_RAPIDAS,
+        ''
+    );
 
-    let contenedor = document.getElementById('auroPlanCantidadesRapidas');
-    if(contenedor) return contenedor;
-
-    contenedor = document.createElement('div');
-    contenedor.id = 'auroPlanCantidadesRapidas';
-    contenedor.className = 'auro-plan-cantidades-rapidas';
-    contenedor.setAttribute('aria-label', 'Cantidades rápidas');
-    contenedor.innerHTML = AURO_PLAN_CANTIDADES_RAPIDAS.map(function(cantidad){
-        return '<button type="button" class="auro-plan-cantidad-rapida" data-auro-cantidad="' +
-            escapeHtmlPlan(cantidad) + '">' + escapeHtmlPlan(cantidad) + '</button>';
-    }).join('');
-
-    contenedor.addEventListener('click', function(evento){
-        const boton = evento.target.closest('[data-auro-cantidad]');
-        if(!boton) return;
-        campo.value = String(boton.dataset.auroCantidad || '');
-        campo.dispatchEvent(new Event('input', {bubbles:true}));
-        campo.focus();
-    });
-
-    campo.insertAdjacentElement('afterend', contenedor);
-    return contenedor;
+    return auroPlanInstalarLimpiezaRapidaCampo('hcMedCantidad', 'cantidad');
 }
 
 function auroPlanInstalarAyudasMedicamentos(){
     auroPlanActualizarOpcionesVia();
     auroPlanInstalarLimpiarMedicamentoPrincipal();
-    auroPlanInstalarCantidadesRapidas();
+    auroPlanInstalarCantidadRapida();
     auroPlanInstalarEntradaViaLibre();
     auroPlanInstalarAccesoViaLibreRapido();
 
@@ -4036,34 +4019,6 @@ function instalarResponsivePlanAndroid(){
       #hc_plan .auro-plan-ampliar-indicaciones:hover,
       #hc_plan .auro-plan-via-libre-rapida.activo,
       #hc_plan .auro-plan-ampliar-indicaciones.activo{
-        background:#f8fafc;
-        border-color:#cbd5e1;
-        color:#1f2937;
-      }
-
-      #hc_plan .auro-plan-cantidades-rapidas{
-        display:flex;
-        flex-wrap:wrap;
-        gap:5px;
-        margin-top:6px;
-      }
-
-      #hc_plan .auro-plan-cantidad-rapida{
-        min-width:32px;
-        min-height:29px;
-        padding:3px 8px;
-        border:1px solid #d1d5db;
-        border-radius:9px;
-        background:#fff;
-        color:#475569;
-        font-size:11px;
-        font-weight:800;
-        line-height:1;
-        cursor:pointer;
-      }
-
-      #hc_plan .auro-plan-cantidad-rapida:hover,
-      #hc_plan .auro-plan-cantidad-rapida:focus{
         background:#f8fafc;
         border-color:#cbd5e1;
         color:#1f2937;
