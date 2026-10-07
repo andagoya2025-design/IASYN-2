@@ -231,6 +231,10 @@ const AURO_PLAN_VIAS_COMPLETAS = {
     'VIA NASAL': 'Vía nasal'
 };
 
+const AURO_PLAN_CANTIDADES_RAPIDAS = [
+    '1','2','3','5','7','10','14','20','21','28','30','60','90'
+];
+
 const AURO_PLAN_FRECUENCIAS_RAPIDAS = [
     'Dosis única',
     'Cada 4 horas',
@@ -786,8 +790,61 @@ function auroPlanInstalarEditorIndicacionesAmpliado(){
     return boton;
 }
 
+function auroPlanInstalarLimpiarMedicamentoPrincipal(){
+    const campo = document.getElementById('hcMedBusqueda');
+    if(!campo) return null;
+
+    let boton = document.getElementById('auroPlanLimpiarMedicamentoPrincipal');
+    if(boton) return boton;
+
+    boton = document.createElement('button');
+    boton.type = 'button';
+    boton.id = 'auroPlanLimpiarMedicamentoPrincipal';
+    boton.className = 'auro-plan-limpiar-rapido auro-plan-limpiar-medicamento-principal';
+    boton.setAttribute('aria-label', 'Limpiar medicamento');
+    boton.title = 'Limpiar únicamente el medicamento en preparación';
+    boton.innerHTML = '<i class="bi bi-x-circle me-1"></i> Limpiar medicamento';
+    boton.addEventListener('click', function(){
+        limpiarFormularioMedicamento();
+        campo.focus();
+    });
+
+    campo.insertAdjacentElement('afterend', boton);
+    return boton;
+}
+
+function auroPlanInstalarCantidadesRapidas(){
+    const campo = document.getElementById('hcMedCantidad');
+    if(!campo) return null;
+
+    let contenedor = document.getElementById('auroPlanCantidadesRapidas');
+    if(contenedor) return contenedor;
+
+    contenedor = document.createElement('div');
+    contenedor.id = 'auroPlanCantidadesRapidas';
+    contenedor.className = 'auro-plan-cantidades-rapidas';
+    contenedor.setAttribute('aria-label', 'Cantidades rápidas');
+    contenedor.innerHTML = AURO_PLAN_CANTIDADES_RAPIDAS.map(function(cantidad){
+        return '<button type="button" class="auro-plan-cantidad-rapida" data-auro-cantidad="' +
+            escapeHtmlPlan(cantidad) + '">' + escapeHtmlPlan(cantidad) + '</button>';
+    }).join('');
+
+    contenedor.addEventListener('click', function(evento){
+        const boton = evento.target.closest('[data-auro-cantidad]');
+        if(!boton) return;
+        campo.value = String(boton.dataset.auroCantidad || '');
+        campo.dispatchEvent(new Event('input', {bubbles:true}));
+        campo.focus();
+    });
+
+    campo.insertAdjacentElement('afterend', contenedor);
+    return contenedor;
+}
+
 function auroPlanInstalarAyudasMedicamentos(){
     auroPlanActualizarOpcionesVia();
+    auroPlanInstalarLimpiarMedicamentoPrincipal();
+    auroPlanInstalarCantidadesRapidas();
     auroPlanInstalarEntradaViaLibre();
     auroPlanInstalarAccesoViaLibreRapido();
 
@@ -2323,6 +2380,69 @@ function normalizarMedTexto(t){
     return normalizarTextoPlan(t);
 }
 
+/* IASYN - búsqueda tolerante de medicamentos.
+   Solo decide coincidencias/sugerencias; no prescribe, guarda ni modifica recetas. */
+function auroPlanDistanciaLevenshtein(a, b){
+    a = normalizarMedTexto(a);
+    b = normalizarMedTexto(b);
+    if(a === b) return 0;
+    if(!a) return b.length;
+    if(!b) return a.length;
+
+    let anterior = Array.from({length:b.length + 1}, (_, i) => i);
+    for(let i = 1; i <= a.length; i++){
+        const actual = [i];
+        for(let j = 1; j <= b.length; j++){
+            const costo = a[i - 1] === b[j - 1] ? 0 : 1;
+            actual[j] = Math.min(
+                actual[j - 1] + 1,
+                anterior[j] + 1,
+                anterior[j - 1] + costo
+            );
+        }
+        anterior = actual;
+    }
+    return anterior[b.length];
+}
+
+function auroPlanTerminosBusquedaMedicamento(m){
+    const valores = [
+        m?.med, m?.pres, m?.cat, m?.principio_activo,
+        m?.forma_farmaceutica, m?.concentracion,
+        ...(Array.isArray(m?.denominaciones_comerciales) ? m.denominaciones_comerciales : (m?.denominaciones_comerciales ? [m.denominaciones_comerciales] : [])),
+        ...(Array.isArray(m?.nombres_alternativos) ? m.nombres_alternativos : (m?.nombres_alternativos ? [m.nombres_alternativos] : [])),
+        ...(Array.isArray(m?.aliases) ? m.aliases : (m?.aliases ? [m.aliases] : [])),
+        ...(Array.isArray(m?.palabras_clave) ? m.palabras_clave : (m?.palabras_clave ? [m.palabras_clave] : []))
+    ];
+
+    const completos = valores
+        .map(v => normalizarMedTexto(v))
+        .filter(Boolean);
+    const palabras = completos.flatMap(v => v.split(/\s+/).filter(Boolean));
+    return Array.from(new Set([...completos, ...palabras]));
+}
+
+function auroPlanCoincideBusquedaMedicamento(m, consulta){
+    const q = normalizarMedTexto(consulta);
+    if(!q) return {coincide:true, puntaje:0};
+
+    const terminos = auroPlanTerminosBusquedaMedicamento(m);
+    if(terminos.some(t => t.includes(q))) return {coincide:true, puntaje:0};
+    if(q.length < 3) return {coincide:false, puntaje:999};
+
+    let mejor = 999;
+    terminos.forEach(function(t){
+        if(!t) return;
+        if(q.includes(t) && t.length >= 3) mejor = Math.min(mejor, 1);
+        const limiteLongitud = Math.max(2, Math.ceil(Math.max(q.length, t.length) * 0.35));
+        if(Math.abs(q.length - t.length) > limiteLongitud) return;
+        mejor = Math.min(mejor, auroPlanDistanciaLevenshtein(q, t));
+    });
+
+    const umbral = q.length <= 4 ? 1 : (q.length <= 8 ? 2 : 3);
+    return {coincide:mejor <= umbral, puntaje:mejor};
+}
+
 /* ============================================================
    IASYN PLAN 32 - CATÁLOGO / PRESENTACIONES / VÍAS INTELIGENTES
    - Usa MEDICAMENTOS_IASYN_BASE como fuente primaria.
@@ -2773,30 +2893,14 @@ function renderMedicamentoSugerencias(){
         : [];
 
     const res = base
-        .filter(m => {
-            if(!q) return true;
-
-            const textoBusqueda = [
-                m.med,
-                m.pres,
-                m.cat,
-                m.principio_activo,
-                m.forma_farmaceutica,
-                m.concentracion,
-                ...(Array.isArray(m.denominaciones_comerciales)
-                    ? m.denominaciones_comerciales
-                    : (m.denominaciones_comerciales ? [m.denominaciones_comerciales] : [])),
-                ...(Array.isArray(m.nombres_alternativos)
-                    ? m.nombres_alternativos
-                    : (m.nombres_alternativos ? [m.nombres_alternativos] : []))
-            ]
-            .map(v => String(v || '').trim())
-            .filter(Boolean)
-            .join(' ');
-
-            return normalizarMedTexto(textoBusqueda).includes(q);
+        .map(function(m, indice){
+            const resultado = auroPlanCoincideBusquedaMedicamento(m, q);
+            return {m, indice, resultado};
         })
-        .slice(0,40);
+        .filter(x => x.resultado.coincide)
+        .sort((a,b) => (a.resultado.puntaje - b.resultado.puntaje) || (a.indice - b.indice))
+        .slice(0,40)
+        .map(x => x.m);
 
     if(!res.length){
         box.innerHTML =
@@ -3935,6 +4039,38 @@ function instalarResponsivePlanAndroid(){
         background:#f8fafc;
         border-color:#cbd5e1;
         color:#1f2937;
+      }
+
+      #hc_plan .auro-plan-cantidades-rapidas{
+        display:flex;
+        flex-wrap:wrap;
+        gap:5px;
+        margin-top:6px;
+      }
+
+      #hc_plan .auro-plan-cantidad-rapida{
+        min-width:32px;
+        min-height:29px;
+        padding:3px 8px;
+        border:1px solid #d1d5db;
+        border-radius:9px;
+        background:#fff;
+        color:#475569;
+        font-size:11px;
+        font-weight:800;
+        line-height:1;
+        cursor:pointer;
+      }
+
+      #hc_plan .auro-plan-cantidad-rapida:hover,
+      #hc_plan .auro-plan-cantidad-rapida:focus{
+        background:#f8fafc;
+        border-color:#cbd5e1;
+        color:#1f2937;
+      }
+
+      #hc_plan .auro-plan-limpiar-medicamento-principal{
+        margin-bottom:2px;
       }
 
       #hc_plan .auro-plan-indicaciones-controladas{
