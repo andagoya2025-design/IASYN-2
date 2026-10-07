@@ -2327,7 +2327,7 @@ function normalizarMedTexto(t){
    IASYN PLAN 32 - CATÁLOGO / PRESENTACIONES / VÍAS INTELIGENTES
    - Usa MEDICAMENTOS_IASYN_BASE como fuente primaria.
    - Si existe un catálogo IASYN enriquecido, puede aportar variantes.
-   - No realiza llamadas de red ni depende de otro ERP.
+   - Puede ampliar el catálogo desde la API de ESTA instalación; conserva respaldo local.
    - Conserva exactamente la estructura persistida del medicamento.
 ============================================================ */
 window.auroPlanCatalogoMedicamentoActivo = null;
@@ -2360,6 +2360,100 @@ function auroPlanApiCatalogoSeguro(){
 
     return null;
 }
+
+/* ============================================================
+   IASYN PLAN 33 - CATÁLOGO DINÁMICO DE MEDICAMENTOS v1.0
+   ------------------------------------------------------------
+   - Fuente dinámica: pestaña medicamentos de ESTA instalación.
+   - GET esperado: listarMedicamentosActivos.
+   - Catálogo local IASYN permanece como respaldo.
+   - Si API/hoja/backend falla, NO destruye el catálogo local.
+   - No prescribe frecuencia, duración, cantidad ni indicaciones.
+   - No guarda datos clínicos ni modifica id_atencion.
+============================================================ */
+window.__iasynPlanCatalogoMedicamentosDinamico = window.__iasynPlanCatalogoMedicamentosDinamico || {estado:'PENDIENTE',promesa:null,cargados:0};
+
+function iasynPlanListaTextoCatalogo(valor){
+    if(Array.isArray(valor)) return valor.map(v=>String(v||'').trim()).filter(Boolean);
+    const texto=String(valor===null||valor===undefined?'':valor).trim();
+    if(!texto) return [];
+    return texto.split(/[;\n|]+/).map(v=>String(v||'').trim()).filter(Boolean);
+}
+
+function iasynPlanDatosJsonMedicamento(registro){
+    const valor=registro?registro.datos_json:null;
+    if(valor && typeof valor==='object' && !Array.isArray(valor)) return valor;
+    const raw=String(valor===null||valor===undefined?'':valor).trim();
+    if(!raw) return {};
+    try{ const parsed=JSON.parse(raw); return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:{}; }catch(e){ return {}; }
+}
+
+function iasynPlanMedicamentoBdAFormatoPlan(registro){
+    if(!registro||typeof registro!=='object') return null;
+    const datos=iasynPlanDatosJsonMedicamento(registro);
+    const presentaciones=Array.isArray(datos.presentaciones)?datos.presentaciones:[];
+    const variantes=presentaciones.filter(p=>p&&typeof p==='object').map(p=>{
+        const forma=String(p.forma||p.forma_farmaceutica||'').trim();
+        const concentracion=String(p.concentracion||'').trim();
+        const pres=String(p.presentacion||p.pres||[concentracion,forma].filter(Boolean).join(' ')).trim();
+        const viasRaw=Array.isArray(p.vias)?p.vias:(Array.isArray(p.vias_compatibles)?p.vias_compatibles:(p.via?[p.via]:[]));
+        return {forma_farmaceutica:forma,concentracion:concentracion,pres:pres,vias_compatibles:viasRaw.map(v=>String(v||'').trim()).filter(Boolean)};
+    }).filter(v=>v.forma_farmaceutica||v.concentracion||v.pres||v.vias_compatibles.length);
+    const comerciales=iasynPlanListaTextoCatalogo(registro.nombres_comerciales);
+    const aliases=iasynPlanListaTextoCatalogo(registro.aliases);
+    const palabras=iasynPlanListaTextoCatalogo(registro.palabras_clave);
+    const nombresAlternativos=Array.from(new Set([...comerciales,...aliases,...palabras,String(registro.nombre_generico||'').trim(),String(registro.principio_activo||'').trim()].filter(Boolean)));
+    const item={
+        cat:String(registro.categoria||'OTROS').trim()||'OTROS',
+        med:String(registro.nombre_medicamento||registro.nombre_generico||registro.principio_activo||'').trim(),
+        frec:'',dur:'',ind:'',
+        principio_activo:String(registro.principio_activo||'').trim(),
+        nombre_generico:String(registro.nombre_generico||'').trim(),
+        denominaciones_comerciales:comerciales,nombres_alternativos:nombresAlternativos,aliases:aliases,palabras_clave:palabras,
+        id_medicamento:String(registro.id_medicamento||'').trim(),origen_catalogo:'BD_MEDICAMENTOS',variantes:variantes
+    };
+    if(variantes.length===1){
+        item.forma_farmaceutica=variantes[0].forma_farmaceutica; item.concentracion=variantes[0].concentracion; item.pres=variantes[0].pres;
+        if(variantes[0].vias_compatibles.length===1) item.via=variantes[0].vias_compatibles[0];
+    }
+    return item.med?item:null;
+}
+
+function iasynPlanFusionarCatalogoBd(registros){
+    const respaldo=auroPlanCatalogoBaseSeguro().slice();
+    const bd=(Array.isArray(registros)?registros:[]).filter(r=>{const e=String(r?.estado||'').trim().toUpperCase();return !e||e==='ACTIVO';}).map(iasynPlanMedicamentoBdAFormatoPlan).filter(Boolean);
+    const bdUnicos=[], vistosBd=new Set();
+    bd.forEach(item=>{const clave=normalizarMedTexto(item.med||'');if(!clave||vistosBd.has(clave))return;vistosBd.add(clave);bdUnicos.push(item);});
+    const nombresBd=new Set(bdUnicos.map(x=>normalizarMedTexto(x.med||'')).filter(Boolean));
+    const respaldoSinDuplicar=respaldo.filter(item=>!nombresBd.has(normalizarMedTexto(item?.med||item?.principio_activo||'')));
+    const fusion=[...bdUnicos,...respaldoSinDuplicar];
+    window.MEDICAMENTOS_IASYN_BASE=fusion;
+    window.MEDICAMENTOS_AUROSANAX_BASE=fusion;
+    return {total:fusion.length,dinamicos:bdUnicos.length,respaldo:respaldoSinDuplicar.length};
+}
+
+async function iasynPlanCargarCatalogoMedicamentosBd(){
+    const estado=window.__iasynPlanCatalogoMedicamentosDinamico;
+    if(estado.promesa) return estado.promesa;
+    estado.estado='CARGANDO';
+    estado.promesa=(async function(){
+        try{
+            const respuesta=await auroPlanApiGet('listarMedicamentosActivos',{});
+            if(!Array.isArray(respuesta)) throw new Error('Respuesta de medicamentos no válida.');
+            const resultado=iasynPlanFusionarCatalogoBd(respuesta);
+            estado.estado='CARGADO'; estado.cargados=resultado.dinamicos;
+            const buscador=document.getElementById('hcMedBusqueda');
+            if(buscador&&document.activeElement===buscador&&String(buscador.value||'').trim()) buscador.dispatchEvent(new Event('input',{bubbles:true}));
+            return resultado;
+        }catch(error){
+            estado.estado='RESPALDO'; estado.cargados=0;
+            console.warn('[IASYN Plan] Catálogo dinámico no disponible; se conserva el catálogo local.',error);
+            return {total:auroPlanCatalogoBaseSeguro().length,dinamicos:0,respaldo:auroPlanCatalogoBaseSeguro().length,fallback:true};
+        }
+    })();
+    return estado.promesa;
+}
+window.iasynPlanCargarCatalogoMedicamentosBd=iasynPlanCargarCatalogoMedicamentosBd;
 
 function auroPlanVariantesMedicamento(item){
     if(!item || typeof item !== 'object') return [];
@@ -4984,6 +5078,9 @@ window.cargarPlanClinicoDesdeSheets = cargarPlanClinicoDesdeSheets;
 document.addEventListener('DOMContentLoaded', function(){
     inicializarPlan();
     auroPlanInstalarAyudasMedicamentos();
+
+    /* Carga no bloqueante: si backend/hoja aún no existen, conserva catálogo local. */
+    iasynPlanCargarCatalogoMedicamentosBd();
 });
 
 /* ============================================================
