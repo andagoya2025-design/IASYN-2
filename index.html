@@ -151,7 +151,9 @@
       flex:0 0 auto;
     }
 
-    /* IASYN 2 — estado visual del contexto; presentación únicamente. */
+    /* IASYN 2 — ESTADO VISUAL DE ATENCIÓN, derivado del contexto real.
+       Verde = atención abierta/activa; rojo = histórica; gris = sin atención activa.
+       data-mode es solo presentación, nunca fuente clínica. */
     .auro-patient-context[data-mode="actual"]{
       border-color:#22c55e;
       background:linear-gradient(135deg,#dcfce7 0%,#f0fdf4 100%);
@@ -168,17 +170,10 @@
       background:linear-gradient(135deg,#f8fafc 0%,#ffffff 100%);
       box-shadow:0 9px 22px rgba(71,85,105,.10);
     }
-    .auro-patient-context-status[data-mode="actual"]{
-      color:#047857;font-weight:950;letter-spacing:.015em;
-    }
-    .auro-patient-context-status[data-mode="actual"]::before{
-      width:9px;height:9px;background:#00c853;
-      box-shadow:0 0 0 4px rgba(0,200,83,.16);
-    }
+    .auro-patient-context-status[data-mode="actual"]{color:#047857;font-weight:950;letter-spacing:.015em}
+    .auro-patient-context-status[data-mode="actual"]::before{width:9px;height:9px;background:#00c853;box-shadow:0 0 0 4px rgba(0,200,83,.16)}
     .auro-patient-context-status[data-mode="historica"]{color:#b91c1c;font-weight:900}
-    .auro-patient-context-status[data-mode="historica"]::before{
-      background:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,.10);
-    }
+    .auro-patient-context-status[data-mode="historica"]::before{background:#dc2626;box-shadow:0 0 0 3px rgba(220,38,38,.10)}
     .auro-patient-context-status[data-mode="historia"],
     .auro-patient-context-status[data-mode="seleccionada"]{color:#64748b;font-weight:850}
     .auro-patient-context-status[data-mode="historia"]::before,
@@ -189,17 +184,9 @@
       font-weight:900;
     }
 
-    .auro-patient-context-mobile{
+    /* IASYN 2 — copia superior oculta visualmente; nodo conservado. */
+    .auro-patient-context.auro-patient-context-mobile{
       display:none;
-    }
-
-    /* IASYN 2 — ANTIDUPLICIDAD VISUAL SIN BORRAR NADA.
-       Si el menú lateral está abierto, ya muestra el contexto del paciente;
-       se oculta únicamente la copia superior. El nodo permanece en el DOM. */
-    @media(max-width:980px){
-      .sidebar.show ~ .main #auroPatientContextMobile{
-        display:none !important;
-      }
     }
 
     @media(max-width:980px){
@@ -13380,8 +13367,13 @@ if(typeof showScreen==='function'){
     );
   }
 
+  function estadoAtencionReal(atencion){
+    /* Compatible con el contexto real actual y con registros legacy. Solo lectura. */
+    return texto(atencion?.estado_atencion || atencion?.estado || '').toLowerCase();
+  }
+
   function esConsultaHistorica(atencion){
-    const estado = texto(atencion?.estado_atencion || atencion?.estado).toLowerCase();
+    const estado = estadoAtencionReal(atencion);
     return /finaliz|cerrad|complet|atendid/.test(estado);
   }
 
@@ -13404,19 +13396,19 @@ if(typeof showScreen==='function'){
       }
 
       const numero = texto(atencion.numero_consulta);
-      const estadoTecnico = texto(atencion.estado_atencion || atencion.estado).toLowerCase();
+      const estadoTecnico = estadoAtencionReal(atencion);
       const historica = esConsultaHistorica(atencion);
       const actual = /abiert|activ|en curso|iniciad/.test(estadoTecnico);
 
       return {
         nombre,
         modo: historica ? 'historica' : (actual ? 'actual' : 'seleccionada'),
-        estado: historica ? 'Consulta histórica' : (actual ? 'Atención actual' : 'Consulta seleccionada'),
+        estado: historica ? 'CONSULTA HISTÓRICA' : (actual ? 'ATENCIÓN ACTIVA' : 'CONSULTA SELECCIONADA'),
         consulta: numero ? ('Consulta #' + numero) : ''
       };
     }
 
-    return { nombre, modo:'historia', estado:'Historia clínica', consulta:'' };
+    return { nombre, modo:'historia', estado:'SIN ATENCIÓN ACTIVA', consulta:'' };
   }
 
   function pintarContenedor(el, contexto){
