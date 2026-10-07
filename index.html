@@ -151,10 +151,54 @@
       flex:0 0 auto;
     }
 
-    .auro-patient-context-status[data-mode="actual"]::before{background:#16a34a}
-    .auro-patient-context-status[data-mode="historica"]::before{background:#64748b}
-    .auro-patient-context-status[data-mode="historia"]::before{background:#8b1e5a}
-    .auro-patient-context-status[data-mode="seleccionada"]::before{background:#2563eb}
+    /* IASYN 2 — ESTADO VISUAL DE ATENCIÓN.
+       Presentación únicamente: el color representa el contexto clínico ya resuelto;
+       nunca crea, selecciona, finaliza ni modifica una atención. */
+    .auro-patient-context[data-mode="actual"]{
+      border-color:#22c55e;
+      background:linear-gradient(135deg,#dcfce7 0%,#f0fdf4 100%);
+      box-shadow:0 12px 28px rgba(22,163,74,.24);
+    }
+    .auro-patient-context[data-mode="historica"]{
+      border-color:#fca5a5;
+      background:linear-gradient(135deg,#fee2e2 0%,#fff1f2 100%);
+      box-shadow:0 10px 24px rgba(185,28,28,.12);
+    }
+    .auro-patient-context[data-mode="historia"],
+    .auro-patient-context[data-mode="seleccionada"]{
+      border-color:#d1d5db;
+      background:linear-gradient(135deg,#f8fafc 0%,#ffffff 100%);
+      box-shadow:0 9px 22px rgba(71,85,105,.10);
+    }
+
+    .auro-patient-context-status[data-mode="actual"]{
+      color:#047857;
+      font-weight:950;
+      letter-spacing:.015em;
+    }
+    .auro-patient-context-status[data-mode="actual"]::before{
+      width:9px;
+      height:9px;
+      background:#00c853;
+      box-shadow:0 0 0 4px rgba(0,200,83,.16);
+    }
+    .auro-patient-context-status[data-mode="historica"]{
+      color:#b91c1c;
+      font-weight:900;
+    }
+    .auro-patient-context-status[data-mode="historica"]::before{
+      background:#dc2626;
+      box-shadow:0 0 0 3px rgba(220,38,38,.10);
+    }
+    .auro-patient-context-status[data-mode="historia"],
+    .auro-patient-context-status[data-mode="seleccionada"]{
+      color:#64748b;
+      font-weight:850;
+    }
+    .auro-patient-context-status[data-mode="historia"]::before,
+    .auro-patient-context-status[data-mode="seleccionada"]::before{
+      background:#94a3b8;
+    }
 
     .auro-patient-context-separator{
       color:#cbd5e1;
@@ -616,6 +660,13 @@
       font-weight:900;font-size:24px;
     }
     .patient-profile-card h5{margin:0;font-weight:900}
+    /* IASYN 2 — ANTIDUPLICIDAD VISUAL.
+       La ficha sigue en el DOM con todos sus IDs; solo se oculta en Historia clínica.
+       El contexto persistente del paciente continúa visible en su componente dedicado. */
+    #historia #hcPatientCard{
+      display:none !important;
+    }
+
     .patient-tags{display:flex;gap:8px;flex-wrap:wrap;margin-top:7px}
     .patient-kpis{display:grid;grid-template-columns:repeat(5,minmax(105px,1fr));gap:8px;min-width:620px}
     .patient-kpi{border:1px solid var(--line);border-radius:16px;padding:10px;background:#fff}
@@ -13343,8 +13394,21 @@ if(typeof showScreen==='function'){
     );
   }
 
+  function estadoAtencionReal(atencion){
+    /*
+      IASYN 2 — fuente de estado compatible.
+      Prioriza estado_atencion y conserva estado como fallback legacy.
+      Solo lectura; no modifica el objeto ni el backend.
+    */
+    return texto(
+      atencion?.estado_atencion ||
+      atencion?.estado ||
+      ''
+    ).toLowerCase();
+  }
+
   function esConsultaHistorica(atencion){
-    const estado = texto(atencion?.estado).toLowerCase();
+    const estado = estadoAtencionReal(atencion);
     return /finaliz|cerrad|complet|atendid/.test(estado);
   }
 
@@ -13367,19 +13431,19 @@ if(typeof showScreen==='function'){
       }
 
       const numero = texto(atencion.numero_consulta);
-      const estadoTecnico = texto(atencion.estado).toLowerCase();
+      const estadoTecnico = estadoAtencionReal(atencion);
       const historica = esConsultaHistorica(atencion);
       const actual = /abiert|activ|en curso|iniciad/.test(estadoTecnico);
 
       return {
         nombre,
         modo: historica ? 'historica' : (actual ? 'actual' : 'seleccionada'),
-        estado: historica ? 'Consulta histórica' : (actual ? 'Atención actual' : 'Consulta seleccionada'),
+        estado: historica ? 'CONSULTA HISTÓRICA' : (actual ? 'ATENCIÓN ACTIVA' : 'CONSULTA SELECCIONADA'),
         consulta: numero ? ('Consulta #' + numero) : ''
       };
     }
 
-    return { nombre, modo:'historia', estado:'Historia clínica', consulta:'' };
+    return { nombre, modo:'historia', estado:'SIN ATENCIÓN ACTIVA', consulta:'' };
   }
 
   function pintarContenedor(el, contexto){
@@ -13392,6 +13456,7 @@ if(typeof showScreen==='function'){
 
     if(!contexto){
       el.classList.remove('is-visible');
+      el.removeAttribute('data-mode');
       if(nombreEl) nombreEl.textContent = '';
       if(estadoEl){ estadoEl.textContent = ''; estadoEl.removeAttribute('data-mode'); }
       if(consultaEl) consultaEl.textContent = '';
@@ -13399,6 +13464,7 @@ if(typeof showScreen==='function'){
       return;
     }
 
+    el.dataset.mode = contexto.modo;
     if(nombreEl) nombreEl.textContent = contexto.nombre;
     if(estadoEl){
       estadoEl.textContent = contexto.estado;
@@ -13422,6 +13488,7 @@ if(typeof showScreen==='function'){
     'aurosanax:paciente-seleccionado',
     'aurosanax:atencion-seleccionada',
     'aurosanax:atencion-limpiada',
+    'aurosanax:atencion-finalizada',
     'aurosanax:historia-nueva'
   ].forEach(function(evento){
     window.addEventListener(evento, refrescar);
