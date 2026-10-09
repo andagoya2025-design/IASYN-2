@@ -11549,7 +11549,8 @@ async function inicializarERP(){
 
   await cargarCitasAgendaWeb();
   actualizarDashboard();
-  auroInicializarAyudasExamenFisicoV32();
+  // La ayuda de examen físico ya se inicializó antes de las lecturas.
+  // Evitar una segunda pasada síncrona sobre el DOM al terminar la carga.
 }
 
 /* AUROSANAX: inicialización movida después de cargar pacientes.js */
