@@ -771,6 +771,13 @@
         }
       };
 
+      // IASYN 2 · BLINDAJE ANTIRREGRESIVO: la edición nunca modifica
+      // la fecha ni la hora clínica originales de la atención.
+      if (accionAtencion === 'editarAtencion') {
+        delete payload.data.fecha_atencion;
+        delete payload.data.hora_atencion;
+      }
+
       const res = await fetch(API_URL, {
         method: 'POST',
         mode: 'no-cors',
@@ -1063,49 +1070,6 @@
 
   function atencionAbierta(idPaciente){
     return atencionesPaciente(idPaciente).find(a => String(a.estado_atencion).toLowerCase() === 'abierta') || null;
-  }
-
-  /*
-    IASYN 2 · FINALIZAR POR SELECCIÓN EXACTA
-    Solo reconoce la atención elegida con Ver cuando pertenece al paciente visible.
-    No busca ni sustituye silenciosamente por otra atención abierta.
-  */
-  function atencionSeleccionadaExacta(idPaciente){
-    const idPacienteActual = String(idPaciente || idPacienteActivo() || '').trim();
-    const idSeleccionada = String(atencionActivaId || '').trim();
-
-    if(!idPacienteActual || !idSeleccionada) return null;
-
-    const encontrada = leerLocal().find(function(item){
-      return (
-        String(item?.id_atencion || '').trim() === idSeleccionada &&
-        String(item?.id_paciente || '').trim() === idPacienteActual
-      );
-    }) || null;
-
-    return encontrada ? normalizar(encontrada) : null;
-  }
-
-  function actualizarBotonFinalizarSegunSeleccion(idPaciente){
-    const btnFinalizar = $('btnFinalizarAtencion');
-    if(!btnFinalizar) return;
-
-    const seleccionada = atencionSeleccionadaExacta(idPaciente);
-    const abiertaSeleccionada = !!(
-      seleccionada &&
-      String(seleccionada.estado_atencion || '').trim().toLowerCase() === 'abierta'
-    );
-
-    btnFinalizar.disabled = !abiertaSeleccionada || finalizandoAtencionEnCurso;
-    btnFinalizar.style.opacity = (abiertaSeleccionada && !finalizandoAtencionEnCurso) ? '1' : '0.55';
-    btnFinalizar.style.cursor = (abiertaSeleccionada && !finalizandoAtencionEnCurso) ? 'pointer' : 'not-allowed';
-    btnFinalizar.innerHTML = finalizandoAtencionEnCurso
-      ? '<i class="bi bi-hourglass-split me-1"></i> Finalizando...'
-      : (abiertaSeleccionada
-        ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
-        : (seleccionada
-          ? '<i class="bi bi-lock me-1"></i> Cerrada ✓'
-          : '<i class="bi bi-lock me-1"></i> Seleccione consulta'));
   }
 
   function siguienteConsulta(idPaciente){
@@ -1699,27 +1663,22 @@
       return;
     }
 
-    const seleccionada = atencionSeleccionadaExacta(idPaciente);
-    if(!seleccionada){
-      alert('Seleccione con “Ver” la atención que desea finalizar.');
-      return;
-    }
-
-    if(String(seleccionada.estado_atencion || '').trim().toLowerCase() !== 'abierta'){
-      alert('La consulta seleccionada está cerrada. Seleccione con “Ver” la atención abierta que desea finalizar.');
+    const abierta = atencionAbierta(idPaciente);
+    if(!abierta){
+      alert('No hay atención abierta para finalizar.');
       return;
     }
 
     if(!confirm('¿Finalizar la atención actual? Quedará registrada como consulta histórica.')) return;
 
     const lista = leerLocal();
-    const idx = lista.findIndex(a => String(a.id_atencion) === String(seleccionada.id_atencion));
+    const idx = lista.findIndex(a => String(a.id_atencion) === String(abierta.id_atencion));
 
     let atencionFinalizada = null;
 
     if(idx >= 0){
       atencionFinalizada = Object.assign({}, lista[idx], {
-        numero_consulta: Number(lista[idx].numero_consulta || seleccionada.numero_consulta || siguienteConsulta(idPaciente) || 1),
+        numero_consulta: Number(lista[idx].numero_consulta || abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
         estado_atencion: 'Finalizada',
         actualizado_en: fechaHora()
       });
@@ -1727,14 +1686,14 @@
       lista[idx] = atencionFinalizada;
       guardarLocal(lista);
     }else{
-      atencionFinalizada = Object.assign({}, seleccionada, {
-        numero_consulta: Number(seleccionada.numero_consulta || siguienteConsulta(idPaciente) || 1),
+      atencionFinalizada = Object.assign({}, abierta, {
+        numero_consulta: Number(abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
         estado_atencion: 'Finalizada',
         actualizado_en: fechaHora()
       });
     }
 
-    const idFinalizada = String(atencionFinalizada?.id_atencion || seleccionada.id_atencion || '').trim();
+    const idFinalizada = String(atencionFinalizada?.id_atencion || abierta.id_atencion || '').trim();
 
     auroInvalidarContextoAtencion({
       idAnterior:idFinalizada,
@@ -2606,15 +2565,11 @@
       return;
     }
 
-    const sincronizada = sincronizarContextoAtencion(a, {
+    sincronizarContextoAtencion(a, {
       motivo:'boton_ver',
       emitirIniciada:false,
       idAnterior:String(atencionActivaId || '').trim()
     });
-
-    if(sincronizada){
-      actualizarBotonFinalizarSegunSeleccion(idPacienteVisible);
-    }
   }
 
   function asegurarBloque(){
@@ -2721,7 +2676,14 @@
     }
 
     if(btnFinalizar){
-      actualizarBotonFinalizarSegunSeleccion(idPaciente);
+      btnFinalizar.disabled = !abierta || finalizandoAtencionEnCurso;
+      btnFinalizar.style.opacity = (abierta && !finalizandoAtencionEnCurso) ? '1' : '0.55';
+      btnFinalizar.style.cursor = (abierta && !finalizandoAtencionEnCurso) ? 'pointer' : 'not-allowed';
+      btnFinalizar.innerHTML = finalizandoAtencionEnCurso
+        ? '<i class="bi bi-hourglass-split me-1"></i> Finalizando...'
+        : (abierta
+          ? '<i class="bi bi-check-circle me-1"></i> Finalizar'
+          : '<i class="bi bi-lock me-1"></i> Cerrada ✓');
     }
 
     resumen.textContent = 'Total consultas: ' + arr.length + (arr[0] ? ' · Última: ' + fechaVisual(arr[0].fecha_atencion) : '') + ' · Vista integral activa';
