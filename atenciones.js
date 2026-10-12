@@ -1072,6 +1072,60 @@
     return atencionesPaciente(idPaciente).find(a => String(a.estado_atencion).toLowerCase() === 'abierta') || null;
   }
 
+  /* IASYN 2 · AVISO QUIRÚRGICO DE ATENCIONES ABIERTAS · SOLO LECTURA */
+  function auroNombrePacienteAviso(idPaciente){
+    const id = String(idPaciente || '').trim();
+    if(!id) return 'Paciente no identificado';
+    try{
+      const activo = pacienteActivo();
+      if(activo && String(activo.id_paciente || activo.id || '').trim() === id){
+        const nombre = String(activo.nombre_completo || activo.nombre ||
+          [activo.nombres, activo.apellidos].filter(Boolean).join(' ')).trim();
+        if(nombre) return nombre;
+      }
+      if(typeof patients !== 'undefined' && Array.isArray(patients)){
+        const p = patients.find(function(item){
+          return String(item.id_paciente || item.id || '').trim() === id;
+        });
+        if(p){
+          const nombre = String(p.nombre_completo || p.nombre ||
+            [p.nombres, p.apellidos].filter(Boolean).join(' ')).trim();
+          if(nombre) return nombre;
+        }
+      }
+    }catch(error){
+      console.warn(MODULO, 'No se pudo consultar el nombre del paciente para el aviso.', error);
+    }
+    return id;
+  }
+
+  function auroAbiertasMedicoAviso(idMedico, idPacienteActual){
+    const medico = String(idMedico || '').trim();
+    const paciente = String(idPacienteActual || '').trim();
+    if(!medico) return [];
+    return leerLocal().filter(function(a){
+      return String(a.id_medico || '').trim() === medico &&
+        String(a.id_paciente || '').trim() !== paciente &&
+        String(a.estado_atencion || '').trim().toLowerCase() === 'abierta';
+    });
+  }
+
+  /* Consulta explícita a Sheets para no autorizar nuevas consultas con caché obsoleta.
+     Si falla, NO se crea atención ni se cambia el contexto clínico. */
+  async function auroRefrescarAtencionesParaAviso(){
+    if(typeof API_URL === 'undefined' || !API_URL){
+      throw new Error('No está configurada la conexión con Google Sheets.');
+    }
+    const respuesta = await fetch(API_URL + '?accion=listarAtenciones&_=' + Date.now());
+    if(!respuesta.ok) throw new Error('La consulta de atenciones devolvió HTTP ' + respuesta.status);
+    const resultado = await respuesta.json();
+    const remotas = Array.isArray(resultado) ? resultado :
+      (resultado && Array.isArray(resultado.data) ? resultado.data : null);
+    if(!remotas) throw new Error('Respuesta de atenciones no válida.');
+    mezclarAtencionesLocalesYSheets(remotas);
+    atencionesSheetsCargadas = true;
+  }
+
   function siguienteConsulta(idPaciente){
     return atencionesPaciente(idPaciente).reduce((m,a) => Math.max(m, Number(a.numero_consulta || 0)), 0) + 1;
   }
@@ -1575,6 +1629,45 @@
       if(!seleccionado) return null;
 
       idMedico = idMedicoRegistro(seleccionado);
+    }
+
+    /* IASYN 2 · ADAPTACIÓN QUIRÚRGICA DEL AVISO AUROSANAX.
+       No altera selección, recetas, firmas, timestamps ni estados previos. */
+    try{
+      await auroRefrescarAtencionesParaAviso();
+    }catch(error){
+      console.warn(MODULO, 'No se pudo verificar la lista actual de atenciones.', error);
+      alert('No se pudieron verificar las atenciones abiertas en Google Sheets. ' +
+        'No se inició otra consulta para evitar duplicidades. Revise la conexión e intente de nuevo.');
+      return null;
+    }
+
+    /* Revalidación del mismo paciente después de actualizar la fuente persistente. */
+    const abiertaActualizada = atencionAbierta(idPaciente);
+    if(abiertaActualizada){
+      alert('Este paciente ya tiene una atención abierta' +
+        (abiertaActualizada.numero_consulta
+          ? ' (consulta #' + abiertaActualizada.numero_consulta + ')' : '') +
+        '. Continúe o finalice esa atención antes de iniciar una nueva.');
+      return null;
+    }
+
+    const otrasAbiertas = auroAbiertasMedicoAviso(idMedico, idPaciente);
+    if(otrasAbiertas.length){
+      const detalle = otrasAbiertas.map(function(a){
+        return '• Paciente: ' + auroNombrePacienteAviso(a.id_paciente) +
+          '\n  Consulta: ' + (a.numero_consulta ? '#' + a.numero_consulta : 'Sin número') +
+          '\n  ID atención: ' + String(a.id_atencion || '').trim();
+      }).join('\n\n');
+      const continuar = confirm(
+        'El médico seleccionado tiene ' + otrasAbiertas.length +
+        (otrasAbiertas.length === 1 ? ' atención abierta.' : ' atenciones abiertas.') +
+        '\n\n' + detalle + '\n\n' +
+        'Estas atenciones pertenecen a otros pacientes.\n' +
+        'Aceptar: mantenerlas abiertas e iniciar una nueva atención.\n' +
+        'Cancelar: no crear una nueva atención.'
+      );
+      if(!continuar) return null;
     }
 
     const num = siguienteConsulta(idPaciente);
