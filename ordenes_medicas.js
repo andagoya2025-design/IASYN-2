@@ -12,6 +12,8 @@
  - Una fila puede contener múltiples ítems dentro de detalle_json.items.
  - Conserva snapshot documental de paciente, historia, médico, centro e ítems.
  - PDF no se almacena: se reconstruye bajo demanda.
+ - V1.3.1: preparación de firma INACTIVA, sin motor ni llamadas nuevas.
+ - Bloquea emisión si falla verificación del historial remoto.
  - No modifica Diagnóstico, Atenciones, Recetas, Certificados ni Documentos.
  - No usa polling ni MutationObserver.
  - Falla cerrado si el contexto clínico es ambiguo o no coincide con Plan.
@@ -25,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.3.0-IASYN';
+const VERSION='1.3.1-IASYN-PREPARACION-FIRMA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -39,7 +41,8 @@ const state={
   medicos:[],
   paciente:null,
   historia:null,
-  montado:false
+  montado:false,
+  cargaFallida:true
 };
 
 const txt=v=>String(v??'').trim();
@@ -630,6 +633,7 @@ function estadoPrimario(){
 
   if(!ctx.id) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-file-earmark-medical',nota:'Seleccione una atención clínica.'};
   if(ctx.bloqueada) return {disabled:true,texto:'Orden médica bloqueada',icono:'bi-lock',nota:'La atención está anulada, cancelada o archivada.'};
+  if(state.cargaFallida) return {disabled:true,texto:'Verificando órdenes médicas',icono:'bi-lock',nota:'No se pudo confirmar el historial de órdenes. La emisión permanece bloqueada para evitar duplicados.'};
   if(!plan.ok) return {disabled:true,texto:'Emitir Orden Médica',icono:'bi-exclamation-triangle',nota:plan.motivo};
 
   if(activas.length>1){
@@ -739,6 +743,10 @@ async function accionPrincipal(){
 }
 
 async function emitir(){
+  if(state.cargaFallida){
+    aviso('No se confirmó el historial remoto de órdenes. Emisión bloqueada para evitar duplicados.','err');
+    return;
+  }
   const activas=ordenesActivasFormales();
   if(activas.length>1){
     aviso(`Se detectaron ${activas.length} órdenes formales activas para esta atención. Emisión bloqueada para evitar otra duplicidad.`,'err');
@@ -1031,6 +1039,7 @@ async function cargar(){
   if(!state.montado) montar();
   if(!ctx.id){
     state.ordenesEmitidas=[];
+    state.cargaFallida=true;
     render();
     return [];
   }
@@ -1040,7 +1049,9 @@ async function cargar(){
     await cargarAuxiliares(ctx);
     const r=await get('listarOrdenesMedicasPorAtencion',{id_atencion:ctx.id});
     if(token!==state.token) return [];
+    if(!Array.isArray(r)&&!Array.isArray(r?.registros)&&!Array.isArray(r?.data)) throw Error('Respuesta del historial inválida o incompleta.');
     state.ordenesEmitidas=arr(r).filter(x=>txt(x.id_atencion)===ctx.id);
+    state.cargaFallida=false;
     const activas=ordenesActivasFormales();
     if(activas.length>1){
       render();
@@ -1050,6 +1061,7 @@ async function cargar(){
   }catch(e){
     if(token!==state.token) return [];
     state.ordenesEmitidas=[];
+    state.cargaFallida=true;
     render();
     aviso('El módulo está listo, pero el backend de órdenes médicas aún no respondió: '+(e.message||e),'warn');
     return [];
@@ -1089,9 +1101,49 @@ async function inicializar(){
   return true;
 }
 
+/*
+ * V1.3.1 - PREPARACIÓN DE FIRMA (INACTIVA POR DISEÑO).
+ * No invoca el motor, no realiza POST ni consulta firmas.
+ * El backend debe validar de forma autoritativa la versión y el documento.
+ */
+function prepararSolicitudFirmaOrden(id){
+  if(state.cargaFallida) throw Error('No se ha verificado el historial remoto de órdenes.');
+  const ctx=contexto();
+  if(!ctx.id || ctx.bloqueada) throw Error('No hay una atención válida para firmar.');
+  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
+  if(!reg) throw Error('La orden no existe en el historial cargado.');
+  if(txt(reg.id_atencion)!==ctx.id) throw Error('La orden pertenece a otra atención.');
+  if(estadoOrdenEsAnulada(reg)||estadoOrdenEsReemplazada(reg)) throw Error('No se puede firmar una versión anulada o reemplazada.');
+  const d=datosDocumentoEmitido(reg);
+  if(!d.id_orden||!d.id_paciente||!d.id_historia||!d.id_medico||!Number.isSafeInteger(d.version)||d.version<1){
+    throw Error('La orden no tiene identidad clínica y versión completas.');
+  }
+  if(ctx.idPaciente&&ctx.idPaciente!==d.id_paciente) throw Error('La identidad del paciente no coincide con la atención.');
+  if(ctx.idHistoria&&ctx.idHistoria!==d.id_historia) throw Error('La historia clínica no coincide con la atención.');
+  if(ctx.idMedico&&ctx.idMedico!==d.id_medico) throw Error('El médico no coincide con la atención.');
+  if(!itemsUnicos(d.detalle_json.items||[]).length) throw Error('La orden no contiene indicaciones.');
+  const html='<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden médica</title><style>'+estilosImpresion()+'</style></head><body>'+docHTML(d)+'</body></html>';
+  return Object.freeze({
+    tipo_documento:'ORDEN_MEDICA',
+    id_documento_origen:d.id_orden,
+    id_orden:d.id_orden,
+    id_receta:'',
+    id_atencion:d.id_atencion,
+    id_paciente:d.id_paciente,
+    id_historia:d.id_historia,
+    id_medico:d.id_medico,
+    numero_consulta:d.numero_consulta,
+    version_documento:d.version,
+    firmas_requeridas:1,
+    html_documento:html
+  });
+}
+
 window.IASYN_ORDENES_MEDICAS={
   version:VERSION,
   jsonVersion:JSON_VERSION,
+  firmaElectronicaHabilitada:false,
+  prepararSolicitudFirma:prepararSolicitudFirmaOrden,
   estado:state,
   inicializar,
   cargar,
