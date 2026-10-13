@@ -689,6 +689,7 @@ function render(){
   app.querySelectorAll('[data-aom-preview]').forEach(b=>b.addEventListener('click',()=>vistaPreviaPorId(b.dataset.aomPreview)));
   app.querySelectorAll('[data-aom-editar]').forEach(b=>b.addEventListener('click',()=>editarFormal(b.dataset.aomEditar)));
   app.querySelectorAll('[data-aom-imprimir]').forEach(b=>b.addEventListener('click',()=>imprimirPorId(b.dataset.aomImprimir)));
+  app.querySelectorAll('[data-aom-firmar]').forEach(b=>b.addEventListener('click',()=>solicitarFirmaOrden(b.dataset.aomFirmar)));
   app.querySelectorAll('[data-aom-anular]').forEach(b=>b.addEventListener('click',()=>anular(b.dataset.aomAnular)));
 }
 
@@ -709,6 +710,7 @@ function filaHistorial(r){
       <button type="button" class="aom-btn" data-aom-preview="${esc(id)}"><i class="bi bi-eye"></i> Vista previa</button>
       ${noEditable?'':`<button type="button" class="aom-btn" data-aom-editar="${esc(id)}"><i class="bi bi-pencil-square"></i> Editar</button>`}
       <button type="button" class="aom-btn" data-aom-imprimir="${esc(id)}"><i class="bi bi-printer"></i> Imprimir</button>
+      ${noEditable?'':`<button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" title="Firma disponible al completar integración del servidor"><i class="bi bi-pen"></i> Firmar</button>`}
       ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-slash-circle"></i> Anular</button>`}
     </div>
   </div>`;
@@ -1106,6 +1108,16 @@ async function inicializar(){
  * No invoca el motor, no realiza POST ni consulta firmas.
  * El backend debe validar de forma autoritativa la versión y el documento.
  */
+function solicitarFirmaOrden(id){
+  try {
+    // Prevalidación local sin efectos: no enviar a un motor que aún no reconoce ORDEN_MEDICA.
+    prepararSolicitudFirmaOrden(id);
+    aviso('La orden está preparada. Falta habilitar y validar la ruta ORDEN_MEDICA en SCRIB 05 y firma_electronica.js antes de firmar. No se ha enviado ninguna solicitud.','warn');
+  } catch(error) {
+    aviso('No es posible firmar: '+(error?.message||String(error)),'warn');
+  }
+}
+
 function prepararSolicitudFirmaOrden(id){
   if(state.cargaFallida) throw Error('No se ha verificado el historial remoto de órdenes.');
   const ctx=contexto();
