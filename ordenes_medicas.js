@@ -12,10 +12,10 @@
  - Una fila puede contener múltiples ítems dentro de detalle_json.items.
  - Conserva snapshot documental de paciente, historia, médico, centro e ítems.
  - PDF no se almacena: se reconstruye bajo demanda.
- - V1.3.1: preparación de firma INACTIVA, sin motor ni llamadas nuevas.
+ - V1.4.0: firma directa por backend, aislada del motor exclusivo de Recetas.
  - Bloquea emisión si falla verificación del historial remoto.
  - No modifica Diagnóstico, Atenciones, Recetas, Certificados ni Documentos.
- - No usa polling ni MutationObserver.
+ - Polling solo para estado de firma; no usa MutationObserver.
  - Falla cerrado si el contexto clínico es ambiguo o no coincide con Plan.
  - Atención finalizada/cerrada puede abrir/imprimir/corregir documento formal;
    anulada/cancelada/archivada queda bloqueada.
@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.3.1-IASYN-PREPARACION-FIRMA';
+const VERSION='1.4.0-IASYN-FIRMA-ORDEN-MEDICA-CANDIDATA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -42,7 +42,11 @@ const state={
   paciente:null,
   historia:null,
   montado:false,
-  cargaFallida:true
+  cargaFallida:true,
+  firmasPorDocumento:{},
+  firmaProcesos:new Map(),
+  firmaConsultaToken:0,
+  ultimoAviso:null
 };
 
 const txt=v=>String(v??'').trim();
@@ -686,11 +690,16 @@ function render(){
     </div>`;
 
   document.getElementById('iasynOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
+  if(state.ultimoAviso){
+    const a=document.getElementById('iasynOrdenMedicaAviso');
+    if(a){a.className='aom-notice '+state.ultimoAviso.tipo;a.textContent=state.ultimoAviso.mensaje;}
+  }
   app.querySelectorAll('[data-aom-preview]').forEach(b=>b.addEventListener('click',()=>vistaPreviaPorId(b.dataset.aomPreview)));
   app.querySelectorAll('[data-aom-editar]').forEach(b=>b.addEventListener('click',()=>editarFormal(b.dataset.aomEditar)));
   app.querySelectorAll('[data-aom-imprimir]').forEach(b=>b.addEventListener('click',()=>imprimirPorId(b.dataset.aomImprimir)));
-  app.querySelectorAll('[data-aom-firmar]').forEach(b=>b.addEventListener('click',()=>solicitarFirmaOrden(b.dataset.aomFirmar)));
   app.querySelectorAll('[data-aom-anular]').forEach(b=>b.addEventListener('click',()=>anular(b.dataset.aomAnular)));
+  app.querySelectorAll('[data-aom-firmar]').forEach(b=>b.addEventListener('click',()=>solicitarFirmaOrden(b.dataset.aomFirmar)));
+  app.querySelectorAll('[data-aom-ver-firmado]').forEach(b=>b.addEventListener('click',()=>verOrdenFirmada(b.dataset.aomVerFirmado)));
 }
 
 function filaHistorial(r){
@@ -700,6 +709,9 @@ function filaHistorial(r){
   const anulada=estadoOrdenEsAnulada(r);
   const reemplazada=estadoOrdenEsReemplazada(r);
   const noEditable=anulada||reemplazada;
+  const firmado=!!state.firmasPorDocumento[id];
+  const proceso=state.firmaProcesos.get(id);
+  const firmando=!!proceso;
 
   return `<div class="aom-row">
     <div class="aom-row-main">
@@ -710,13 +722,15 @@ function filaHistorial(r){
       <button type="button" class="aom-btn" data-aom-preview="${esc(id)}"><i class="bi bi-eye"></i> Vista previa</button>
       ${noEditable?'':`<button type="button" class="aom-btn" data-aom-editar="${esc(id)}"><i class="bi bi-pencil-square"></i> Editar</button>`}
       <button type="button" class="aom-btn" data-aom-imprimir="${esc(id)}"><i class="bi bi-printer"></i> Imprimir</button>
-      ${noEditable?'':`<button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" title="Firma disponible al completar integración del servidor"><i class="bi bi-pen"></i> Firmar</button>`}
+      ${firmado?`<button type="button" class="aom-btn" data-aom-ver-firmado="${esc(id)}"><i class="bi bi-shield-check"></i> Ver firmado</button>`:''}
+      ${!noEditable&&!firmado?`<button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" ${firmando?'disabled':''}><i class="bi bi-pen"></i> ${firmando?'Firma en proceso…':'Firmar'}</button>`:''}
       ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-slash-circle"></i> Anular</button>`}
     </div>
   </div>`;
 }
 
 function aviso(msg,tipo=''){
+  state.ultimoAviso={mensaje:txt(msg),tipo:txt(tipo)};
   const el=document.getElementById('iasynOrdenMedicaAviso');
   if(!el) return;
   el.className='aom-notice'+(tipo?' '+tipo:'');
@@ -1041,6 +1055,7 @@ async function cargar(){
   if(!state.montado) montar();
   if(!ctx.id){
     state.ordenesEmitidas=[];
+    state.firmasPorDocumento={};
     state.cargaFallida=true;
     render();
     return [];
@@ -1054,6 +1069,7 @@ async function cargar(){
     if(!Array.isArray(r)&&!Array.isArray(r?.registros)&&!Array.isArray(r?.data)) throw Error('Respuesta del historial inválida o incompleta.');
     state.ordenesEmitidas=arr(r).filter(x=>txt(x.id_atencion)===ctx.id);
     state.cargaFallida=false;
+    await sincronizarFirmasOrdenes(ctx.id,token);
     const activas=ordenesActivasFormales();
     if(activas.length>1){
       render();
@@ -1103,29 +1119,121 @@ async function inicializar(){
   return true;
 }
 
-/*
- * V1.3.1 - PREPARACIÓN DE FIRMA (INACTIVA POR DISEÑO).
- * No invoca el motor, no realiza POST ni consulta firmas.
- * El backend debe validar de forma autoritativa la versión y el documento.
+/* Firma de órdenes: ruta independiente de la validación exclusiva de RECETA.
+ * Candidato sujeto a verificación del contrato Apps Script ORDEN_MEDICA.
+ * Nunca se informa éxito sin confirmación remota FIRMADO.
  */
-function solicitarFirmaOrden(id){
-  try {
+async function postFirmaOrden(accion,data){
+  const r=await post(accion,data);
+  if(!r||r.success===false||r.ok===false) throw Error(txt(r?.message||r?.error)||'El servidor rechazó '+accion+'.');
+  return r;
+}
+function firmaOrdenExacta(doc,id,version){
+  const origen=txt(doc?.id_documento_origen||doc?.id_orden||doc?.id_orden_medica);
+  const tipo=txt(doc?.tipo_documento).toUpperCase();
+  const estado=txt(doc?.estado_firma||doc?.estado).toUpperCase();
+  const v=Number(doc?.version_documento||doc?.version||0);
+  return tipo==='ORDEN_MEDICA' && origen===txt(id) && estado==='FIRMADO' && v===Number(version);
+}
+async function consultarFirmaOrden(reg){
+  const id=txt(reg.id_orden);
+  const version=datosDocumentoEmitido(reg).version;
+  const r=await postFirmaOrden('consultarDocumentosFirmados',{
+    tipo_documento:'ORDEN_MEDICA',id_documento_origen:id,id_orden:id,
+    id_atencion:txt(reg.id_atencion)
+  });
+  const docs=Array.isArray(r.documentos)?r.documentos:[];
+  return docs.find(x=>firmaOrdenExacta(x,id,version))||null;
+}
+async function sincronizarFirmasOrdenes(idAtencion,tokenCarga){
+  const t=++state.firmaConsultaToken;
+  const nuevas={};
+  for(const reg of state.ordenesEmitidas){
+    if(tokenCarga!==state.token||t!==state.firmaConsultaToken) return;
+    try{
+      const firmada=await consultarFirmaOrden(reg);
+      if(firmada) nuevas[txt(reg.id_orden)]=firmada;
+    }catch(e){
+      // No inventar estado FIRMADO ante fallo de red/servidor.
+      console.warn('IASYN Órdenes: no se pudo consultar la firma.',e);
+    }
+  }
+  if(tokenCarga===state.token&&t===state.firmaConsultaToken&&txt(idAtencion)===txt(state.idAtencion)){
+    state.firmasPorDocumento=nuevas;
+  }
+}
+async function solicitarFirmaOrden(id){
+  id=txt(id);
+  if(state.firmaProcesos.has(id)) return aviso('Ya existe una solicitud de firma en curso.','warn');
+  try{
     const solicitud=prepararSolicitudFirmaOrden(id);
-    const motor=window.auroFirmaElectronica;
-    // Interruptor de despliegue: no activar sin backend y agente comprobados.
-    if(window.IASYN_ORDEN_MEDICA_FIRMA_VERIFICADA !== true ||
-       !motor || typeof motor.firmarDocumento !== 'function') {
-      aviso('Orden validada, pero firma bloqueada hasta verificar backend y agente Windows. No se envió solicitud.','warn');
-      return;
+    if(state.firmasPorDocumento[id]) return verOrdenFirmada(id);
+    // La consulta remota previa evita una firma duplicada tras recargar el navegador.
+    const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===id);
+    const existente=await consultarFirmaOrden(reg);
+    if(existente){
+      state.firmasPorDocumento[id]=existente;
+      render();
+      return aviso('Esta versión ya está firmada. Use Ver firmado.','ok');
     }
     if(!window.confirm('¿Firmar electrónicamente esta versión de la orden médica?')) return;
-    Promise.resolve(motor.firmarDocumento(solicitud)).then(resultado=>{
-      const estado=txt(resultado?.estado_firma).toUpperCase();
-      if(estado==='FIRMADO') aviso('Firma confirmada por el servidor.','ok');
-      else aviso('Solicitud enviada; confirme el estado de la firma antes de considerar firmado el documento.','warn');
-    }).catch(error=>aviso('No se completó la firma: '+(error?.message||String(error)),'err'));
-  } catch(error) {
-    aviso('No es posible firmar: '+(error?.message||String(error)),'warn');
+    const proceso={id_atencion:solicitud.id_atencion,id_solicitud:'',cancelado:false};
+    state.firmaProcesos.set(id,proceso);
+    render();
+    aviso('Enviando orden médica para una firma electrónica…');
+    const r=await postFirmaOrden('firmarDocumento',solicitud);
+    if(txt(r.estado_firma).toUpperCase()==='FIRMADO'){
+      const firmada=await consultarFirmaOrden(reg);
+      if(!firmada) throw Error('El servidor indicó FIRMADO, pero no se confirmó el documento archivado.');
+      state.firmasPorDocumento[id]=firmada;
+      aviso('Orden médica firmada y archivada.','ok');
+      return;
+    }
+    proceso.id_solicitud=txt(r.id_solicitud);
+    if(!proceso.id_solicitud) throw Error('El servidor no devolvió id_solicitud.');
+    aviso('Solicitud creada. Firme el PDF en Adobe y guárdelo.');
+    const inicio=Date.now();
+    while(Date.now()-inicio<35*60*1000){
+      await new Promise(resolve=>setTimeout(resolve,2000));
+      const estado=await postFirmaOrden('obtenerEstadoFirmaElectronica',{id_solicitud:proceso.id_solicitud});
+      const valor=txt(estado.estado_firma||estado.estado).toUpperCase();
+      if(valor==='FIRMADO'){
+        const firmada=await consultarFirmaOrden(reg);
+        if(!firmada) throw Error('La firma fue reportada, pero aún no se pudo confirmar su archivo para esta versión.');
+        state.firmasPorDocumento[id]=firmada;
+        aviso('Orden médica firmada electrónicamente y archivada.','ok');
+        return;
+      }
+      if(['ERROR','EXPIRADA','CANCELADA'].includes(valor)) throw Error(txt(estado.error)||'La firma terminó en estado '+valor+'.');
+      if(valor==='TOMADA') aviso('Adobe está abierto. Firme la orden y guarde el PDF.');
+    }
+    throw Error('La firma sigue pendiente. Consulte nuevamente el estado antes de intentar otra firma.');
+  }catch(e){
+    aviso('No se completó la firma: '+txt(e?.message||e),'err');
+  }finally{
+    state.firmaProcesos.delete(id);
+    render();
+  }
+}
+async function verOrdenFirmada(id){
+  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===txt(id));
+  if(!reg||txt(reg.id_atencion)!==txt(contexto().id)) return aviso('Orden no válida para la atención actual.','err');
+  const ventana=window.open('','_blank');
+  try{
+    const r=await postFirmaOrden('obtenerDocumentoFirmado',{
+      tipo_documento:'ORDEN_MEDICA',id_documento_origen:txt(id),id_orden:txt(id),
+      id_atencion:txt(reg.id_atencion),version_documento:datosDocumentoEmitido(reg).version
+    });
+    if(!txt(r.pdf_firmado_base64)) throw Error('No se recibió el PDF firmado.');
+    const bin=atob(r.pdf_firmado_base64);
+    const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
+    if(ventana) ventana.location.href=url; else window.open(url,'_blank');
+    setTimeout(()=>URL.revokeObjectURL(url),120000);
+  }catch(e){
+    if(ventana) ventana.close();
+    aviso('No se pudo abrir el PDF firmado: '+txt(e?.message||e),'err');
   }
 }
 
@@ -1150,12 +1258,16 @@ function prepararSolicitudFirmaOrden(id){
     tipo_documento:'ORDEN_MEDICA',
     id_documento_origen:d.id_orden,
     id_orden:d.id_orden,
+    id_orden_medica:d.id_orden,
     id_receta:'',
     id_atencion:d.id_atencion,
     id_paciente:d.id_paciente,
+    nombre_paciente:d.nombre_paciente,
     id_historia:d.id_historia,
     id_medico:d.id_medico,
+    nombre_medico:d.nombre_medico,
     numero_consulta:d.numero_consulta,
+    nombre_archivo:`ORDEN_MEDICA_${d.numero_consulta||'CONSULTA'}_${d.id_orden}_V${d.version}.pdf`,
     version_documento:d.version,
     firmas_requeridas:1,
     html_documento:html
@@ -1165,7 +1277,9 @@ function prepararSolicitudFirmaOrden(id){
 window.IASYN_ORDENES_MEDICAS={
   version:VERSION,
   jsonVersion:JSON_VERSION,
-  firmaElectronicaHabilitada:false,
+  firmaElectronicaHabilitada:true,
+  firmar:solicitarFirmaOrden,
+  verFirmado:verOrdenFirmada,
   prepararSolicitudFirma:prepararSolicitudFirmaOrden,
   estado:state,
   inicializar,
