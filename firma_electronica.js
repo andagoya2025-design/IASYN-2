@@ -3249,7 +3249,7 @@
   function esCertificado(data){
     const d = data || {};
     const tipo = texto(d.tipo_documento).toUpperCase();
-    return tipo === 'CERTIFICADO' || !!texto(d.id_certificado || d.id_documento_origen);
+    return tipo ? tipo === 'CERTIFICADO' : !!texto(d.id_certificado);
   }
 
   function normalizarCertificado(data){
@@ -3410,7 +3410,7 @@
 
   function esReceta(data){
     const d=data||{};
-    return tipo(d)==='RECETA' || (!!texto(d.id_receta) && !texto(d.id_certificado));
+    return tipo(d) ? tipo(d)==='RECETA' : (!!texto(d.id_receta) && !texto(d.id_certificado));
   }
 
   function apiUrl(){
@@ -3782,7 +3782,7 @@
 
   function esReceta(data){
     const d=data||{};
-    return tipo(d)==='RECETA' || (!!texto(d.id_receta || d.id_documento_origen) && !texto(d.id_certificado));
+    return tipo(d) ? tipo(d)==='RECETA' : (!!texto(d.id_receta) && !texto(d.id_certificado));
   }
 
   function apiUrl(){
