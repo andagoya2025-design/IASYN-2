@@ -1110,9 +1110,20 @@ async function inicializar(){
  */
 function solicitarFirmaOrden(id){
   try {
-    // Prevalidación local sin efectos: no enviar a un motor que aún no reconoce ORDEN_MEDICA.
-    prepararSolicitudFirmaOrden(id);
-    aviso('La orden está preparada. Falta habilitar y validar la ruta ORDEN_MEDICA en SCRIB 05 y firma_electronica.js antes de firmar. No se ha enviado ninguna solicitud.','warn');
+    const solicitud=prepararSolicitudFirmaOrden(id);
+    const motor=window.auroFirmaElectronica;
+    // Interruptor de despliegue: no activar sin backend y agente comprobados.
+    if(window.IASYN_ORDEN_MEDICA_FIRMA_VERIFICADA !== true ||
+       !motor || typeof motor.firmarDocumento !== 'function') {
+      aviso('Orden validada, pero firma bloqueada hasta verificar backend y agente Windows. No se envió solicitud.','warn');
+      return;
+    }
+    if(!window.confirm('¿Firmar electrónicamente esta versión de la orden médica?')) return;
+    Promise.resolve(motor.firmarDocumento(solicitud)).then(resultado=>{
+      const estado=txt(resultado?.estado_firma).toUpperCase();
+      if(estado==='FIRMADO') aviso('Firma confirmada por el servidor.','ok');
+      else aviso('Solicitud enviada; confirme el estado de la firma antes de considerar firmado el documento.','warn');
+    }).catch(error=>aviso('No se completó la firma: '+(error?.message||String(error)),'err'));
   } catch(error) {
     aviso('No es posible firmar: '+(error?.message||String(error)),'warn');
   }
