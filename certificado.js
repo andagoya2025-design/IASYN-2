@@ -304,7 +304,7 @@ function normalizarConfig(c){
   c=c||{};
   if(c.datos&&typeof c.datos==='object') c=c.datos;
   return {
-    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social)||'AUROSANAX',
+    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social),
     subtitulo:txt(c.subtitulo_clinica||c.descripcion_clinica||c.eslogan_clinica),
     razon_social:txt(c.razon_social),
     ruc:txt(c.ruc),
@@ -316,6 +316,7 @@ function normalizarConfig(c){
     email:txt(c.email_clinica||c.correo_clinica||c.email||c.correo),
     web:txt(c.sitio_web_clinica||c.web_clinica||c.web),
     logo:txt(c.logo_url||c.logo_drive_url||c.logo),
+    logoFileId:txt(c.logo_file_id),
     colorPrincipal:txt(c.color_principal)||'#8b1e5a'
   };
 }
@@ -330,6 +331,7 @@ async function cargarContextoAuxiliar(ctx){
     cfg=normalizarConfig(Object.assign({},configGlobal(),remoto||{}));
   }catch(e){}
   state.configuracion=cfg;
+  /* La configuración se resuelve por instalación; no se reutiliza el logo de otro centro. */
 
   try{
     const r=await get('listarMedicosActivos');
@@ -1015,10 +1017,37 @@ function certificadoPersistido(id){
   return state.certificados.find(c=>txt(c.id_certificado)===x)||null;
 }
 
-function htmlCompletoFirmaCertificado(certificado){
+/* IASYN — membrete institucional: resolución no persistente, sin alterar snapshots.
+   El backend devuelve el logo propio de esta instalación como data:image/. */
+async function resolverLogoCertificado(data,paraFirma){
+  const d=parse(data?.detalle_json);
+  const cfgActual=state.configuracion||{};
+  const cfgDocumento=d.centro&&typeof d.centro==='object'?d.centro:{};
+  const logoDocumento=txt(cfgDocumento.logo||cfgDocumento.logo_url||cfgDocumento.logo_drive_url);
+  const logoActual=txt(cfgActual.logo);
+  /* Un certificado histórico con logo diferente no debe recibir el logo actual. */
+  if(logoDocumento && logoActual && logoDocumento!==logoActual){
+    if(paraFirma) throw Error('El certificado conserva un logotipo histórico diferente al actual. No se sustituirá su identidad durante la firma.');
+    return logoDocumento;
+  }
+  const fuente=logoDocumento||logoActual;
+  if(fuente.startsWith('data:image/')) return fuente;
+  try{
+    const r=await postFirma('obtenerLogoInstitucionalFirma',{});
+    const imagen=txt(r?.data_url);
+    if(r?.disponible && /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(imagen)) return imagen;
+  }catch(e){
+    console.warn('IASYN CERTIFICADOS: no se pudo incrustar el logo institucional.',e);
+  }
+  if(paraFirma && fuente) throw Error('No se pudo incrustar el logotipo configurado. Se detuvo la firma para evitar emitir un certificado sin membrete.');
+  return fuente;
+}
+
+async function htmlCompletoFirmaCertificado(certificado){
   /* El PDF firmado no necesita handlers HTML. Se eliminan atributos on*
      del documento que son útiles solo para la vista del navegador. */
-  const cuerpo=docHTML(certificado).replace(/\son[a-z]+=(?:"[^"]*"|'[^']*')/gi,'');
+  const logoFirma=await resolverLogoCertificado(certificado,true);
+  const cuerpo=docHTML(certificado,logoFirma).replace(/\son[a-z]+=(?:"[^"]*"|'[^']*')/gi,'');
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1120,7 +1149,7 @@ async function firmarCertificado(idCertificado){
   toastPremium('info','Certificado enviado a firma. Preparando Adobe…');
 
   try{
-    const htmlDocumento=htmlCompletoFirmaCertificado(certificado);
+    const htmlDocumento=await htmlCompletoFirmaCertificado(certificado);
     const nombre=`CERTIFICADO_${txt(certificado.numero_consulta||'CONSULTA')}_${id}.pdf`;
     const r=await postFirma('firmarDocumento',{
       tipo_documento:'CERTIFICADO',
@@ -1252,7 +1281,7 @@ function renderContextoClinico(){
   </div>`;
 }
 
-function docHTML(data){
+function docHTML(data,logoResuelto){
   const d=parse(data.detalle_json);
   const dx=d.diagnosticos||[];
   const dias=Number(d.dias_reposo||0);
@@ -1276,7 +1305,7 @@ function docHTML(data){
     d.centro||{}
   );
 
-  const centro=txt(cfg.nombre)||'AUROSANAX';
+  const centro=txt(cfg.nombre)||'Centro médico';
   const color=txt(cfg.colorPrincipal)||'#8b1e5a';
   const ciudad=txt(cfg.ciudad)||'Guayaquil';
   const tipo=txt(data.tipo_certificado||d.tipo_certificado||'Certificado médico').toUpperCase();
@@ -1285,8 +1314,9 @@ function docHTML(data){
   const ubicacion=[cfg.direccion,cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(' · ');
   const contactoCentro=[cfg.telefono,cfg.email,cfg.web].filter(Boolean).join(' · ');
 
-  const logo=cfg.logo
-    ? `<div class="ac-logo-wrap"><img class="ac-logo" src="${esc(cfg.logo)}" alt="Logo institucional" onerror="this.parentElement.style.display='none'"></div>`
+  const fuenteLogo=logoResuelto===undefined?txt(cfg.logo):txt(logoResuelto);
+  const logo=fuenteLogo
+    ? `<div class="ac-logo-wrap"><img class="ac-logo" src="${esc(fuenteLogo)}" alt="Logo institucional" onerror="this.parentElement.style.display='none'"></div>`
     : '<div></div>';
 
   const dxHtml=dx.length
@@ -1474,9 +1504,8 @@ position:absolute;
 }`;
 }
 
-function auroGenerarVistaImpresionCertificadoUnificada(dataOpcional){
+async function auroGenerarVistaImpresionCertificadoUnificada(dataOpcional){
   const data=dataOpcional||datos();
-  const htmlDoc=docHTML(data);
   const ventana=window.open('','_blank');
 
   if(!ventana){
@@ -1484,13 +1513,15 @@ function auroGenerarVistaImpresionCertificadoUnificada(dataOpcional){
     return;
   }
 
+  const logoVista=await resolverLogoCertificado(data,false);
+  const htmlDoc=docHTML(data,logoVista);
   ventana.document.open();
   ventana.document.write(`<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Vista previa de certificado médico AUROSANAX</title>
+<title>Vista previa de certificado médico</title>
 <style>
 ${estilosImpresion()}
 html,body{background:#dfe3e8}
@@ -1584,12 +1615,13 @@ html,body{background:#dfe3e8}
   ventana.focus();
 }
 
-function vista(imprimir){
+async function vista(imprimir){
   const data=datos();
-  const htmlDoc=docHTML(data);
   const p=document.getElementById('acPreview');
 
   if(!imprimir){
+    const logoVista=await resolverLogoCertificado(data,false);
+    const htmlDoc=docHTML(data,logoVista);
     if(p){
       p.innerHTML=htmlDoc;
       p.style.display='block';
