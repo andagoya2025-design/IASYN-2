@@ -1132,7 +1132,9 @@ function firmaOrdenExacta(doc,id,version){
   const origen=txt(doc?.id_documento_origen||doc?.id_orden||doc?.id_orden_medica);
   const tipo=txt(doc?.tipo_documento).toUpperCase();
   const estado=txt(doc?.estado_firma||doc?.estado).toUpperCase();
-  const v=Number(doc?.version_documento||doc?.version||0);
+  let detalle={};
+  try{detalle=JSON.parse(txt(doc?.detalle_json)||'{}');}catch(_e){}
+  const v=Number(doc?.version_documento||detalle.version_documento||doc?.version||0);
   return tipo==='ORDEN_MEDICA' && origen===txt(id) && estado==='FIRMADO' && v===Number(version);
 }
 async function consultarFirmaOrden(reg){
@@ -1140,7 +1142,7 @@ async function consultarFirmaOrden(reg){
   const version=datosDocumentoEmitido(reg).version;
   const r=await postFirmaOrden('consultarDocumentosFirmados',{
     tipo_documento:'ORDEN_MEDICA',id_documento_origen:id,id_orden:id,
-    id_atencion:txt(reg.id_atencion)
+    id_atencion:txt(reg.id_atencion),version_documento:version
   });
   const docs=Array.isArray(r.documentos)?r.documentos:[];
   return docs.find(x=>firmaOrdenExacta(x,id,version))||null;
