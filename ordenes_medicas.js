@@ -1006,7 +1006,7 @@ function docHTML(data){
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
   const contactoCentro=[centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
   const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
-  const logoHtml=logo?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt="Logo institucional" onerror="this.parentElement.remove();this.closest('.aom-doc-head')?.classList.add('no-logo')"></div>`:'';
+  const logoHtml=logo?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt="Logo institucional"></div>`:'';
   return `<article class="aom-paper" style="--aom-color:${esc(color)}">
     <header class="aom-doc-head${logo?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'IASYN')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ' · ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
     <div class="aom-doc-title">ORDEN MÉDICA</div>
