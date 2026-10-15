@@ -1447,11 +1447,49 @@
     let remoto={};
     try{
       const r=await apiGet('obtenerConfiguracion',{});
+      if(r && r.success===false) throw new Error(txt(r.message||'No se pudo leer la configuración institucional.'));
       remoto=recConfigObjeto(r);
+      /* La API histórica puede responder con filas {clave,valor}; se normalizan
+         solo en memoria, sin alterar la configuración ni efectuar escrituras. */
+      const filas=Array.isArray(r)?r:
+        (Array.isArray(r?.data)?r.data:
+        (Array.isArray(r?.datos)?r.datos:
+        (Array.isArray(r?.registros)?r.registros:
+        (Array.isArray(r?.resultado)?r.resultado:[]))));
+      if(filas.length){
+        const valores={};
+        filas.forEach(f=>{
+          const k=txt(f?.clave);
+          if(k && f?.valor!==undefined && f?.valor!==null) valores[k]=f.valor;
+        });
+        remoto=Object.assign({},valores,remoto);
+      }
+      /* Compatibilidad con instalaciones donde obtenerConfiguracion devuelve
+         una respuesta parcial: consultar la lista SOLO si falta dirección. */
+      if(!recDireccionConfig(remoto)){
+        try{
+          const listado=await apiGet('listarConfiguracion',{});
+          if(listado && listado.success===false) throw new Error(txt(listado.message||'Listado institucional no disponible.'));
+          const rows=Array.isArray(listado)?listado:
+            (Array.isArray(listado?.data)?listado.data:
+            (Array.isArray(listado?.datos)?listado.datos:
+            (Array.isArray(listado?.registros)?listado.registros:[])));
+          const valores={};
+          rows.forEach(f=>{
+            const k=txt(f?.clave);
+            if(k && f?.valor!==undefined && f?.valor!==null) valores[k]=f.valor;
+          });
+          remoto=Object.assign({},valores,remoto);
+        }catch(_e){ /* No interrumpe emisión ni firma. */ }
+      }
+      if(!recDireccionConfig(remoto)){
+        console.warn(MODULO+': la configuración consultada no contiene direccion_clinica. Verifique que el valor esté guardado en el centro activo.');
+      }
     }catch(e){
       console.warn(MODULO+': no se pudo consultar configuración institucional.',e);
     }
     const base=recConfigInstitucional();
+    /* Nunca se inventa una dirección: el dato proviene del servidor o de la configuración activa. */
     const campo=(...claves)=>primerTexto(...claves.map(k=>remoto[k]));
     const cfg=Object.assign({},base,{
       nombre:campo('nombre_clinica','nombre_centro','nombre_comercial','razon_social')||base.nombre,
