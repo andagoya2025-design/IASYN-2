@@ -1382,6 +1382,39 @@
      - La impresión real no hereda el zoom visual del dispositivo.
      ============================================================ */
 
+  /* Normalización de lectura: admite envoltorios de API sin alterar datos persistidos. */
+  function recConfigObjeto(valor){
+    if(!valor || typeof valor!=='object' || Array.isArray(valor)) return {};
+    let c=valor;
+    for(let i=0;i<4;i++){
+      const siguiente=[c.datos,c.configuracion,c.config,c.centro,c.data]
+        .find(x=>x && typeof x==='object' && !Array.isArray(x));
+      if(!siguiente) break;
+      c=Object.assign({},c,siguiente);
+      if(siguiente===c) break;
+      /* Se conserva la prioridad de los campos del objeto interno. */
+      delete c.datos;
+      delete c.configuracion;
+      delete c.config;
+      delete c.centro;
+      delete c.data;
+    }
+    return c;
+  }
+
+  function recDireccionConfig(c){
+    c=recConfigObjeto(c);
+    const ubicacion=recConfigObjeto(c.ubicacion);
+    const contacto=recConfigObjeto(c.contacto);
+    return primerTexto(
+      c.direccion_clinica,c.direccion_centro,c.direccion_establecimiento,
+      c.direccion_consultorio,c.direccion_fiscal,c.direccion,
+      c.domicilio,c.domicilio_fiscal,c.direccion_matriz,
+      ubicacion.direccion_clinica,ubicacion.direccion,ubicacion.domicilio,
+      contacto.direccion
+    );
+  }
+
   function recConfigInstitucional(){
     const candidatos=[
       window.auroConfiguracionCentro,
@@ -1390,15 +1423,14 @@
       window.CONFIG_CENTRO,
       window.configuracionInstitucional
     ];
-    let c=candidatos.find(x=>x&&typeof x==='object'&&!Array.isArray(x))||{};
-    if(c.datos&&typeof c.datos==='object') c=c.datos;
+    const c=recConfigObjeto(candidatos.find(x=>x&&typeof x==='object'&&!Array.isArray(x))||{});
 
     return {
       nombre:primerTexto(c.nombre_clinica,c.nombre_centro,c.nombre_comercial,c.razon_social,'IASYN'),
       subtitulo:primerTexto(c.subtitulo_clinica,c.descripcion_clinica,c.eslogan_clinica),
       razon_social:txt(c.razon_social),
       ruc:txt(c.ruc),
-      direccion:primerTexto(c.direccion_clinica,c.direccion),
+      direccion:recDireccionConfig(c),
       ciudad:primerTexto(c.ciudad_clinica,c.ciudad),
       provincia:primerTexto(c.provincia_clinica,c.provincia),
       pais:primerTexto(c.pais_clinica,c.pais),
@@ -1415,8 +1447,7 @@
     let remoto={};
     try{
       const r=await apiGet('obtenerConfiguracion',{});
-      const datos=r?.datos && typeof r.datos==='object' ? r.datos : r;
-      if(datos && typeof datos==='object' && !Array.isArray(datos)) remoto=datos;
+      remoto=recConfigObjeto(r);
     }catch(e){
       console.warn(MODULO+': no se pudo consultar configuración institucional.',e);
     }
@@ -1427,7 +1458,7 @@
       subtitulo:campo('subtitulo_clinica','descripcion_clinica','eslogan_clinica')||base.subtitulo,
       razon_social:campo('razon_social')||base.razon_social,
       ruc:campo('ruc')||base.ruc,
-      direccion:campo('direccion_clinica','direccion')||base.direccion,
+      direccion:recDireccionConfig(remoto)||base.direccion,
       ciudad:campo('ciudad_clinica','ciudad')||base.ciudad,
       provincia:campo('provincia_clinica','provincia')||base.provincia,
       pais:campo('pais_clinica','pais')||base.pais,
