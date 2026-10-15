@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.4.3-IASYN-FIRMA-CERT-UX-SYNC-FIRMADOS-V1';
+const VERSION='1.4.4-IASYN-CERT-EDITOR-PAGINACION-V1';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -401,7 +401,15 @@ function instalarCSS(){
 .ac-field.full{grid-column:1/-1}
 .ac-field label{display:block;font-size:12px;font-weight:800;color:#4b5563;margin-bottom:5px}
 .ac-field input,.ac-field select,.ac-field textarea{width:100%;border:1px solid #d1d5db;border-radius:12px;padding:10px 11px;font:inherit}
-.ac-field textarea{min-height:92px;resize:vertical}
+.ac-field textarea{min-height:92px;resize:vertical;line-height:1.62}
+.ac-editor-actions{display:flex;justify-content:flex-end;margin-bottom:5px}
+.ac-expand{border:1px solid #e5b7d0;background:#fff7fb;color:#8b1e5a;border-radius:9px;padding:5px 10px;font-size:12px;font-weight:800;cursor:pointer}
+.ac-editor-dialog{border:0;border-radius:18px;width:min(1000px,96vw);max-height:95vh;padding:0;box-shadow:0 20px 70px #0005}
+.ac-editor-dialog::backdrop{background:#111827a8}
+.ac-editor-panel{padding:18px;display:grid;gap:12px}
+.ac-editor-panel textarea{width:100%;min-height:55vh;max-height:70vh;resize:vertical;padding:14px;font:15px/1.62 Arial,sans-serif;text-align:justify;white-space:pre-wrap;border:1px solid #cbd5e1;border-radius:12px}
+.ac-editor-footer{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.ac-editor-hint{font-size:12px;color:#64748b}
 .ac-dx{display:grid;gap:8px}
 .ac-dx label{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid #ead7e2;border-radius:12px;background:linear-gradient(135deg,#fff,#fff9fc);min-height:46px;cursor:pointer;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}
 .ac-dx label:hover{border-color:#d9a7c3;box-shadow:0 5px 14px rgba(139,30,90,.06)}
@@ -438,9 +446,9 @@ function instalarCSS(){
 .ac-brand-sub{font-size:10.5px;color:#667085;margin-top:2px}
 .ac-doc-date{text-align:right;font-size:11.5px;font-weight:750}
 .ac-paper h1{text-align:center;font-size:19px;margin:22px 0 26px;letter-spacing:.045em}
-.ac-paper p{font-size:12.3px;line-height:1.62;text-align:justify;margin:0 0 12px}
+.ac-paper p{font-size:12.3px;line-height:1.62;text-align:justify;white-space:pre-line;margin:0 0 12px}
 .ac-cert-lines{display:grid;gap:6px;margin:14px 0}
-.ac-cert-line{font-size:12.1px;line-height:1.42}
+.ac-cert-line{font-size:12.1px;line-height:1.62;text-align:justify;white-space:pre-line}
 .ac-cert-line b:first-child{display:inline-block;min-width:150px}
 .ac-dx-doc{margin:14px 0 16px}
 .ac-dx-doc-title{font-size:12.1px;font-weight:900;margin-bottom:5px}
@@ -556,10 +564,10 @@ function html(){
 
             <div class="ac-field"><label>Número de contacto</label><input id="acContacto" inputmode="tel"></div>
             <div class="ac-field"><label>Institución / Empresa</label><input id="acEmpresa"></div>
-            <div class="ac-field full"><label>Resumen clínico</label><textarea id="acResumen"></textarea></div>
+            <div class="ac-field full"><label>Resumen clínico</label><div class="ac-editor-actions"><button type="button" class="ac-expand" data-acexpand="acResumen">⛶ Ampliar editor</button></div><textarea id="acResumen"></textarea></div>
             <div class="ac-field"><label>Actividad laboral</label><input id="acActividad"></div>
             <div class="ac-field"><label>Dirección de trabajo</label><input id="acDireccionTrabajo"></div>
-            <div class="ac-field full"><label>Observaciones / extensión de reposo</label><textarea id="acObservaciones"></textarea></div>
+            <div class="ac-field full"><label>Observaciones / extensión de reposo</label><div class="ac-editor-actions"><button type="button" class="ac-expand" data-acexpand="acObservaciones">⛶ Ampliar editor</button></div><textarea id="acObservaciones"></textarea></div>
           </div>
 
           <div class="ac-actions">
@@ -665,6 +673,48 @@ function eventos(){
   document.getElementById('acVista')?.addEventListener('click',()=>vista(false));
   document.getElementById('acImprimir')?.addEventListener('click',()=>vista(true));
   document.getElementById('acNuevo')?.addEventListener('click',nuevo);
+  document.querySelectorAll('[data-acexpand]').forEach(b=>b.addEventListener('click',()=>abrirEditorAmpliado(b.dataset.acexpand)));
+}
+
+
+/* Editor ampliado: el texto original solo cambia al pulsar Aplicar.
+   Mantiene el mismo esquema detalle_json y no requiere endpoints nuevos. */
+function abrirEditorAmpliado(id){
+  const origen=document.getElementById(id);
+  if(!origen) return;
+  const titulo=id==='acResumen'?'Resumen clínico':'Observaciones / extensión de reposo';
+  const dialog=document.createElement('dialog');
+  dialog.className='ac-editor-dialog';
+  const panel=document.createElement('div');
+  panel.className='ac-editor-panel';
+  const encabezado=document.createElement('strong');
+  encabezado.textContent=titulo;
+  const ayuda=document.createElement('div');
+  ayuda.className='ac-editor-hint';
+  ayuda.textContent='Edición ampliada · texto justificado · interlineado uniforme en el certificado. Aplicar no guarda en el servidor.';
+  const campo=document.createElement('textarea');
+  campo.value=origen.value;
+  campo.setAttribute('aria-label',titulo);
+  const pie=document.createElement('div');
+  pie.className='ac-editor-footer';
+  const cancelar=document.createElement('button');
+  cancelar.type='button';cancelar.className='ac-btn ac-soft';cancelar.textContent='Cancelar';
+  const aplicar=document.createElement('button');
+  aplicar.type='button';aplicar.className='ac-btn ac-primary';aplicar.textContent='Aplicar texto';
+  pie.append(cancelar,aplicar);
+  panel.append(encabezado,ayuda,campo,pie);
+  dialog.appendChild(panel);
+  document.body.appendChild(dialog);
+  dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+  cancelar.addEventListener('click',()=>dialog.close());
+  aplicar.addEventListener('click',()=>{
+    origen.value=campo.value;
+    origen.dispatchEvent(new Event('input',{bubbles:true}));
+    dialog.close();
+    origen.focus();
+  });
+  if(typeof dialog.showModal==='function') dialog.showModal();
+  else { dialog.setAttribute('open',''); campo.focus(); }
 }
 
 function calcularHasta(){
@@ -1457,9 +1507,9 @@ body{overflow-x:hidden}
 .ac-brand-sub{font-size:10px;color:#667085;margin-top:2px;overflow-wrap:anywhere}
 .ac-doc-date{text-align:right;font-size:11px;font-weight:750;white-space:normal}
 h1{text-align:center;font-size:19px;margin:24px 0 27px;letter-spacing:.045em}
-p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
+p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margin:0 0 12px}
 .ac-cert-lines{display:grid;gap:6px;margin:14px 0}
-.ac-cert-line{font-size:12px;line-height:1.42}
+.ac-cert-line{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line}
 .ac-cert-line b:first-child{display:inline-block;min-width:150px}
 .ac-dx-doc{margin:14px 0 16px}
 .ac-dx-doc-title{font-size:12px;font-weight:900;margin-bottom:5px}
