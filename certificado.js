@@ -309,9 +309,9 @@ function normalizarConfig(c){
     razon_social:txt(c.razon_social),
     ruc:txt(c.ruc),
     direccion:txt(c.direccion_clinica||c.direccion),
-    ciudad:txt(c.ciudad_clinica||c.ciudad)||'Guayaquil',
+    ciudad:txt(c.ciudad_clinica||c.ciudad),
     provincia:txt(c.provincia_clinica||c.provincia),
-    pais:txt(c.pais_clinica||c.pais)||'Ecuador',
+    pais:txt(c.pais_clinica||c.pais),
     telefono:txt(c.telefono_clinica||c.whatsapp_clinica||c.telefono||c.whatsapp),
     email:txt(c.email_clinica||c.correo_clinica||c.email||c.correo),
     web:txt(c.sitio_web_clinica||c.web_clinica||c.web),
@@ -1307,11 +1307,13 @@ function docHTML(data,logoResuelto){
 
   const centro=txt(cfg.nombre)||'Centro médico';
   const color=txt(cfg.colorPrincipal)||'#8b1e5a';
-  const ciudad=txt(cfg.ciudad)||'Guayaquil';
+  const ciudad=txt(cfg.ciudad);
   const tipo=txt(data.tipo_certificado||d.tipo_certificado||'Certificado médico').toUpperCase();
   const fecha=d.fecha_emision||data.fecha_emision||hoy();
 
-  const ubicacion=[cfg.direccion,cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(' · ');
+  // Dirección institucional única desde Configuración del Centro; sin anexos predeterminados.
+  // El snapshot histórico d.centro se conserva, pero no prevalece sobre la configuración vigente.
+  const ubicacion=txt(state.configuracion?.direccion||normalizarConfig(configGlobal()).direccion);
   const contactoCentro=[cfg.telefono,cfg.email,cfg.web].filter(Boolean).join(' · ');
 
   const fuenteLogo=logoResuelto===undefined?txt(cfg.logo):txt(logoResuelto);
@@ -1343,7 +1345,7 @@ function docHTML(data,logoResuelto){
         <div class="ac-brand">${esc(centro)}</div>
         ${(med.especialidad||cfg.subtitulo)?`<div class="ac-brand-sub">${esc(med.especialidad||cfg.subtitulo)}</div>`:''}
       </div>
-      <div class="ac-doc-date">${esc(ciudad)}, ${esc(fechaVisual(fecha))}</div>
+      <div class="ac-doc-date">${ciudad?esc(ciudad)+', ':''}${esc(fechaVisual(fecha))}</div>
     </div>
 
     <h1>${esc(tipo)}</h1>
