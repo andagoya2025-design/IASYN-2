@@ -1395,19 +1395,59 @@
 
     return {
       nombre:primerTexto(c.nombre_clinica,c.nombre_centro,c.nombre_comercial,c.razon_social,'IASYN'),
-      subtitulo:primerTexto(c.subtitulo_clinica,c.descripcion_clinica,c.eslogan_clinica,'Ginecología y Obstetricia'),
+      subtitulo:primerTexto(c.subtitulo_clinica,c.descripcion_clinica,c.eslogan_clinica),
       razon_social:txt(c.razon_social),
       ruc:txt(c.ruc),
       direccion:primerTexto(c.direccion_clinica,c.direccion),
-      ciudad:primerTexto(c.ciudad_clinica,c.ciudad,'Guayaquil'),
+      ciudad:primerTexto(c.ciudad_clinica,c.ciudad),
       provincia:primerTexto(c.provincia_clinica,c.provincia),
-      pais:primerTexto(c.pais_clinica,c.pais,'Ecuador'),
+      pais:primerTexto(c.pais_clinica,c.pais),
       telefono:primerTexto(c.telefono_clinica,c.whatsapp_clinica,c.telefono,c.whatsapp),
       email:primerTexto(c.email_clinica,c.correo_clinica,c.email,c.correo),
       web:primerTexto(c.sitio_web_clinica,c.web_clinica,c.web),
       logo:primerTexto(c.logo_url,c.logo_drive_url,c.logo),
       colorPrincipal:primerTexto(c.color_principal,'#8b1e5a')
     };
+  }
+
+  /* Identidad institucional vigente: consulta aislada, sin escrituras. */
+  async function recIdentidadDocumento(){
+    let remoto={};
+    try{
+      const r=await apiGet('obtenerConfiguracion',{});
+      const datos=r?.datos && typeof r.datos==='object' ? r.datos : r;
+      if(datos && typeof datos==='object' && !Array.isArray(datos)) remoto=datos;
+    }catch(e){
+      console.warn(MODULO+': no se pudo consultar configuración institucional.',e);
+    }
+    const base=recConfigInstitucional();
+    const campo=(...claves)=>primerTexto(...claves.map(k=>remoto[k]));
+    const cfg=Object.assign({},base,{
+      nombre:campo('nombre_clinica','nombre_centro','nombre_comercial','razon_social')||base.nombre,
+      subtitulo:campo('subtitulo_clinica','descripcion_clinica','eslogan_clinica')||base.subtitulo,
+      razon_social:campo('razon_social')||base.razon_social,
+      ruc:campo('ruc')||base.ruc,
+      direccion:campo('direccion_clinica','direccion')||base.direccion,
+      ciudad:campo('ciudad_clinica','ciudad')||base.ciudad,
+      provincia:campo('provincia_clinica','provincia')||base.provincia,
+      pais:campo('pais_clinica','pais')||base.pais,
+      telefono:campo('telefono_clinica','whatsapp_clinica','telefono','whatsapp')||base.telefono,
+      email:campo('email_clinica','correo_clinica','email','correo')||base.email,
+      web:campo('sitio_web_clinica','web_clinica','web')||base.web,
+      logo:campo('logo_url','logo_drive_url','logo')||base.logo,
+      colorPrincipal:campo('color_principal')||base.colorPrincipal
+    });
+    /* La imagen embebida funciona tanto en el visor como al imprimir/PDF. */
+    let logo=cfg.logo;
+    try{
+      const r=await auroRecFirmaPost('obtenerLogoInstitucionalFirma',{});
+      if(r?.disponible && /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(txt(r.data_url))){
+        logo=txt(r.data_url);
+      }
+    }catch(e){
+      console.warn(MODULO+': logo embebido no disponible; se conserva URL configurada.',e);
+    }
+    return {configuracion:cfg,logo:logo};
   }
 
   function recNombreCompleto(obj){
@@ -1511,7 +1551,7 @@
     const ctx=opciones.ctx||state.contexto||contextoAtencion();
     const a=ctx.atencion||{};
     const d=opciones.detalle||detalleActual();
-    const cfg=recConfigInstitucional();
+    const cfg=opciones.configuracion||recConfigInstitucional();
     const diagnosticos=Array.isArray(opciones.diagnosticos)?opciones.diagnosticos:state.diagnosticos;
     const logoFuente=Object.prototype.hasOwnProperty.call(opciones,'logo')
       ? txt(opciones.logo)
@@ -1665,7 +1705,7 @@ body{overflow-x:hidden}
 }`;
   }
 
-  function vistaPrevia(){
+  async function vistaPrevia(){
     const ctx=state.contexto||contextoAtencion();
     if(!ctx.id){
       setMsg('Seleccione una atención antes de imprimir recomendaciones.','error');
@@ -1678,13 +1718,15 @@ body{overflow-x:hidden}
       return;
     }
 
-    const htmlDoc=recDocumentoHTML();
     const w=window.open('','_blank');
 
     if(!w){
       setMsg('El navegador bloqueó la vista de impresión. Permita ventanas emergentes para este sitio.','error');
       return;
     }
+    const identidad=await recIdentidadDocumento();
+    if(w.closed) return;
+    const htmlDoc=recDocumentoHTML({configuracion:identidad.configuracion,logo:identidad.logo});
 
     w.document.open();
     w.document.write(`<!DOCTYPE html>
@@ -1846,7 +1888,7 @@ html,body{background:#dfe3e8}
     });
   }
 
-  function auroRecAbrirGuardada(id){
+  async function auroRecAbrirGuardada(id){
     const rid=txt(id);
     const registro=state.registro;
     const ctx=state.contexto||contextoAtencion();
@@ -1861,17 +1903,20 @@ html,body{background:#dfe3e8}
     }
 
     const detalle=parseDetalle(registro.detalle_json);
-    const htmlDoc=recDocumentoHTML({
-      ctx:ctx,
-      detalle:detalle,
-      diagnosticos:Array.isArray(state.diagnosticos)?state.diagnosticos:[]
-    });
-
     const w=window.open('','_blank');
     if(!w){
       setMsg('El navegador bloqueó la vista de la recomendación guardada. Permita ventanas emergentes para este sitio.','error');
       return null;
     }
+    const identidad=await recIdentidadDocumento();
+    if(w.closed) return null;
+    const htmlDoc=recDocumentoHTML({
+      ctx:ctx,
+      detalle:detalle,
+      diagnosticos:Array.isArray(state.diagnosticos)?state.diagnosticos:[],
+      configuracion:identidad.configuracion,
+      logo:identidad.logo
+    });
 
     w.document.open();
     w.document.write(`<!DOCTYPE html>
@@ -2120,11 +2165,13 @@ html,body{background:#dfe3e8}
     const detalle=parseDetalle(registro.detalle_json);
     const diagnosticos=await auroRecFirmaDiagnosticos(idAtn);
     const logo=await auroRecFirmaLogoDataUrl();
+    const identidad=await recIdentidadDocumento();
 
     const cuerpo=recDocumentoHTML({
       ctx:ctxActual,
       detalle:detalle,
       diagnosticos:diagnosticos,
+      configuracion:identidad.configuracion,
       logo:logo
     });
 
