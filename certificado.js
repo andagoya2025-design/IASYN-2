@@ -429,7 +429,7 @@ function instalarCSS(){
 .ac-error{background:#fef2f2;color:#991b1b}
 .ac-warn{background:#fffbeb;color:#92400e}
 .ac-preview{margin-top:14px;overflow:auto;background:#eef1f4;border-radius:16px;padding:18px}
-.ac-paper{width:210mm;min-height:297mm;background:#fff;margin:auto;padding:15mm 17mm 42mm;box-shadow:0 8px 28px rgba(0,0,0,.12);transform-origin:top center;position:relative}
+.ac-paper{width:210mm;min-height:297mm;background:#fff;margin:auto;padding:15mm 17mm;box-shadow:0 8px 28px rgba(0,0,0,.12);transform-origin:top center;position:relative;display:flex;flex-direction:column}
 .ac-doc-head{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--ac-color,#8b1e5a);padding-bottom:10px}
 .ac-logo-wrap{width:60px;height:60px;display:grid;place-items:center;border-radius:12px;overflow:hidden}
 .ac-logo-wrap:empty{display:none}
@@ -447,8 +447,12 @@ function instalarCSS(){
 .ac-dx-doc-row{font-size:12.1px;line-height:1.45}
 .ac-reposo{margin-top:16px}
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
-.ac-firma-area{position:absolute;left:17mm;right:17mm;bottom:15mm;display:grid;grid-template-columns:1fr 1fr;gap:22mm;align-items:end;margin-top:0}
-.ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}
+/* El cierre sigue al contenido, se desplaza al fondo si cabe en una hoja y no se superpone. */
+.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:18mm;break-inside:avoid;page-break-inside:avoid}
+.ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.5;min-width:0;overflow-wrap:anywhere;display:grid;gap:5px;align-content:end}
+.ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start}
+.ac-contacto-icono{width:12px;height:12px;display:block;margin-top:2px;color:var(--ac-color,#8b1e5a)}
+.ac-contacto-texto{min-width:0;overflow-wrap:anywhere}
 .ac-sign{text-align:center;font-size:11.5px}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.5px}
@@ -1314,7 +1318,21 @@ function docHTML(data,logoResuelto){
   // Dirección institucional única desde Configuración del Centro; sin anexos predeterminados.
   // El snapshot histórico d.centro se conserva, pero no prevalece sobre la configuración vigente.
   const ubicacion=txt(state.configuracion?.direccion||normalizarConfig(configGlobal()).direccion);
-  const contactoCentro=[cfg.telefono,cfg.email,cfg.web].filter(Boolean).join(' · ');
+  // Solo datos institucionales vigentes; el snapshot clínico permanece intacto.
+  const configVigente=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{});
+  const contactoFilas=[
+    ['direccion',ubicacion],
+    ['correo',txt(configVigente.email)],
+    ['telefono',txt(configVigente.telefono)]
+  ].filter(([,valor])=>!!valor);
+  const iconosContacto={
+    direccion:'<path d="M12 21s-7-4.4-7-11a7 7 0 0 1 14 0c0 6.6-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/>',
+    correo:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+    telefono:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.7L7.1 10a16 16 0 0 0 6.9 6.9l1.6-1.9a2 2 0 0 1 1.7-.6l3 .5a2 2 0 0 1 1.7 2Z"/>'
+  };
+  const contactoHTML=contactoFilas.map(([tipo,valor])=>
+    `<div class="ac-contacto-fila"><svg class="ac-contacto-icono" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${iconosContacto[tipo]}</svg><span class="ac-contacto-texto">${esc(valor)}</span></div>`
+  ).join('');
 
   const fuenteLogo=logoResuelto===undefined?txt(cfg.logo):txt(logoResuelto);
   const logo=fuenteLogo
@@ -1380,11 +1398,7 @@ function docHTML(data,logoResuelto){
     ${d.observaciones?`<p style="margin-top:16px"><b>OBSERVACIONES:</b> ${esc(d.observaciones)}</p>`:''}
 
     <div class="ac-firma-area">
-      <div class="ac-centro-contacto">
-        ${ubicacion?`<div>${esc(ubicacion)}</div>`:''}
-        ${contactoCentro?`<div>${esc(contactoCentro)}</div>`:''}
-        ${cfg.razon_social?`<div>${esc(cfg.razon_social)}${cfg.ruc?' · RUC '+esc(cfg.ruc):''}</div>`:''}
-      </div>
+      <div class="ac-centro-contacto">${contactoHTML}</div>
 
       <div class="ac-sign">
         <div class="ac-sign-line"></div>
@@ -1415,12 +1429,14 @@ body{overflow-x:hidden}
   width:100%;
   max-width:100%;
   min-width:0;
-  min-height:270mm;
+  min-height:273mm;
   margin:0;
-  padding:0 0 30mm 0;
+  padding:0;
   background:#fff;
   overflow:visible;
   position:relative;
+  display:flex;
+  flex-direction:column;
 }
 .ac-paper,.ac-paper *{min-width:0}
 .ac-paper p,.ac-paper span,.ac-paper b,.ac-paper div{
@@ -1450,20 +1466,21 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;margin:0 0 12px}
 .ac-dx-doc-row{font-size:12px;line-height:1.45}
 .ac-reposo{margin-top:16px}
 .ac-reposo-row{font-size:12.1px;line-height:1.5;margin-top:4px}
-.ac-firma-area{
-position:absolute;
-  left:0;
-  right:0;
-  bottom:0;
+ .ac-firma-area{
+  position:relative;
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  gap:22mm;
+  gap:15mm;
   align-items:end;
-  margin-top:0;
+  margin-top:auto;
+  padding-top:18mm;
   break-inside:avoid;
   page-break-inside:avoid;
 }
-.ac-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
+.ac-centro-contacto{font-size:10.2px;color:#475569;line-height:1.5;overflow-wrap:anywhere;display:grid;gap:5px;align-content:end;min-width:0}
+.ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start;break-inside:avoid}
+.ac-contacto-icono{display:block;width:12px;height:12px;margin-top:2px;color:var(--ac-color,#8b1e5a)}
+.ac-contacto-texto{min-width:0;overflow-wrap:anywhere}
 .ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.4px}
@@ -1493,16 +1510,18 @@ position:absolute;
     min-width:0!important;
     min-height:273mm!important;
     margin:0!important;
-    padding:0 0 30mm 0!important;
+    padding:0!important;
     overflow:visible!important;
     position:relative!important;
+    display:flex!important;
+    flex-direction:column!important;
     transform:none!important;
     translate:none!important;
     page-break-inside:auto!important;
     break-inside:auto!important;
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
-  .ac-firma-area{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
+   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:auto!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
 
@@ -1576,7 +1595,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:273mm!important;margin:0!important;padding:0 0 30mm 0!important;position:relative!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:273mm!important;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
 }
 </style>
 </head>
