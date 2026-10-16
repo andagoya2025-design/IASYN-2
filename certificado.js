@@ -464,7 +464,7 @@ function instalarCSS(){
 .ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start}
 .ac-contacto-icono{width:12px;height:12px;display:block;margin-top:2px;color:var(--ac-color,#8b1e5a)}
 .ac-contacto-texto{min-width:0;overflow-wrap:anywhere}
-.ac-sign{text-align:center;font-size:11.5px}
+.ac-sign{text-align:center;font-size:11.5px;position:relative;top:2mm}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.5px}
 .ac-toast-zone{
@@ -1540,7 +1540,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
 .ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start;break-inside:avoid}
 .ac-contacto-icono{display:block;width:12px;height:12px;margin-top:2px;color:var(--ac-color,#8b1e5a)}
 .ac-contacto-texto{min-width:0;overflow-wrap:anywhere}
-.ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
+.ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere;position:relative;top:2mm}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.4px}
 
