@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.4.5-IASYN-CERT-APERTURA-INTRO-V1';
+const VERSION='1.4.4-IASYN-CERT-EDITOR-PAGINACION-V1';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -40,8 +40,7 @@ const state={
   firmaSolicitudId:'',
   firmaDocumentoId:'',
   firmando:false,
-  firmaPollToken:0,
-  previewToken:0
+  firmaPollToken:0
 };
 
 const txt=v=>String(v??'').trim();
@@ -1039,11 +1038,9 @@ function abrir(id){
 
   msg('ok','Certificado cargado para revisión.');
   actualizarControlesFirma();
-  vista(false).catch(e=>msg('error',e.message||'No se pudo actualizar la vista previa.'));
 }
 
 function nuevo(){
-  state.previewToken++;
   state.editandoId='';
   ['acEmpresa','acResumen','acActividad','acDireccionTrabajo','acObservaciones'].forEach(x=>sv(x,''));
 
@@ -1060,7 +1057,7 @@ function nuevo(){
   document.querySelectorAll('[data-acdx]').forEach(x=>x.checked=true);
 
   const preview=document.getElementById('acPreview');
-  if(preview){ preview.innerHTML=''; preview.style.display='none'; }
+  if(preview) preview.style.display='none';
 
   state.firmaSolicitudId='';
   state.firmaDocumentoId='';
@@ -1421,7 +1418,14 @@ function docHTML(data,logoResuelto){
 
     <h1>${esc(tipo)}</h1>
 
-    <p>Por medio del presente certifico haber atendido al/la paciente <b>${esc(pac.nombre||'Paciente')}</b>, con documento de identidad <b>${esc(pac.numero_documento||'—')}</b>, número de historia clínica <b>${esc(hist.numero_historia||hist.id_historia||'—')}</b>, en la consulta <b>#${esc(data.numero_consulta||'—')}</b>, atendida por <b>${esc(med.nombre||'Profesional tratante')}</b>.</p>
+    <p>
+      Por medio del presente certifico haber atendido al/la paciente
+      <b>${esc(pac.nombre||'Paciente')}</b>, con documento de identidad
+      <b>${esc(pac.numero_documento||'—')}</b>, número de historia clínica
+      <b>${esc(hist.numero_historia||hist.id_historia||'—')}</b>, en la consulta
+      <b>#${esc(data.numero_consulta||'—')}</b>, atendida por
+      <b>${esc(med.nombre||'Profesional tratante')}</b>.
+    </p>
 
     <div class="ac-cert-lines">
       ${med.especialidad?`<div class="ac-cert-line"><b>ESPECIALIDAD:</b> ${esc(med.especialidad)}</div>`:''}
@@ -1447,7 +1451,7 @@ function docHTML(data,logoResuelto){
       <div class="ac-centro-contacto">${contactoHTML}</div>
 
       <div class="ac-sign">
-        <div class="ac-sign-line"></div>
+        <div class="ac-sign-line" data-iasyn-signature-target="CERTIFICADO" data-iasyn-signature-edge="top" data-iasyn-signature-gap-pt="2.5"></div>
         <b>${esc(med.nombre||'Profesional tratante')}</b>
         ${med.especialidad?`<br><span>${esc(med.especialidad)}</span>`:''}
         ${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}
@@ -1683,13 +1687,11 @@ html,body{background:#dfe3e8}
 }
 
 async function vista(imprimir){
-  const miPreviewToken=++state.previewToken;
   const data=datos();
   const p=document.getElementById('acPreview');
 
   if(!imprimir){
     const logoVista=await resolverLogoCertificado(data,false);
-    if(miPreviewToken!==state.previewToken) return;
     const htmlDoc=docHTML(data,logoVista);
     if(p){
       p.innerHTML=htmlDoc;
@@ -1763,9 +1765,6 @@ async function inicializar(){
   state.paciente=null;
   state.historia=null;
   state.editandoId='';
-  state.previewToken++;
-  const previa=document.getElementById('acPreview');
-  if(previa){previa.innerHTML='';previa.style.display='none';}
   actualizarControlesFirma();
   renderContextoClinico();
   pintarCargaAtencion(c);
