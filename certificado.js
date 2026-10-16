@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.4.5-IASYN-CERT-APERTURA-INTRO-V1';
+const VERSION='1.4.5-IASYN-CERT-APERTURA-RAPIDA-V2';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -422,6 +422,8 @@ function instalarCSS(){
 .ac-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .ac-btn{border:0;border-radius:12px;padding:10px 14px;font-weight:850;cursor:pointer}
 .ac-btn[disabled]{opacity:.72;cursor:wait}
+.ac-btn.ac-abierto{background:#8b1e5a;color:#fff;border:1px solid #8b1e5a}
+.ac-btn.ac-abriendo{outline:2px solid #d79ab9;outline-offset:2px}
 .ac-firma-preparando{background:#fff7ed!important;color:#9a3412!important;border:1px solid #fed7aa!important}
 .ac-firma-proceso{background:#eff6ff!important;color:#1d4ed8!important;border:1px solid #bfdbfe!important}
 .ac-firma-firmada{background:#ecfdf5!important;color:#166534!important;border:1px solid #bbf7d0!important}
@@ -882,7 +884,10 @@ function renderHistorial(){
     </div>`;
   }).join('');
 
-  b.querySelectorAll('[data-aceditar]').forEach(x=>x.onclick=()=>abrir(x.dataset.aceditar));
+  b.querySelectorAll('[data-aceditar]').forEach(x=>{
+    if(txt(x.dataset.aceditar)===txt(state.editandoId)){x.classList.add('ac-abierto');x.textContent='Abierto ✓';x.setAttribute('aria-pressed','true');}
+    x.onclick=()=>abrir(x.dataset.aceditar);
+  });
   b.querySelectorAll('[data-acfirmar]').forEach(x=>x.onclick=()=>firmarCertificado(x.dataset.acfirmar));
   b.querySelectorAll('[data-acverfirmado]').forEach(x=>x.onclick=()=>verCertificadoFirmado(x.dataset.acverfirmado));
   b.querySelectorAll('[data-accancelarfirma]').forEach(x=>x.onclick=()=>cancelarFirmaCertificado(x.dataset.accancelarfirma));
@@ -1039,6 +1044,14 @@ function abrir(id){
 
   msg('ok','Certificado cargado para revisión.');
   actualizarControlesFirma();
+  /* Estado visual inmediato; no reconstruir historial ni consultar servidor. */
+  document.querySelectorAll('[data-aceditar]').forEach(b=>{
+    const elegido=txt(b.dataset.aceditar)===txt(id);
+    b.classList.toggle('ac-abierto',elegido);
+    b.classList.toggle('ac-abriendo',elegido);
+    b.textContent=elegido?'Abierto ✓':'Abrir';
+    b.setAttribute('aria-pressed',elegido?'true':'false');
+  });
   vista(false).catch(e=>msg('error',e.message||'No se pudo actualizar la vista previa.'));
 }
 
@@ -1688,13 +1701,25 @@ async function vista(imprimir){
   const p=document.getElementById('acPreview');
 
   if(!imprimir){
-    const logoVista=await resolverLogoCertificado(data,false);
-    if(miPreviewToken!==state.previewToken) return;
-    const htmlDoc=docHTML(data,logoVista);
+    /* Pintado inmediato con los datos ya cargados en memoria.
+       El logo institucional se resuelve después, sin bloquear Abrir.
+       previewToken impide que una respuesta antigua sustituya la nueva. */
     if(p){
-      p.innerHTML=htmlDoc;
+      p.innerHTML=docHTML(data);
       p.style.display='block';
       p.scrollIntoView({behavior:'smooth',block:'start'});
+    }
+    document.querySelectorAll('[data-aceditar].ac-abriendo').forEach(b=>b.classList.remove('ac-abriendo'));
+    const logoVista=await resolverLogoCertificado(data,false);
+    if(miPreviewToken!==state.previewToken) return;
+    if(p){
+      const img=p.querySelector('.ac-logo');
+      if(img){
+        if(img.getAttribute('src')!==logoVista) img.setAttribute('src',logoVista);
+      }else if(logoVista){
+        /* Solo cuando no había logo en el primer pintado. */
+        p.innerHTML=docHTML(data,logoVista);
+      }
     }
     return;
   }
