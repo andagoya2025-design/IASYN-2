@@ -458,8 +458,8 @@ function instalarCSS(){
 .ac-dx-doc-row{font-size:12.1px;line-height:1.45}
 .ac-reposo{margin-top:16px}
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
-/* El cierre sigue al contenido, se desplaza al fondo si cabe en una hoja y no se superpone. */
-.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:18mm;break-inside:avoid;page-break-inside:avoid}
+/* Cierre indivisible: institucional y profesional se desplazan juntos; reserva superior para firma IASYN. */
+.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:26mm;break-inside:avoid;page-break-inside:avoid}
 .ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.5;min-width:0;overflow-wrap:anywhere;display:grid;gap:5px;align-content:end}
 .ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start}
 .ac-contacto-icono{width:12px;height:12px;display:block;margin-top:2px;color:var(--ac-color,#8b1e5a)}
@@ -1532,7 +1532,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
   gap:15mm;
   align-items:end;
   margin-top:auto;
-  padding-top:18mm;
+  padding-top:26mm;
   break-inside:avoid;
   page-break-inside:avoid;
 }
