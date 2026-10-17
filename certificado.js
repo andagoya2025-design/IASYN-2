@@ -459,7 +459,7 @@ function instalarCSS(){
 .ac-reposo{margin-top:16px}
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
 /* Cierre indivisible: institucional y profesional se desplazan juntos; reserva superior para firma IASYN. */
-.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:26mm;break-inside:avoid;page-break-inside:avoid}
+.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:18mm;break-inside:avoid;page-break-inside:avoid}
 .ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.5;min-width:0;overflow-wrap:anywhere;display:grid;gap:5px;align-content:end}
 .ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start}
 .ac-contacto-icono{width:12px;height:12px;display:block;margin-top:2px;color:var(--ac-color,#8b1e5a)}
@@ -1488,7 +1488,7 @@ body{overflow-x:hidden}
   width:100%;
   max-width:100%;
   min-width:0;
-  min-height:273mm;
+  min-height:268mm;
   margin:0;
   padding:0;
   background:#fff;
@@ -1532,7 +1532,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
   gap:15mm;
   align-items:end;
   margin-top:auto;
-  padding-top:26mm;
+  padding-top:18mm;
   break-inside:avoid;
   page-break-inside:avoid;
 }
@@ -1567,7 +1567,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     width:100%!important;
     max-width:100%!important;
     min-width:0!important;
-    min-height:273mm!important;
+    min-height:268mm!important;
     margin:0!important;
     padding:0!important;
     overflow:visible!important;
@@ -1616,7 +1616,7 @@ html,body{background:#dfe3e8}
 .auro-cert-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}
 .auro-cert-preview-stage{min-height:calc(100vh - 62px);padding:20px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
 .auro-cert-preview-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
-.auro-cert-preview-sheet>.ac-paper{min-height:273mm!important}
+.auro-cert-preview-sheet>.ac-paper{min-height:268mm!important}
 @media(max-width:980px){
   .auro-cert-preview-stage{padding:12px 0 20px;overflow-x:hidden;display:flex;justify-content:center}
   .auro-cert-preview-sheet{transform-origin:top center}
@@ -1654,7 +1654,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:273mm!important;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:268mm!important;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
 }
 </style>
 </head>
