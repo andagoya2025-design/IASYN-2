@@ -459,12 +459,12 @@ function instalarCSS(){
 .ac-reposo{margin-top:16px}
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
 /* Cierre indivisible: institucional y profesional se desplazan juntos; reserva superior para firma IASYN. */
-.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:10mm;break-inside:avoid;page-break-inside:avoid}
+.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:18mm;break-inside:avoid;page-break-inside:avoid}
 .ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.5;min-width:0;overflow-wrap:anywhere;display:grid;gap:5px;align-content:end}
 .ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start}
 .ac-contacto-icono{width:12px;height:12px;display:block;margin-top:2px;color:var(--ac-color,#8b1e5a)}
 .ac-contacto-texto{min-width:0;overflow-wrap:anywhere}
-.ac-sign{text-align:center;font-size:11.5px;position:relative;top:0}
+.ac-sign{text-align:center;font-size:11.5px;position:relative;top:2mm}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.5px}
 .ac-toast-zone{
@@ -1117,7 +1117,7 @@ async function htmlCompletoFirmaCertificado(certificado){
   /* El PDF firmado no necesita handlers HTML. Se eliminan atributos on*
      del documento que son útiles solo para la vista del navegador. */
   const logoFirma=await resolverLogoCertificado(certificado,true);
-  const cuerpo=docHTML(certificado,logoFirma).replace(/\son[a-z]+=(?:"[^"]*"|'[^']*')/gi,'');
+  const cuerpo=(await certPieUltimaPagina(docHTML(certificado,logoFirma))).replace(/\son[a-z]+=(?:"[^"]*"|'[^']*')/gi,'');
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1471,6 +1471,49 @@ function docHTML(data,logoResuelto){
   </div>`;
 }
 
+/* IASYN: ajuste del pie en la ULTIMA pagina, sin scripts dentro del PDF.
+   Se mide en un contenedor DOM temporal con la geometria A4 de impresion.
+   Si la medicion falla se conserva el documento original (fallo seguro). */
+async function certPieUltimaPagina(html){
+  if(typeof document==='undefined'||!document.body) return html;
+  const mm=96/25.4;
+  const altoPagina=273*mm; // A4 297mm menos margenes @page de 12mm arriba/abajo
+  const margenInferior=7*mm;
+  const cont=document.createElement('div');
+  cont.setAttribute('aria-hidden','true');
+  cont.style.cssText='position:absolute;left:-100000px;top:0;visibility:hidden;pointer-events:none;width:180mm;background:#fff;';
+  const style=document.createElement('style');
+  style.textContent=estilosImpresion()+`\n.ac-paper{min-height:0!important;display:block!important;width:100%!important} .ac-firma-area{margin-top:0!important;padding-top:0!important;display:grid!important} .ac-sign{top:0!important}`;
+  const host=document.createElement('div');
+  host.innerHTML=html;
+  const shadow=cont.attachShadow({mode:'open'});
+  shadow.appendChild(style);
+  shadow.appendChild(host);
+  document.body.appendChild(cont);
+  try{
+    if(document.fonts&&document.fonts.ready) await document.fonts.ready;
+    const papel=host.querySelector('.ac-paper');
+    const pie=host.querySelector('.ac-firma-area');
+    if(!papel||!pie) return html;
+    const raiz=papel.getBoundingClientRect();
+    const rect=pie.getBoundingClientRect();
+    const comienzo=rect.top-raiz.top;
+    const altura=rect.height;
+    if(!(comienzo>=0&&altura>0&&altura<altoPagina-2*margenInferior)) return html;
+    // Ubicar el pie al fondo de la pagina donde cabe; si no cabe, pasar ambos bloques juntos.
+    const pagina=Math.max(0,Math.floor((comienzo+altura+margenInferior-0.01)/altoPagina));
+    const fin=(pagina+1)*altoPagina-margenInferior;
+    const hueco=Math.max(0,fin-comienzo-altura);
+    if(!Number.isFinite(hueco)||hueco>altoPagina) return html;
+    // Espaciador externo al pie: el pie sigue siendo un solo bloque indivisible.
+    const spacer=document.createElement('div');
+    spacer.setAttribute('class','ac-espacio-pie-ultima');
+    spacer.style.cssText='height:'+hueco.toFixed(2)+'px;break-inside:avoid;page-break-inside:avoid;';
+    pie.parentNode.insertBefore(spacer,pie);
+    return papel.outerHTML;
+  }finally{cont.remove();}
+}
+
 function estilosImpresion(){
   return `
 @page{size:A4 portrait;margin:12mm 15mm}
@@ -1488,14 +1531,13 @@ body{overflow-x:hidden}
   width:100%;
   max-width:100%;
   min-width:0;
-  min-height:268mm;
+  min-height:0;
   margin:0;
   padding:0;
   background:#fff;
   overflow:visible;
   position:relative;
-  display:flex;
-  flex-direction:column;
+  display:block;
 }
 .ac-paper,.ac-paper *{min-width:0}
 .ac-paper p,.ac-paper span,.ac-paper b,.ac-paper div{
@@ -1531,8 +1573,8 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:15mm;
   align-items:end;
-  margin-top:auto;
-  padding-top:10mm;
+  margin-top:0;
+  padding-top:0;
   break-inside:avoid;
   page-break-inside:avoid;
 }
@@ -1567,20 +1609,19 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     width:100%!important;
     max-width:100%!important;
     min-width:0!important;
-    min-height:268mm!important;
+    min-height:0!important;
     margin:0!important;
     padding:0!important;
     overflow:visible!important;
     position:relative!important;
-    display:flex!important;
-    flex-direction:column!important;
+    display:block!important;
     transform:none!important;
     translate:none!important;
     page-break-inside:auto!important;
     break-inside:auto!important;
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
-   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:auto!important;break-inside:avoid!important;page-break-inside:avoid!important}
+   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:0!important;padding-top:0!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
 
@@ -1594,7 +1635,7 @@ async function auroGenerarVistaImpresionCertificadoUnificada(dataOpcional){
   }
 
   const logoVista=await resolverLogoCertificado(data,false);
-  const htmlDoc=docHTML(data,logoVista);
+  const htmlDoc=await certPieUltimaPagina(docHTML(data,logoVista));
   ventana.document.open();
   ventana.document.write(`<!DOCTYPE html>
 <html lang="es">
@@ -1616,7 +1657,7 @@ html,body{background:#dfe3e8}
 .auro-cert-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}
 .auro-cert-preview-stage{min-height:calc(100vh - 62px);padding:20px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
 .auro-cert-preview-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
-.auro-cert-preview-sheet>.ac-paper{min-height:268mm!important}
+.auro-cert-preview-sheet>.ac-paper{min-height:272mm!important}
 @media(max-width:980px){
   .auro-cert-preview-stage{padding:12px 0 20px;overflow-x:hidden;display:flex;justify-content:center}
   .auro-cert-preview-sheet{transform-origin:top center}
@@ -1654,7 +1695,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:268mm!important;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:0!important;margin:0!important;padding:0!important;position:relative!important;display:block!important;transform:none!important}
 }
 </style>
 </head>
