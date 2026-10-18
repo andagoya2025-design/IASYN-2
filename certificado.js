@@ -1117,7 +1117,7 @@ async function htmlCompletoFirmaCertificado(certificado){
   /* El PDF firmado no necesita handlers HTML. Se eliminan atributos on*
      del documento que son útiles solo para la vista del navegador. */
   const logoFirma=await resolverLogoCertificado(certificado,true);
-  const cuerpo=(await certPieUltimaPagina(docHTML(certificado,logoFirma))).replace(/\son[a-z]+=(?:"[^"]*"|'[^']*')/gi,'');
+  const cuerpo=docHTML(certificado,logoFirma).replace(/\son[a-z]+=(?:"[^"]*"|'[^']*')/gi,'');
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1126,7 +1126,7 @@ async function htmlCompletoFirmaCertificado(certificado){
 <title>Certificado médico</title>
 <style>${estilosImpresion()}</style>
 </head>
-<body>${cuerpo}</body>
+<body>${cuerpo}${scriptPaginacionCertificado()}</body>
 </html>`;
 }
 
@@ -1471,47 +1471,47 @@ function docHTML(data,logoResuelto){
   </div>`;
 }
 
-/* IASYN: ajuste del pie en la ULTIMA pagina, sin scripts dentro del PDF.
-   Se mide en un contenedor DOM temporal con la geometria A4 de impresion.
-   Si la medicion falla se conserva el documento original (fallo seguro). */
-async function certPieUltimaPagina(html){
-  if(typeof document==='undefined'||!document.body) return html;
-  const mm=96/25.4;
-  const altoPagina=273*mm; // A4 297mm menos margenes @page de 12mm arriba/abajo
-  const margenInferior=7*mm;
-  const cont=document.createElement('div');
-  cont.setAttribute('aria-hidden','true');
-  cont.style.cssText='position:absolute;left:-100000px;top:0;visibility:hidden;pointer-events:none;width:180mm;background:#fff;';
-  const style=document.createElement('style');
-  style.textContent=estilosImpresion()+`\n.ac-paper{min-height:0!important;display:block!important;width:100%!important} .ac-firma-area{margin-top:0!important;padding-top:0!important;display:grid!important} .ac-sign{top:0!important}`;
-  const host=document.createElement('div');
-  host.innerHTML=html;
-  const shadow=cont.attachShadow({mode:'open'});
-  shadow.appendChild(style);
-  shadow.appendChild(host);
-  document.body.appendChild(cont);
-  try{
-    if(document.fonts&&document.fonts.ready) await document.fonts.ready;
-    const papel=host.querySelector('.ac-paper');
-    const pie=host.querySelector('.ac-firma-area');
-    if(!papel||!pie) return html;
-    const raiz=papel.getBoundingClientRect();
-    const rect=pie.getBoundingClientRect();
-    const comienzo=rect.top-raiz.top;
-    const altura=rect.height;
-    if(!(comienzo>=0&&altura>0&&altura<altoPagina-2*margenInferior)) return html;
-    // Ubicar el pie al fondo de la pagina donde cabe; si no cabe, pasar ambos bloques juntos.
-    const pagina=Math.max(0,Math.floor((comienzo+altura+margenInferior-0.01)/altoPagina));
-    const fin=(pagina+1)*altoPagina-margenInferior;
-    const hueco=Math.max(0,fin-comienzo-altura);
-    if(!Number.isFinite(hueco)||hueco>altoPagina) return html;
-    // Espaciador externo al pie: el pie sigue siendo un solo bloque indivisible.
-    const spacer=document.createElement('div');
-    spacer.setAttribute('class','ac-espacio-pie-ultima');
-    spacer.style.cssText='height:'+hueco.toFixed(2)+'px;break-inside:avoid;page-break-inside:avoid;';
-    pie.parentNode.insertBefore(spacer,pie);
-    return papel.outerHTML;
-  }finally{cont.remove();}
+/* IASYN A4: el cierre pertenece al flujo del documento, no a una página fija.
+   Medir con la geometría real del navegador evita que flexbox fragmente
+   los dos bloques cuando el contenido ocupa más de una hoja. */
+function scriptPaginacionCertificado(){
+  return `<script>
+(function(){
+  function ajustarFirma(){
+    var papel=document.querySelector('.ac-paper');
+    var firma=papel&&papel.querySelector('.ac-firma-area');
+    if(!papel||!firma)return;
+    papel.classList.remove('ac-multipagina');
+    firma.style.removeProperty('--ac-desplazamiento-firma');
+    var pxPorMm=document.createElement('div');
+    pxPorMm.style.cssText='position:absolute;visibility:hidden;width:100mm;height:100mm;pointer-events:none';
+    document.body.appendChild(pxPorMm);
+    var mm=pxPorMm.getBoundingClientRect().height/100;
+    pxPorMm.remove();
+    if(!mm)return;
+    var altoPagina=273*mm; // A4 menos márgenes verticales de 12 mm
+    // Se mide el contenido SIN flex para evitar el error de fragmentación.
+    papel.classList.add('ac-multipagina');
+    var caja=papel.getBoundingClientRect();
+    var bloque=firma.getBoundingClientRect();
+    var final=bloque.bottom-caja.top;
+    var margenSeguridad=5*mm;
+    var pagina=Math.max(1,Math.ceil((final+margenSeguridad)/altoPagina));
+    if(pagina===1){
+      papel.classList.remove('ac-multipagina');
+      return;
+    }
+    // El bloque se empuja hacia el pie de la última hoja; jamás se parte.
+    // Si no hay espacio, el salto natural de página lo mueve completo.
+    var libre=pagina*altoPagina-final-margenSeguridad;
+    if(libre>0)firma.style.setProperty('--ac-desplazamiento-firma',libre+'px');
+  }
+  window.addEventListener('beforeprint',ajustarFirma);
+  window.addEventListener('load',ajustarFirma);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(ajustarFirma);
+  ajustarFirma();
+})();
+<\/script>`;
 }
 
 function estilosImpresion(){
@@ -1531,13 +1531,14 @@ body{overflow-x:hidden}
   width:100%;
   max-width:100%;
   min-width:0;
-  min-height:0;
+  min-height:272mm;
   margin:0;
   padding:0;
   background:#fff;
   overflow:visible;
   position:relative;
-  display:block;
+  display:flex;
+  flex-direction:column;
 }
 .ac-paper,.ac-paper *{min-width:0}
 .ac-paper p,.ac-paper span,.ac-paper b,.ac-paper div{
@@ -1573,8 +1574,8 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:15mm;
   align-items:end;
-  margin-top:0;
-  padding-top:0;
+  margin-top:auto;
+  padding-top:18mm;
   break-inside:avoid;
   page-break-inside:avoid;
 }
@@ -1582,7 +1583,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
 .ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start;break-inside:avoid}
 .ac-contacto-icono{display:block;width:12px;height:12px;margin-top:2px;color:var(--ac-color,#8b1e5a)}
 .ac-contacto-texto{min-width:0;overflow-wrap:anywhere}
-.ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere;position:relative;top:0}
+.ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere;position:relative;top:2mm}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.4px}
 
@@ -1609,19 +1610,23 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     width:100%!important;
     max-width:100%!important;
     min-width:0!important;
-    min-height:0!important;
+    min-height:272mm!important;
     margin:0!important;
     padding:0!important;
     overflow:visible!important;
     position:relative!important;
-    display:block!important;
+    display:flex!important;
+    flex-direction:column!important;
     transform:none!important;
     translate:none!important;
     page-break-inside:auto!important;
     break-inside:auto!important;
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
-   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:0!important;padding-top:0!important;break-inside:avoid!important;page-break-inside:avoid!important}
+   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:auto!important;break-inside:avoid!important;page-break-inside:avoid!important}
+   /* Multipágina: no fragmentar un contenedor flex de altura mínima A4. */
+   .ac-paper.ac-multipagina{display:block!important;min-height:0!important}
+   .ac-paper.ac-multipagina .ac-firma-area{margin-top:var(--ac-desplazamiento-firma,0px)!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
 
@@ -1635,7 +1640,7 @@ async function auroGenerarVistaImpresionCertificadoUnificada(dataOpcional){
   }
 
   const logoVista=await resolverLogoCertificado(data,false);
-  const htmlDoc=await certPieUltimaPagina(docHTML(data,logoVista));
+  const htmlDoc=docHTML(data,logoVista);
   ventana.document.open();
   ventana.document.write(`<!DOCTYPE html>
 <html lang="es">
@@ -1695,7 +1700,8 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:0!important;margin:0!important;padding:0!important;position:relative!important;display:block!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:272mm!important;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
+   .auro-cert-preview-sheet>.ac-paper.ac-multipagina{display:block!important;min-height:0!important}
 }
 </style>
 </head>
@@ -1710,6 +1716,7 @@ html,body{background:#dfe3e8}
   <main class="auro-cert-preview-stage">
     <div class="auro-cert-preview-sheet" id="auroCertPreviewSheet">${htmlDoc}</div>
   </main>
+${scriptPaginacionCertificado()}
 <script>
 (function(){
   function ajustar(){
