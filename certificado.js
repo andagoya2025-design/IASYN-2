@@ -1567,20 +1567,22 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     width:100%!important;
     max-width:100%!important;
     min-width:0!important;
-    min-height:272mm!important;
+    /* En impresion multipagina, no simular una hoja con altura minima. */
+    min-height:0!important;
     margin:0!important;
     padding:0!important;
     overflow:visible!important;
     position:relative!important;
-    display:flex!important;
-    flex-direction:column!important;
+    /* Flujo de bloques: Chromium pagina contenido extenso sin fragmentar flex. */
+    display:block!important;
     transform:none!important;
     translate:none!important;
     page-break-inside:auto!important;
     break-inside:auto!important;
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
-   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:auto!important;break-inside:avoid!important;page-break-inside:avoid!important}
+   /* Cierre unido, en flujo natural; margen superior explicito y predecible. */
+   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:18mm!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
 
@@ -1654,7 +1656,8 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:272mm!important;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
+  /* No sobrescribir la geometria de impresion establecida por estilosImpresion(). */
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:0!important;margin:0!important;padding:0!important;position:relative!important;display:block!important;transform:none!important}
 }
 </style>
 </head>
