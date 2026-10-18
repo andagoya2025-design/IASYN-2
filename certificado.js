@@ -1481,39 +1481,30 @@ function scriptPaginacionCertificado(){
     var papel=document.querySelector('.ac-paper');
     var firma=papel&&papel.querySelector('.ac-firma-area');
     if(!papel||!firma)return;
+    papel.classList.remove('ac-multipagina');
     firma.style.removeProperty('--ac-desplazamiento-firma');
-    papel.classList.add('ac-multipagina');
-    var regla=document.createElement('div');
-    regla.style.cssText='position:absolute;visibility:hidden;width:100mm;height:100mm;pointer-events:none';
-    document.body.appendChild(regla);
-    var mm=regla.getBoundingClientRect().height/100;
-    regla.remove();
+    var pxPorMm=document.createElement('div');
+    pxPorMm.style.cssText='position:absolute;visibility:hidden;width:100mm;height:100mm;pointer-events:none';
+    document.body.appendChild(pxPorMm);
+    var mm=pxPorMm.getBoundingClientRect().height/100;
+    pxPorMm.remove();
     if(!mm)return;
-
-    // A4: 297 mm - 12 mm superior - 12 mm inferior = 273 mm útiles.
-    // Se calcula con el contenido real, NO con el fondo de un flex de 272 mm.
-    var altoPagina=273*mm;
-    var margenInferior=8*mm;
+    var altoPagina=273*mm; // A4 menos márgenes verticales de 12 mm
+    // Se mide el contenido SIN flex para evitar el error de fragmentación.
+    papel.classList.add('ac-multipagina');
     var caja=papel.getBoundingClientRect();
     var bloque=firma.getBoundingClientRect();
-    var altoFirma=bloque.height;
-    var inicioFirma=bloque.top-caja.top;
-    var finNatural=inicioFirma+altoFirma;
-
-    // En una página se conserva el comportamiento estable de pie de hoja.
-    if(finNatural<=altoPagina-margenInferior){
+    var final=bloque.bottom-caja.top;
+    var margenSeguridad=5*mm;
+    var pagina=Math.max(1,Math.ceil((final+margenSeguridad)/altoPagina));
+    if(pagina===1){
       papel.classList.remove('ac-multipagina');
       return;
     }
-
-    // Determinar la última página necesaria para el contenido + ambos bloques.
-    // Un bloque que ya cabe en la página actual NO debe saltar a otra.
-    var pagina=Math.max(1,Math.ceil((finNatural+0.5*mm)/altoPagina));
-    var objetivo=pagina*altoPagina-margenInferior;
-    var desplazamiento=objetivo-finNatural;
-    if(desplazamiento>0){
-      firma.style.setProperty('--ac-desplazamiento-firma',desplazamiento+'px');
-    }
+    // El bloque se empuja hacia el pie de la última hoja; jamás se parte.
+    // Si no hay espacio, el salto natural de página lo mueve completo.
+    var libre=pagina*altoPagina-final-margenSeguridad;
+    if(libre>0)firma.style.setProperty('--ac-desplazamiento-firma',libre+'px');
   }
   window.addEventListener('beforeprint',ajustarFirma);
   window.addEventListener('load',ajustarFirma);
