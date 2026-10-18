@@ -1477,37 +1477,34 @@ function docHTML(data,logoResuelto){
 function scriptPaginacionCertificado(){
   return `<script>
 (function(){
-  // Un solo flujo para impresión y PDF: nunca desplazar el cierre más allá de su hoja.
   function ajustarFirma(){
     var papel=document.querySelector('.ac-paper');
     var firma=papel&&papel.querySelector('.ac-firma-area');
     if(!papel||!firma)return;
     papel.classList.remove('ac-multipagina');
     firma.style.removeProperty('--ac-desplazamiento-firma');
-    var regla=document.createElement('div');
-    regla.style.cssText='position:absolute;visibility:hidden;width:100mm;height:100mm;pointer-events:none';
-    document.body.appendChild(regla);
-    var mm=regla.getBoundingClientRect().height/100;
-    regla.remove();
+    var pxPorMm=document.createElement('div');
+    pxPorMm.style.cssText='position:absolute;visibility:hidden;width:100mm;height:100mm;pointer-events:none';
+    document.body.appendChild(pxPorMm);
+    var mm=pxPorMm.getBoundingClientRect().height/100;
+    pxPorMm.remove();
     if(!mm)return;
-    // El alto útil real lo determina @page: 297 - 12 - 12 = 273 mm.
-    // La impresión siempre utiliza un bloque normal (no flex) para evitar fragmentación.
+    var altoPagina=273*mm; // A4 menos márgenes verticales de 12 mm
+    // Se mide el contenido SIN flex para evitar el error de fragmentación.
     papel.classList.add('ac-multipagina');
     var caja=papel.getBoundingClientRect();
     var bloque=firma.getBoundingClientRect();
-    var altoPagina=273*mm;
-    var inicio=bloque.top-caja.top;
-    var fin=bloque.bottom-caja.top;
-    var pagina=Math.max(0,Math.floor(Math.max(0,fin-0.01)/altoPagina));
-    // No forzar un salto: el cierre permanece inmediatamente después del contenido
-    // cuando su altura o el espacio disponible no permiten un pie seguro.
-    var pie=(pagina+1)*altoPagina;
-    var espacio=pie-fin-8*mm;
-    var mismaHoja=Math.floor(Math.max(0,inicio)/altoPagina)===pagina;
-    if(mismaHoja && espacio>2*mm){
-      // El margen es un ajuste de presentación, nunca una nueva página.
-      firma.style.setProperty('--ac-desplazamiento-firma',Math.max(0,espacio-1*mm)+'px');
+    var final=bloque.bottom-caja.top;
+    var margenSeguridad=5*mm;
+    var pagina=Math.max(1,Math.ceil((final+margenSeguridad)/altoPagina));
+    if(pagina===1){
+      papel.classList.remove('ac-multipagina');
+      return;
     }
+    // El bloque se empuja hacia el pie de la última hoja; jamás se parte.
+    // Si no hay espacio, el salto natural de página lo mueve completo.
+    var libre=pagina*altoPagina-final-margenSeguridad;
+    if(libre>0)firma.style.setProperty('--ac-desplazamiento-firma',Math.max(0,libre-7*mm)+'px');
   }
   window.addEventListener('beforeprint',ajustarFirma);
   window.addEventListener('load',ajustarFirma);
@@ -1626,7 +1623,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     break-inside:auto!important;
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
-   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:var(--ac-desplazamiento-firma,0px)!important;break-inside:avoid!important;page-break-inside:avoid!important}
+   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:auto!important;break-inside:avoid!important;page-break-inside:avoid!important}
    /* Multipágina: no fragmentar un contenedor flex de altura mínima A4. */
    .ac-paper.ac-multipagina{display:block!important;min-height:0!important}
    .ac-paper.ac-multipagina .ac-firma-area{margin-top:var(--ac-desplazamiento-firma,0px)!important;break-inside:avoid!important;page-break-inside:avoid!important}
