@@ -1113,6 +1113,42 @@ async function resolverLogoCertificado(data,paraFirma){
   return fuente;
 }
 
+
+/* IASYN — paginación A4 del cierre en la última hoja.
+   Solo actúa en los documentos independientes (impresión/firma), nunca en el ERP.
+   Medición sin red, sin endpoints, sin modificar el contenido clínico. */
+function scriptPaginacionCertificado(){
+  return `<script>
+(function(){
+  'use strict';
+  function ajustarPie(){
+    var papel=document.querySelector('.ac-paper');
+    var pie=papel&&papel.querySelector('.ac-firma-area');
+    if(!papel||!pie)return;
+    // A4: 297 mm menos los márgenes @page (12 mm arriba y abajo) = 273 mm.
+    // Se mide la altura natural, sin el espacio flexible reservado a una sola hoja.
+    papel.style.minHeight='0';
+    pie.style.marginTop='0';
+    var natural=papel.getBoundingClientRect().height;
+    var mm=document.createElement('div');
+    mm.style.cssText='position:absolute;visibility:hidden;width:1mm;height:1mm;pointer-events:none';
+    document.body.appendChild(mm);
+    var pxmm=mm.getBoundingClientRect().height||3.779527559;
+    mm.remove();
+    var pagina=273*pxmm;
+    // Evita que la reserva de pie cree una página vacía por redondeo.
+    var paginas=Math.max(1,Math.ceil((natural+2*pxmm)/pagina));
+    papel.style.minHeight=paginas===1?'272mm':((paginas*273)-1)+'mm';
+    pie.style.marginTop='auto';
+    papel.setAttribute('data-iasyn-paginas-previstas',String(paginas));
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ajustarPie,{once:true});
+  else ajustarPie();
+  window.addEventListener('beforeprint',ajustarPie);
+})();
+<\/script>`;
+}
+
 async function htmlCompletoFirmaCertificado(certificado){
   /* El PDF firmado no necesita handlers HTML. Se eliminan atributos on*
      del documento que son útiles solo para la vista del navegador. */
@@ -1126,7 +1162,7 @@ async function htmlCompletoFirmaCertificado(certificado){
 <title>Certificado médico</title>
 <style>${estilosImpresion()}</style>
 </head>
-<body>${cuerpo}</body>
+<body>${cuerpo}${scriptPaginacionCertificado()}</body>
 </html>`;
 }
 
@@ -1567,22 +1603,20 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     width:100%!important;
     max-width:100%!important;
     min-width:0!important;
-    /* En impresion multipagina, no simular una hoja con altura minima. */
-    min-height:0!important;
+    min-height:272mm;
     margin:0!important;
     padding:0!important;
     overflow:visible!important;
     position:relative!important;
-    /* Flujo de bloques: Chromium pagina contenido extenso sin fragmentar flex. */
-    display:block!important;
+    display:flex!important;
+    flex-direction:column!important;
     transform:none!important;
     translate:none!important;
     page-break-inside:auto!important;
     break-inside:auto!important;
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
-   /* Cierre unido, en flujo natural; margen superior explicito y predecible. */
-   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:18mm!important;break-inside:avoid!important;page-break-inside:avoid!important}
+   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:auto!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
 
@@ -1618,7 +1652,7 @@ html,body{background:#dfe3e8}
 .auro-cert-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}
 .auro-cert-preview-stage{min-height:calc(100vh - 62px);padding:20px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
 .auro-cert-preview-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
-.auro-cert-preview-sheet>.ac-paper{min-height:272mm!important}
+.auro-cert-preview-sheet>.ac-paper{min-height:272mm}
 @media(max-width:980px){
   .auro-cert-preview-stage{padding:12px 0 20px;overflow-x:hidden;display:flex;justify-content:center}
   .auro-cert-preview-sheet{transform-origin:top center}
@@ -1656,8 +1690,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  /* No sobrescribir la geometria de impresion establecida por estilosImpresion(). */
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:0!important;margin:0!important;padding:0!important;position:relative!important;display:block!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:272mm;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
 }
 </style>
 </head>
@@ -1672,6 +1705,7 @@ html,body{background:#dfe3e8}
   <main class="auro-cert-preview-stage">
     <div class="auro-cert-preview-sheet" id="auroCertPreviewSheet">${htmlDoc}</div>
   </main>
+${scriptPaginacionCertificado()}
 <script>
 (function(){
   function ajustar(){
