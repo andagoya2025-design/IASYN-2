@@ -1162,7 +1162,7 @@ async function htmlCompletoFirmaCertificado(certificado){
 <title>Certificado médico</title>
 <style>${estilosImpresion()}</style>
 </head>
-<body>${cuerpo}</body>
+<body>${cuerpo}${scriptPaginacionCertificado()}</body>
 </html>`;
 }
 
