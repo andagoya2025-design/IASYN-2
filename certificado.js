@@ -1126,7 +1126,7 @@ async function htmlCompletoFirmaCertificado(certificado){
 <title>Certificado médico</title>
 <style>${estilosImpresion()}</style>
 </head>
-<body>${cuerpo}</body>
+<body>${cuerpo}${scriptPaginacionCertificado()}</body>
 </html>`;
 }
 
@@ -1471,6 +1471,49 @@ function docHTML(data,logoResuelto){
   </div>`;
 }
 
+/* IASYN A4: el cierre pertenece al flujo del documento, no a una página fija.
+   Medir con la geometría real del navegador evita que flexbox fragmente
+   los dos bloques cuando el contenido ocupa más de una hoja. */
+function scriptPaginacionCertificado(){
+  return `<script>
+(function(){
+  function ajustarFirma(){
+    var papel=document.querySelector('.ac-paper');
+    var firma=papel&&papel.querySelector('.ac-firma-area');
+    if(!papel||!firma)return;
+    papel.classList.remove('ac-multipagina');
+    firma.style.removeProperty('--ac-desplazamiento-firma');
+    var pxPorMm=document.createElement('div');
+    pxPorMm.style.cssText='position:absolute;visibility:hidden;width:100mm;height:100mm;pointer-events:none';
+    document.body.appendChild(pxPorMm);
+    var mm=pxPorMm.getBoundingClientRect().height/100;
+    pxPorMm.remove();
+    if(!mm)return;
+    var altoPagina=273*mm; // A4 menos márgenes verticales de 12 mm
+    // Se mide el contenido SIN flex para evitar el error de fragmentación.
+    papel.classList.add('ac-multipagina');
+    var caja=papel.getBoundingClientRect();
+    var bloque=firma.getBoundingClientRect();
+    var final=bloque.bottom-caja.top;
+    var margenSeguridad=5*mm;
+    var pagina=Math.max(1,Math.ceil((final+margenSeguridad)/altoPagina));
+    if(pagina===1){
+      papel.classList.remove('ac-multipagina');
+      return;
+    }
+    // El bloque se empuja hacia el pie de la última hoja; jamás se parte.
+    // Si no hay espacio, el salto natural de página lo mueve completo.
+    var libre=pagina*altoPagina-final-margenSeguridad;
+    if(libre>0)firma.style.setProperty('--ac-desplazamiento-firma',libre+'px');
+  }
+  window.addEventListener('beforeprint',ajustarFirma);
+  window.addEventListener('load',ajustarFirma);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(ajustarFirma);
+  ajustarFirma();
+})();
+<\/script>`;
+}
+
 function estilosImpresion(){
   return `
 @page{size:A4 portrait;margin:12mm 15mm}
@@ -1581,6 +1624,9 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
    .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:auto!important;break-inside:avoid!important;page-break-inside:avoid!important}
+   /* Multipágina: no fragmentar un contenedor flex de altura mínima A4. */
+   .ac-paper.ac-multipagina{display:block!important;min-height:0!important}
+   .ac-paper.ac-multipagina .ac-firma-area{margin-top:var(--ac-desplazamiento-firma,0px)!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
 
@@ -1655,6 +1701,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
   .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:272mm!important;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
+   .auro-cert-preview-sheet>.ac-paper.ac-multipagina{display:block!important;min-height:0!important}
 }
 </style>
 </head>
@@ -1669,6 +1716,7 @@ html,body{background:#dfe3e8}
   <main class="auro-cert-preview-stage">
     <div class="auro-cert-preview-sheet" id="auroCertPreviewSheet">${htmlDoc}</div>
   </main>
+${scriptPaginacionCertificado()}
 <script>
 (function(){
   function ajustar(){
