@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.4.5-IASYN-CERT-APERTURA-RAPIDA-V2';
+const VERSION='1.4.6-IASYN-CERT-BLOQUES-ANTICORTE';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -459,12 +459,12 @@ function instalarCSS(){
 .ac-reposo{margin-top:16px}
 .ac-reposo-row{font-size:12.2px;line-height:1.5;margin-top:4px}
 /* Cierre indivisible: institucional y profesional se desplazan juntos; reserva superior para firma IASYN. */
-.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:18mm;break-inside:avoid;page-break-inside:avoid}
+.ac-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:10mm;padding-top:10mm;break-inside:avoid;page-break-inside:avoid}
 .ac-centro-contacto{font-size:10.5px;color:#475569;line-height:1.5;min-width:0;overflow-wrap:anywhere;display:grid;gap:5px;align-content:end}
 .ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start}
 .ac-contacto-icono{width:12px;height:12px;display:block;margin-top:2px;color:var(--ac-color,#8b1e5a)}
 .ac-contacto-texto{min-width:0;overflow-wrap:anywhere}
-.ac-sign{text-align:center;font-size:11.5px;position:relative;top:2mm}
+.ac-sign{text-align:center;font-size:11.5px;position:relative;top:0}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.5px}
 .ac-toast-zone{
@@ -1488,7 +1488,7 @@ body{overflow-x:hidden}
   width:100%;
   max-width:100%;
   min-width:0;
-  min-height:272mm;
+  min-height:0;
   margin:0;
   padding:0;
   background:#fff;
@@ -1531,8 +1531,8 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:15mm;
   align-items:end;
-  margin-top:auto;
-  padding-top:18mm;
+  margin-top:10mm;
+  padding-top:10mm;
   break-inside:avoid;
   page-break-inside:avoid;
 }
@@ -1540,7 +1540,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
 .ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start;break-inside:avoid}
 .ac-contacto-icono{display:block;width:12px;height:12px;margin-top:2px;color:var(--ac-color,#8b1e5a)}
 .ac-contacto-texto{min-width:0;overflow-wrap:anywhere}
-.ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere;position:relative;top:2mm}
+.ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere;position:relative;top:0}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.4px}
 
@@ -1567,7 +1567,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     width:100%!important;
     max-width:100%!important;
     min-width:0!important;
-    min-height:272mm!important;
+    min-height:0!important;
     margin:0!important;
     padding:0!important;
     overflow:visible!important;
@@ -1580,7 +1580,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     break-inside:auto!important;
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
-   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:auto!important;break-inside:avoid!important;page-break-inside:avoid!important}
+   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:10mm!important;padding-top:10mm!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
 
@@ -1654,7 +1654,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:272mm!important;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:0!important;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
 }
 </style>
 </head>
