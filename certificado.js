@@ -21,7 +21,7 @@
 
 if(window.auroCertificados?.version) return;
 
-const VERSION='1.4.5-IASYN-CERT-APERTURA-RAPIDA-V2';
+const VERSION='1.4.6-IASYN-CERT-PIE-MULTIPAGINA-V1';
 const JSON_VERSION='AUROSANAX_CERTIFICADO_JSON_V2';
 
 const state={
@@ -1474,37 +1474,49 @@ function docHTML(data,logoResuelto){
 /* IASYN A4: el cierre pertenece al flujo del documento, no a una página fija.
    Medir con la geometría real del navegador evita que flexbox fragmente
    los dos bloques cuando el contenido ocupa más de una hoja. */
-function scriptPaginacionCertificado(){
+ function scriptPaginacionCertificado(){
   return `<script>
 (function(){
   function ajustarFirma(){
     var papel=document.querySelector('.ac-paper');
     var firma=papel&&papel.querySelector('.ac-firma-area');
     if(!papel||!firma)return;
+    // Restaurar antes de medir: nunca acumular desplazamientos de una impresión anterior.
     papel.classList.remove('ac-multipagina');
     firma.style.removeProperty('--ac-desplazamiento-firma');
-    var pxPorMm=document.createElement('div');
-    pxPorMm.style.cssText='position:absolute;visibility:hidden;width:100mm;height:100mm;pointer-events:none';
-    document.body.appendChild(pxPorMm);
-    var mm=pxPorMm.getBoundingClientRect().height/100;
-    pxPorMm.remove();
+    var medida=document.createElement('div');
+    medida.style.cssText='position:absolute;visibility:hidden;width:100mm;height:100mm;pointer-events:none';
+    document.body.appendChild(medida);
+    var mm=medida.getBoundingClientRect().height/100;
+    medida.remove();
     if(!mm)return;
-    var altoPagina=273*mm; // A4 menos márgenes verticales de 12 mm
-    // Se mide el contenido SIN flex para evitar el error de fragmentación.
+    // El modo de UNA página es el original, sin ninguna modificación.
+    // Se mide primero el documento sin la altura mínima de flexbox.
     papel.classList.add('ac-multipagina');
     var caja=papel.getBoundingClientRect();
     var bloque=firma.getBoundingClientRect();
-    var final=bloque.bottom-caja.top;
-    var margenSeguridad=5*mm;
-    var pagina=Math.max(1,Math.ceil((final+margenSeguridad)/altoPagina));
-    if(pagina===1){
+    var altoPagina=273*mm; // A4 297 mm, márgenes superior/inferior de 12 mm.
+    var altoFirma=bloque.height;
+    var inicio=bloque.top-caja.top;
+    var fin=inicio+altoFirma;
+    var tolerancia=0.5*mm;
+    // Si todo cabe en una hoja, conservar EXACTAMENTE la maqueta anterior.
+    if(fin<=altoPagina+tolerancia){
       papel.classList.remove('ac-multipagina');
       return;
     }
-    // El bloque se empuja hacia el pie de la última hoja; jamás se parte.
-    // Si no hay espacio, el salto natural de página lo mueve completo.
-    var libre=pagina*altoPagina-final-margenSeguridad;
-    if(libre>0)firma.style.setProperty('--ac-desplazamiento-firma',libre+'px');
+    // El cierre institucional/profesional es indivisible. Ubicarlo al pie
+    // de la última hoja con espacio; si no cabe, avanzar una hoja completa.
+    var pagina=Math.max(1,Math.floor((inicio+tolerancia)/altoPagina)+1);
+    var finHoja=pagina*altoPagina;
+    if(fin>finHoja+tolerancia){
+      pagina++;
+      finHoja=pagina*altoPagina;
+    }
+    var desplazamiento=Math.max(0,finHoja-fin);
+    if(desplazamiento>tolerancia){
+      firma.style.setProperty('--ac-desplazamiento-firma',desplazamiento+'px');
+    }
   }
   window.addEventListener('beforeprint',ajustarFirma);
   window.addEventListener('load',ajustarFirma);
