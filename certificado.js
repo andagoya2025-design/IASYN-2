@@ -1170,7 +1170,7 @@ async function htmlCompletoFirmaCertificado(certificado){
 <title>Certificado médico</title>
 <style>${estilosImpresion()}</style>
 </head>
-<body>${cuerpo}${scriptPaginacionCertificado()}</body>
+<body>${cuerpo}</body>
 </html>`;
 }
 
