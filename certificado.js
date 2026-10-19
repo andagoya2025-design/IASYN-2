@@ -1138,16 +1138,8 @@ function scriptPaginacionCertificado(){
     var pagina=273*pxmm;
     // Evita que la reserva de pie cree una página vacía por redondeo.
     var paginas=Math.max(1,Math.ceil((natural+2*pxmm)/pagina));
-    // Protección antirregresión: una hoja conserva la maqueta aprobada.
-    // Multipágina: no fabricar una altura artificial que empuje el cierre
-    // a una hoja adicional sin contenido clínico.
-    if(paginas===1){
-      papel.style.minHeight='272mm';
-      pie.style.marginTop='auto';
-    }else{
-      papel.style.minHeight='0';
-      pie.style.marginTop='0';
-    }
+    papel.style.minHeight=paginas===1?'272mm':((paginas*273)-1)+'mm';
+    pie.style.marginTop='auto';
     papel.setAttribute('data-iasyn-paginas-previstas',String(paginas));
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ajustarPie,{once:true});
@@ -1532,14 +1524,13 @@ body{overflow-x:hidden}
   width:100%;
   max-width:100%;
   min-width:0;
-  min-height:272mm;
+  min-height:0;
   margin:0;
   padding:0;
   background:#fff;
   overflow:visible;
   position:relative;
-  display:flex;
-  flex-direction:column;
+  display:block;
 }
 .ac-paper,.ac-paper *{min-width:0}
 .ac-paper p,.ac-paper span,.ac-paper b,.ac-paper div{
@@ -1569,16 +1560,25 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
 .ac-dx-doc-row{font-size:12px;line-height:1.45}
 .ac-reposo{margin-top:16px}
 .ac-reposo-row{font-size:12.1px;line-height:1.5;margin-top:4px}
+ /* Antiorfandad: mantener el cierre con el texto clinico anterior cuando quepa.
+    No crea paginas artificiales ni ejecuta JavaScript en el motor de firma. */
+ .ac-paper > p:last-of-type,
+ .ac-paper > .ac-reposo,
+ .ac-paper > .ac-cert-line:last-of-type,
+ .ac-paper > .ac-dx-doc:last-of-type{break-after:avoid-page;page-break-after:avoid}
+ .ac-paper p{orphans:4;widows:4}
+ .ac-dx-doc-title{break-after:avoid-page;page-break-after:avoid}
  .ac-firma-area{
   position:relative;
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:15mm;
   align-items:end;
-  margin-top:auto;
+  margin-top:10mm;
   padding-top:18mm;
   break-inside:avoid;
   page-break-inside:avoid;
+  break-before:avoid-page;
 }
 .ac-centro-contacto{font-size:10.2px;color:#475569;line-height:1.5;overflow-wrap:anywhere;display:grid;gap:5px;align-content:end;min-width:0}
 .ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start;break-inside:avoid}
@@ -1611,20 +1611,19 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     width:100%!important;
     max-width:100%!important;
     min-width:0!important;
-    min-height:272mm;
+    min-height:0!important;
     margin:0!important;
     padding:0!important;
     overflow:visible!important;
     position:relative!important;
-    display:flex!important;
-    flex-direction:column!important;
+    display:block!important;
     transform:none!important;
     translate:none!important;
     page-break-inside:auto!important;
     break-inside:auto!important;
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
-   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;break-inside:avoid!important;page-break-inside:avoid!important}
+   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:10mm!important;break-before:avoid-page!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
 
@@ -1698,7 +1697,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:272mm;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:0!important;margin:0!important;padding:0!important;position:relative!important;display:block!important;transform:none!important}
 }
 </style>
 </head>
