@@ -1138,8 +1138,16 @@ function scriptPaginacionCertificado(){
     var pagina=273*pxmm;
     // Evita que la reserva de pie cree una página vacía por redondeo.
     var paginas=Math.max(1,Math.ceil((natural+2*pxmm)/pagina));
-    papel.style.minHeight=paginas===1?'272mm':((paginas*273)-1)+'mm';
-    pie.style.marginTop='auto';
+    // Protección antirregresión: una hoja conserva la maqueta aprobada.
+    // Multipágina: no fabricar una altura artificial que empuje el cierre
+    // a una hoja adicional sin contenido clínico.
+    if(paginas===1){
+      papel.style.minHeight='272mm';
+      pie.style.marginTop='auto';
+    }else{
+      papel.style.minHeight='0';
+      pie.style.marginTop='0';
+    }
     papel.setAttribute('data-iasyn-paginas-previstas',String(paginas));
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ajustarPie,{once:true});
@@ -1162,7 +1170,7 @@ async function htmlCompletoFirmaCertificado(certificado){
 <title>Certificado médico</title>
 <style>${estilosImpresion()}</style>
 </head>
-<body>${cuerpo}</body>
+<body>${cuerpo}${scriptPaginacionCertificado()}</body>
 </html>`;
 }
 
@@ -1616,7 +1624,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     break-inside:auto!important;
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
-   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:auto!important;break-inside:avoid!important;page-break-inside:avoid!important}
+   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
 
