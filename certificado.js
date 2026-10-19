@@ -1611,7 +1611,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     width:100%!important;
     max-width:100%!important;
     min-width:0!important;
-    min-height:272mm!important;
+    min-height:265mm!important; /* Reserva de seguridad de 8 mm dentro del A4 útil (273 mm): evita desbordamiento por redondeo/renderizado al firmar. */
     margin:0!important;
     padding:0!important;
     overflow:visible!important;
