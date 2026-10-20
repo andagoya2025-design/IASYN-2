@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.5-IASYN-CIE10-FIRMA-ROBUSTA-ANTIRREGRESIVA';
+const VERSION='1.4.0-IASYN-FIRMA-ORDEN-MEDICA-CANDIDATA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -512,7 +512,7 @@ function datosDocumentoEmitido(reg){
     fecha_emision:txt(reg?.fecha_emision||d.fecha_emision),
     estado:txt(reg?.estado)||'Emitida',
     version:Number(reg?.version||d.version_documento||1)||1,
-    detalle_json:Object.assign({},d,{items,diagnosticos:diagnosticosUnicosOrden(d.diagnosticos||[])})
+    detalle_json:Object.assign({},d,{items})
   };
 }
 
@@ -587,8 +587,7 @@ function clonarDocumentoEmitido(reg){
   const d=parse(base.detalle_json);
   return Object.assign({},base,{
     detalle_json:Object.assign({},d,{
-      items:itemsUnicos(d.items||[]),
-      diagnosticos:diagnosticosUnicosOrden(d.diagnosticos||[])
+      items:itemsUnicos(d.items||[])
     })
   });
 }
@@ -624,13 +623,6 @@ function instalarCSS(){
   s.textContent=`
 #iasynOrdenMedicaFormalApp{margin-top:14px;font-family:inherit;color:#1f2937}
 #iasynOrdenMedicaFormalApp *{box-sizing:border-box}
-.aom-dx-live{border:1px solid #ead7e2;border-radius:12px;background:#fffafd;padding:10px 12px;margin-bottom:12px;font-size:12px}
-.aom-dx-live>strong{color:#8b1e5a}
-.aom-dx-error{color:#991b1b;margin-top:5px}
-.aom-diagnosticos{margin:8px 0 14px;padding:9px 12px;border:1px solid #ead7e2;border-radius:8px;font-size:11.5px;break-inside:avoid}
-.aom-diagnosticos-title{font-weight:800;color:#8b1e5a;margin-bottom:6px}
-.aom-diagnosticos ol{margin:0;padding-left:18px}.aom-diagnosticos li{margin:3px 0}
-
 .aom-shell{border:1px solid #ead7e2;border-radius:16px;background:#fff;padding:14px}
 .aom-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .aom-title{font-weight:850;color:#111827;display:flex;align-items:center;gap:8px}
@@ -641,15 +633,20 @@ function instalarCSS(){
 .aom-notice.ok{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
 .aom-notice.warn{background:#fffbeb;border-color:#fde68a;color:#92400e}
 .aom-notice.err{background:#fef2f2;border-color:#fecaca;color:#991b1b}
-.aom-history{margin-top:12px;border-top:1px solid #f1f5f9;padding-top:12px}
+ .aom-dx-live{margin-top:12px;padding:12px 14px;background:#fffafd;border:1px solid #f1d6e5;border-radius:12px;font-size:12px;color:#374151}
+ .aom-dx-live>strong{display:block;margin-bottom:7px;color:#7a174f;font-size:13px}
+ .aom-diagnosticos{margin:12px 0;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:11px;line-height:1.55;break-inside:avoid}
+ .aom-diagnosticos-title{font-weight:800;color:#374151;margin-bottom:5px}
+ .aom-diagnosticos ol{margin:0;padding-left:20px}
+ .aom-history{margin-top:12px;border-top:1px solid #f1f5f9;padding-top:12px}
 .aom-history-title{font-size:12px;font-weight:850;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin-bottom:8px}
-.aom-row{display:flex;flex-direction:column;align-items:stretch;gap:12px;padding:15px 16px;margin:10px 0;border:1px solid #ecdce5;border-radius:14px;background:linear-gradient(135deg,#fff,#fffafd);box-shadow:0 2px 9px rgba(95,34,65,.045)}
+.aom-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid #f1f5f9}
 .aom-row:last-child{border-bottom:0}
 .aom-row-main{min-width:0}
-.aom-row-main strong{display:block;font-size:13px;overflow-wrap:anywhere;word-break:break-word;line-height:1.5;color:#711b4a}
+.aom-row-main strong{display:block;font-size:13px;overflow-wrap:anywhere}
 .aom-row-main small{display:block;color:#6b7280;margin-top:2px}
-.aom-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-start;border-top:1px solid #f4e8ef;padding-top:11px}
-.aom-btn{border:1px solid #e2d7df;background:#fff;color:#57334a;border-radius:10px;padding:8px 11px;font-size:12px;font-weight:750;white-space:normal;cursor:pointer}
+.aom-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.aom-btn{border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:10px;padding:6px 9px;font-size:12px;font-weight:750}
 .aom-btn:hover{background:#f9fafb}
 .aom-btn.danger{border-color:#fecaca;color:#991b1b;background:#fff7f7}
 .aom-empty{font-size:12.5px;color:#6b7280;padding:4px 0}
@@ -675,7 +672,7 @@ function instalarCSS(){
 .aom-doc-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
 .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top}
 .aom-doc-table th{background:#f8fafc;text-align:left}
-.aom-doc-bottom{position:relative;margin-top:24mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
+.aom-doc-bottom{position:absolute;left:17mm;right:17mm;bottom:15mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
 @media(max-width:760px){
   .aom-shell{padding:12px}
   .aom-head{align-items:stretch}
@@ -755,7 +752,6 @@ function render(){
   });
   app.innerHTML=`
     <div class="aom-shell">
-      <div class="aom-dx-live"><strong>Diagnósticos de esta atención</strong>${state.diagnosticosCargando?'<div>Consultando diagnósticos CIE-10 guardados…</div>':state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?bloqueDiagnosticosOrden(state.diagnosticos):`<div class="aom-dx-error">${esc(state.diagnosticosError||'Diagnósticos pendientes de verificación.')}</div>`}</div>
       <div class="aom-head">
         <div>
           <div class="aom-title"><i class="bi bi-file-earmark-medical"></i> Documento formal de orden médica</div>
@@ -766,6 +762,7 @@ function render(){
         </button>
       </div>
       <div id="iasynOrdenMedicaAviso" class="aom-notice ${e.disabled?'warn':''}">${esc(e.nota)}</div>
+      <div class="aom-dx-live"><strong>Diagnósticos de esta atención</strong>${state.diagnosticosCargando?'<div>Consultando CIE-10…</div>':state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?bloqueDiagnosticosOrden(state.diagnosticos):`<div>${esc(state.diagnosticosError||'Pendientes de verificación.')}</div>`}</div>
       <div class="aom-history">
         <div class="aom-history-title">Órdenes emitidas en esta atención</div>
         ${emitidas.length?emitidas.map(r=>filaHistorial(r)).join(''):'<div class="aom-empty">Todavía no hay órdenes formales emitidas para esta atención.</div>'}
@@ -860,19 +857,15 @@ async function emitir(){
   }
 
   const idEmision=txt(contexto().id);
-  if(!idEmision) return aviso('No existe una atención activa.','err');
-  if(state.diagnosticosCargando) return aviso('Espere a que termine la verificación de diagnósticos.','warn');
   let data;
   try{
-    // Refrescar desde la fuente oficial al emitir; no usar un caché potencialmente obsoleto.
     const diagnosticos=await consultarDiagnosticosPersistidos(idEmision);
-    if(txt(contexto().id)!==idEmision||txt(state.idAtencion)!==idEmision) throw Error('Cambió la atención durante la consulta de diagnósticos.');
+    if(txt(contexto().id)!==idEmision) throw Error('Cambió la atención durante la consulta CIE-10.');
+    data=datosDocumentoDesdePlan(diagnosticos);
     state.diagnosticos=diagnosticos;
     state.diagnosticosAtencion=idEmision;
     state.diagnosticosVerificados=true;
-    state.diagnosticosError='';
-    data=datosDocumentoDesdePlan(diagnosticos);
-  }catch(e){aviso('No se pudo verificar CIE-10: '+(e.message||e),'err');return;}
+  }catch(e){aviso('No se pudo preparar la orden y sus diagnósticos: '+(e.message||e),'err');return;}
 
   if(!confirm(`Se emitirá una orden médica formal con ${data.detalle_json.items.length} ítem(s). ¿Continuar?`)) return;
 
@@ -1123,7 +1116,7 @@ function estilosImpresion(){
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
   ${document.getElementById('iasynOrdenMedicaCSS')?.textContent||''}
-  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm 48mm!important}.aom-doc-bottom{position:relative!important;margin-top:24mm!important;left:auto!important;right:auto!important;bottom:auto!important}}
+  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm 48mm!important}.aom-doc-bottom{position:absolute!important;left:17mm!important;right:17mm!important;bottom:15mm!important}}
   `;
 }
 
@@ -1383,14 +1376,12 @@ window.IASYN_ORDENES_MEDICAS={
   estado:state,
   inicializar,
   cargar,
-    refrescar:refrescarEstadoLocal,
-    cargarDiagnosticos:()=>cargarDiagnosticosOrden(contexto().id),
-    obtenerDiagnosticos:()=>state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?diagnosticosUnicosOrden(state.diagnosticos):[],
+  refrescar:refrescarEstadoLocal,
   obtenerContexto:contexto,
   obtenerItemsPlan:()=>itemsPlanActual(),
-  obtenerDatosEmision:()=>{if(!state.diagnosticosVerificados||state.diagnosticosAtencion!==txt(contexto().id)) throw Error('Los diagnósticos CIE-10 aún no han sido verificados.');return datosDocumentoDesdePlan(state.diagnosticos);},
+  obtenerDatosEmision:()=>datosDocumentoDesdePlan(),
   construirDocumento:docHTML,
-  imprimir:data=>imprimirDocumento(data||window.IASYN_ORDENES_MEDICAS.obtenerDatosEmision(),false)
+  imprimir:data=>imprimirDocumento(data||datosDocumentoDesdePlan(),false)
 };
 
 if(document.readyState==='loading'){
