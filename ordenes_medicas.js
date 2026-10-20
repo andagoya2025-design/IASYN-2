@@ -1149,6 +1149,10 @@ function estilosImpresion(){
   .aom-doc-title{text-align:center;font-size:19px;font-weight:900;letter-spacing:.04em;margin:13px 0 18px}
   .aom-doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 20px;font-size:12px;margin-bottom:18px;break-inside:avoid}
   .aom-doc-label{color:#6b7280;font-weight:700}
+  .aom-diagnosticos{margin:7px 0 12px;padding:7px 9px;border:1px solid #ead7e2;border-radius:7px;font-size:9.5px;line-height:1.4;break-inside:avoid}
+  .aom-diagnosticos-title{font-size:9.5px;font-weight:800;color:#8b1e5a;margin-bottom:4px}
+  .aom-diagnosticos ol{margin:0;padding-left:17px}
+  .aom-diagnosticos li{font-size:9.5px;line-height:1.4;margin:2px 0}
   .aom-doc-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
   .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top;overflow-wrap:anywhere}
   .aom-doc-table th{background:#f8fafc;text-align:left}
