@@ -6593,8 +6593,11 @@ function auroRecetaFirmaInstalarEventosMotor(){
     }catch(_e){ return ''; }
   }
 
-  async function auroRecetaFirmaHtmlCanonico(receta){
+  async function auroRecetaFirmaHtmlCanonico(receta, diagnosticosVerificados){
     const persistida=normalizarRecetaGuardada(receta||{});
+    if(Array.isArray(diagnosticosVerificados) && diagnosticosVerificados.length){
+      persistida.diagnosticos=diagnosticosVerificados;
+    }
     if(!persistida.id_receta || !persistida.id_atencion){
       throw new Error('La receta no tiene identidad clínica completa.');
     }
@@ -6789,7 +6792,21 @@ function auroRecetaFirmaInstalarEventosMotor(){
       return {success:false,estado:'RECETA_NO_GUARDADA',message:'La receta no está persistida en Google Sheets.'};
     }
 
-    const html=await auroRecetaFirmaHtmlCanonico(persistida);
+    /* IASYN2 DX-FIRMA: consulta de solo lectura; no altera la receta remota.
+       Recuperado de RECETA 04 para impedir firmar sin diagnosticos verificados. */
+    const diagnosticosFirma=auroRecetaDiagnosticosNormalizados(
+      await auroRecetaConsultarDiagnosticosAtencion(idAtn,true)
+    );
+    if(!diagnosticosFirma.length){
+      return {success:false,estado:'DIAGNOSTICOS_NO_VERIFICADOS',
+        message:'No fue posible verificar los diagnósticos de la atención. No se firmó una receta potencialmente incompleta.'};
+    }
+    if(auroRecetaFirmaAtencionActual()!==idAtn){
+      return {success:false,estado:'ATENCION_CAMBIADA',
+        message:'La atención cambió durante la verificación de diagnósticos.'};
+    }
+    const recetaParaFirma={...persistida,diagnosticos:diagnosticosFirma};
+    const html=await auroRecetaFirmaHtmlCanonico(recetaParaFirma,diagnosticosFirma);
     const sha=await auroRecetaFirmaSha256(html);
 
     return {
