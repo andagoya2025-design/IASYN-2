@@ -4289,8 +4289,8 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
         .auro-media-receta .modo-paciente .auro-receta-grid{
           grid-template-columns:repeat(12,minmax(0,1fr))!important;
           gap:0!important;
-          padding:0 0 4px!important;
-          margin:0 0 4px!important;
+          padding:0 0 2px!important;
+          margin:0 0 3px!important;
           border:0!important;
           border-bottom:1px solid #cbd5e1!important;
           border-radius:0!important;
@@ -4299,8 +4299,8 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
         }
 
         .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-dato{
-          padding:2px 5px!important;
-          min-height:28px!important;
+          padding:1px 5px!important;
+          min-height:24px!important;
           border:0!important;
           border-right:1px solid #e5e7eb!important;
           border-radius:0!important;
@@ -4314,14 +4314,14 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
         .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-edad{grid-column:7/8!important}
         .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-fecha{grid-column:8/10!important}
         .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-numero{grid-column:10/13!important;border-right:0!important}
-        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-especialidad{grid-column:1/5!important;border-top:1px solid #eef2f7!important;margin-top:1px!important;padding-top:3px!important}
-        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-medico{grid-column:5/9!important;border-top:1px solid #eef2f7!important;margin-top:1px!important;padding-top:3px!important}
-        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-registro{grid-column:9/13!important;border-top:1px solid #eef2f7!important;margin-top:1px!important;padding-top:3px!important;padding-left:9px!important;border-right:0!important}
+        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-especialidad{grid-column:1/5!important;border-top:1px solid #eef2f7!important;margin-top:0!important;padding-top:1px!important}
+        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-medico{grid-column:5/9!important;border-top:1px solid #eef2f7!important;margin-top:0!important;padding-top:1px!important}
+        .auro-media-receta .modo-paciente .auro-receta-grid .auro-rx-registro{grid-column:9/13!important;border-top:1px solid #eef2f7!important;margin-top:0!important;padding-top:1px!important;padding-left:9px!important;border-right:0!important}
 
         .auro-media-receta .modo-paciente .auro-receta-grid span{
           font-size:7.2px!important;
           line-height:1.04!important;
-          margin-bottom:2px!important;
+          margin-bottom:1px!important;
           letter-spacing:.015em!important;
         }
 
