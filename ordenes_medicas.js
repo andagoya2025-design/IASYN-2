@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.1-IASYN-ORDEN-CIE10-ESTADO-RAPIDO';
+const VERSION='1.4.1-FASE1-DIAGNOSTICOS-Y-ESTADO-FIRMA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -998,16 +998,28 @@ function imprimirPorId(id){
   imprimirDocumento(datosDocumentoEmitido(reg),true);
 }
 
+/* FASE 1: diagnósticos asociados a los ítems de la orden emitida.
+ * No consulta otras atenciones ni inventa diagnósticos no registrados. */
+function diagnosticosOrdenFormal(items){
+  const vistos=new Set();
+  const resultado=[];
+  (Array.isArray(items)?items:[]).forEach(item=>{
+    const codigo=txt(item.codigo_cie10);
+    const descripcion=txt(item.diagnostico);
+    if(!codigo&&!descripcion) return;
+    const clave=norm(codigo)+'|'+norm(descripcion);
+    if(vistos.has(clave)) return;
+    vistos.add(clave);
+    resultado.push({codigo,descripcion});
+  });
+  return resultado;
+}
+
 function docHTML(data){
   const d=data.detalle_json||{};
   const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
-  // Diagnósticos vinculados a las indicaciones efectivamente guardadas en la orden.
-  // No se infieren ni se consultan diagnósticos de otra atención.
-  const diagnosticosOrden=[...new Map(items.filter(o=>txt(o.codigo_cie10)||txt(o.diagnostico)).map(o=>[
-    [txt(o.codigo_cie10).toUpperCase(),txt(o.diagnostico).toLowerCase()].join('|'),
-    {codigo:txt(o.codigo_cie10),descripcion:txt(o.diagnostico)}
-  ])).values()];
+  const diagnosticos=diagnosticosOrdenFormal(items);
   const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
   const contactoCentro=[centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
@@ -1017,7 +1029,7 @@ function docHTML(data){
     <header class="aom-doc-head${logo?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'IASYN')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ' · ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
     <div class="aom-doc-title">ORDEN MÉDICA</div>
     <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
-    ${diagnosticosOrden.length?`<section style="margin:12px 0"><strong>Diagnósticos asociados a la orden (CIE-10)</strong><div style="margin-top:5px;font-size:11.5px">${diagnosticosOrden.map(x=>`<div>${x.codigo?`<strong>${esc(x.codigo)}</strong>`:''}${x.codigo&&x.descripcion?' — ':''}${esc(x.descripcion)}</div>`).join('')}</div></section>`:''}
+    ${diagnosticos.length?`<section class="aom-doc-diagnosticos" style="margin:0 0 14px;break-inside:avoid;page-break-inside:avoid"><strong style="font-size:12px">DIAGNÓSTICOS CLÍNICOS ASOCIADOS A LA ORDEN</strong><div style="font-size:11.5px;line-height:1.55;margin-top:5px">${diagnosticos.map((dx,i)=>`<div>${i+1}. ${dx.codigo?`<strong>CIE-10: ${esc(dx.codigo)}</strong>`:''}${dx.codigo&&dx.descripcion?' — ':''}${esc(dx.descripcion)}</div>`).join('')}</div></section>`:''}
     <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
     ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
     <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${ubicacion?`<div>${esc(ubicacion)}</div>`:''}${contactoCentro?`<div>${esc(contactoCentro)}</div>`:''}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}${data.estado?`<div class="aom-doc-status">Estado documental: ${esc(data.estado)} · Versión ${esc(data.version||1)}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
@@ -1200,9 +1212,9 @@ async function solicitarFirmaOrden(id){
     }
     proceso.id_solicitud=txt(r.id_solicitud);
     if(!proceso.id_solicitud) throw Error('El servidor no devolvió id_solicitud.');
-    aviso('Solicitud enviada a IASYN. Puede continuar trabajando mientras se confirma la firma.');
+    aviso('Solicitud enviada a IASYN. Esperando que el motor presente la selección de firma manual o automática.');
     const inicio=Date.now();
-    while(Date.now()-inicio<60*1000){
+    while(Date.now()-inicio<35*60*1000){
       await new Promise(resolve=>setTimeout(resolve,2000));
       const estado=await postFirmaOrden('obtenerEstadoFirmaElectronica',{id_solicitud:proceso.id_solicitud});
       const valor=txt(estado.estado_firma||estado.estado).toUpperCase();
@@ -1214,10 +1226,9 @@ async function solicitarFirmaOrden(id){
         return;
       }
       if(['ERROR','EXPIRADA','CANCELADA'].includes(valor)) throw Error(txt(estado.error)||'La firma terminó en estado '+valor+'.');
-      if(valor==='TOMADA' && Date.now()-inicio>10000) aviso('IASYN recibió la solicitud; falta confirmar la firma.');
+      if(valor==='TOMADA') aviso('IASYN tomó la orden. Complete la firma manual o automática en la ventana del motor.');
     }
-    aviso('La firma aún está pendiente en IASYN. No se enviará una segunda solicitud automáticamente.','warn');
-    return;
+    throw Error('La firma sigue pendiente. Consulte nuevamente el estado antes de intentar otra firma.');
   }catch(e){
     aviso('No se completó la firma: '+txt(e?.message||e),'err');
   }finally{
