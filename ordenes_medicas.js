@@ -1151,13 +1151,14 @@ function estilosImpresion(){
   .aom-print-toolbar button{border:0;border-radius:10px;padding:9px 13px;font-weight:700;cursor:pointer}
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}
   .aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
-  .aom-view{padding:18px;overflow:auto;background:#eef2f7}
-  .aom-stage{transform-origin:top left;margin:0 auto;width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 6px 24px #0002}
+  .aom-view{padding:18px;overflow:auto;background:#eef2f7;min-height:calc(100vh - 60px)}
+  .aom-stage{margin:0 auto;width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 6px 24px #0002}
+  .aom-stage .aom-paper{width:100%;min-height:273mm}
   @media print{
     html,body{background:#fff!important;overflow:visible!important}
     .aom-print-toolbar{display:none!important}
     .aom-view{padding:0!important;overflow:visible!important;background:#fff!important}
-    .aom-stage{transform:none!important;width:auto!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;box-shadow:none!important}
+    .aom-stage{zoom:1!important;transform:none!important;width:auto!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;box-shadow:none!important}
     .aom-paper{min-height:272mm!important;width:100%!important;padding:0!important;display:flex!important;flex-direction:column!important}
     .aom-doc-bottom{margin-top:auto!important;break-inside:avoid!important}
   }`;
@@ -1190,12 +1191,34 @@ function imprimirDocumento(data,autoPrint=false){
   if(!data) return;
   const w=window.open('','_blank');
   if(!w){alert('El navegador bloqueó la ventana de impresión.');return;}
+  // Apertura inmediata: no esperar al backend para mostrar el visor.
   const html=`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Orden Médica</title><style>${estilosImpresion()}</style></head><body>
     <div class="aom-print-toolbar"><button class="primary" onclick="window.print()">Imprimir / Guardar PDF</button><button class="secondary" onclick="window.close()">Cerrar</button></div>
     <div class="aom-view" id="aomView"><div class="aom-stage" id="aomStage">${docHTML(data)}</div></div>
-    <script>(function(){function fit(){var v=document.getElementById('aomView'),s=document.getElementById('aomStage'),p=s&&s.querySelector('.aom-paper');if(!v||!s||!p)return;var mm=p.getBoundingClientRect().width||794;var avail=Math.max(280,v.clientWidth-12);var scale=Math.min(1,avail/mm);s.style.width=mm+'px';s.style.transform='scale('+scale+')';s.style.height=(p.scrollHeight*scale)+'px';}window.addEventListener('load',fit);window.addEventListener('resize',fit);setTimeout(fit,50);})();<\/script>
+    <script>(function(){function fit(){var v=document.getElementById('aomView'),s=document.getElementById('aomStage');if(!v||!s)return;var natural=s.offsetWidth||794;var available=Math.max(1,v.clientWidth-2);var scale=Math.min(1,available/natural);s.style.zoom=String(scale);s.style.transform='none';s.style.height='auto';}window.addEventListener('load',fit);window.addEventListener('resize',fit);setTimeout(fit,50);})();<\/script>
   </body></html>`;
   w.document.open();w.document.write(html);w.document.close();
+  // El PDF firmado ya obtiene el logo como data URL del backend. Reutilizar
+  // esa misma fuente solo en el visor, sin modificar htmlFirmaOrden ni su motor.
+  const cargarLogo=async()=>{
+    try{
+      const logo=await resolverLogoFirmaOrden(data);
+      if(!logo||w.closed) return;
+      const doc=w.document;
+      const header=doc.querySelector('.aom-doc-head');
+      if(!header) return;
+      let wrap=header.querySelector('.aom-logo-wrap');
+      if(!wrap){
+        wrap=doc.createElement('div');wrap.className='aom-logo-wrap';
+        wrap.appendChild(doc.createElement('img'));
+        header.insertBefore(wrap,header.firstChild);
+      }
+      const img=wrap.querySelector('img');
+      img.className='aom-logo';img.alt='Logotipo institucional';img.src=logo;
+      header.classList.remove('no-logo');
+    }catch(e){console.warn('IASYN Órdenes: no se pudo cargar el logo del visor',e);}
+  };
+  void cargarLogo();
   if(autoPrint){
     w.addEventListener('load',()=>setTimeout(()=>w.print(),180),{once:true});
   }
