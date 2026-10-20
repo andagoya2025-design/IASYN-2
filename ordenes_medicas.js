@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.2-IASYN-CIE10-FIRMA-ROBUSTA-ANTIRREGRESIVA';
+const VERSION='1.4.3-IASYN-CIE10-FIRMA-ROBUSTA-ANTIRREGRESIVA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -45,6 +45,7 @@ const state={
   cargaFallida:true,
   firmasPorDocumento:{},
   firmaProcesos:new Map(),
+  firmaPendientes:new Map(),
   firmaConsultaToken:0,
   firmaEstadoError:{},
   ultimoAviso:null,
@@ -783,6 +784,7 @@ function render(){
   app.querySelectorAll('[data-aom-imprimir]').forEach(b=>b.addEventListener('click',()=>imprimirPorId(b.dataset.aomImprimir)));
   app.querySelectorAll('[data-aom-anular]').forEach(b=>b.addEventListener('click',()=>anular(b.dataset.aomAnular)));
   app.querySelectorAll('[data-aom-firmar]').forEach(b=>b.addEventListener('click',()=>solicitarFirmaOrden(b.dataset.aomFirmar)));
+  app.querySelectorAll('[data-aom-detener-firma]').forEach(b=>b.addEventListener('click',()=>detenerEsperaFirmaOrden(b.dataset.aomDetenerFirma)));
   app.querySelectorAll('[data-aom-ver-firmado]').forEach(b=>b.addEventListener('click',()=>verOrdenFirmada(b.dataset.aomVerFirmado)));
 }
 
@@ -796,6 +798,7 @@ function filaHistorial(r){
   const firmado=!!state.firmasPorDocumento[id];
   const proceso=state.firmaProcesos.get(id);
   const firmando=!!proceso;
+  const pendiente=state.firmaPendientes.get(id);
   const errorFirma=txt(state.firmaEstadoError[id]);
 
   return `<div class="aom-row">
@@ -808,7 +811,8 @@ function filaHistorial(r){
       ${noEditable?'':`<button type="button" class="aom-btn" data-aom-editar="${esc(id)}"><i class="bi bi-pencil-square"></i> Editar</button>`}
       <button type="button" class="aom-btn" data-aom-imprimir="${esc(id)}"><i class="bi bi-printer"></i> Imprimir</button>
       ${firmado?`<button type="button" class="aom-btn" data-aom-ver-firmado="${esc(id)}"><i class="bi bi-shield-check"></i> Ver firmado</button>`:''}
-      ${!noEditable&&!firmado?`<button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" ${firmando?'disabled':''}><i class="bi bi-pen"></i> ${firmando?'Firma en proceso…':'Firmar / Consultar firma'}</button>`:''}
+      ${!noEditable&&!firmado?`<button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" ${firmando?'disabled':''}><i class="bi bi-pen"></i> ${firmando?'Firma en proceso…':pendiente?'Consultar firma pendiente':'Firmar / Consultar firma'}</button>`:''}
+      ${firmando?`<button type="button" class="aom-btn" data-aom-detener-firma="${esc(id)}">Detener espera</button>`:''}
       ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-slash-circle"></i> Anular</button>`}
     </div>
   </div>`;
@@ -1263,77 +1267,115 @@ async function sincronizarFirmasOrdenes(idAtencion,tokenCarga){
     state.firmasPorDocumento=nuevas;
   }
 }
+// Detiene SOLO la espera del navegador; no revoca una firma ni cancela una solicitud del servidor.
+function detenerEsperaFirmaOrden(id){
+  const proceso=state.firmaProcesos.get(txt(id));
+  if(!proceso) return;
+  proceso.cancelado=true;
+  aviso('Se detuvo la espera en pantalla. La solicitud puede seguir pendiente en el motor. Consulte su estado antes de volver a firmar.','warn');
+  render();
+}
+function pausaFirma(ms){return new Promise(resolve=>setTimeout(resolve,ms));}
+function estadoFirmaRespuesta(r){return txt(r?.estado_firma||r?.estado||r?.data?.estado_firma||r?.data?.estado).toUpperCase();}
 async function solicitarFirmaOrden(id){
   id=txt(id);
-  if(state.firmaProcesos.has(id)) return aviso('Ya existe una solicitud de firma en curso.','warn');
+  if(state.firmaProcesos.has(id)) return aviso('Ya existe una consulta de firma en curso.','warn');
   const idAtencionInicio=txt(contexto().id);
   const tokenInicio=state.token;
-  const sigueMismaAtencion=()=>txt(contexto().id)===idAtencionInicio&&txt(state.idAtencion)===idAtencionInicio&&state.token===tokenInicio;
-  const verificarContexto=()=>{if(!sigueMismaAtencion()) throw Error('La atención cambió durante el proceso de firma. Consulte la orden original.');};
+  const mismaAtencion=()=>txt(contexto().id)===idAtencionInicio&&txt(state.idAtencion)===idAtencionInicio&&state.token===tokenInicio;
+  const verificar=()=>{if(!mismaAtencion()) throw Error('La atención cambió. Consulte la orden original.');};
+  let proceso=null;
   try{
     const solicitud=prepararSolicitudFirmaOrden(id);
-    if(state.firmasPorDocumento[id]) return verOrdenFirmada(id);
-    // La consulta remota previa evita una firma duplicada tras recargar el navegador.
     const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===id);
-    const existente=await consultarFirmaOrden(reg);
-    verificarContexto();
-    if(existente){
-      state.firmasPorDocumento[id]=existente;
-      render();
-      return aviso('Esta versión ya está firmada. Use Ver firmado.','ok');
-    }
-    if(!window.confirm('¿Enviar esta versión de la orden médica al motor de firma electrónica?')) return;
-    verificarContexto();
-    const proceso={id_atencion:solicitud.id_atencion,id_solicitud:'',cancelado:false};
+    if(state.firmasPorDocumento[id]) return verOrdenFirmada(id);
+    // Bloqueo antes de cualquier await para evitar doble clic y solicitudes duplicadas.
+    proceso={id_atencion:solicitud.id_atencion,id_solicitud:'',cancelado:false};
     state.firmaProcesos.set(id,proceso);
     render();
-    aviso('Enviando orden médica para una firma electrónica…');
-    const r=await postFirmaOrden('firmarDocumento',solicitud);
-    verificarContexto();
-    if(txt(r.estado_firma).toUpperCase()==='FIRMADO'){
-      const firmada=await consultarFirmaOrden(reg);
-      verificarContexto();
-      if(!firmada) throw Error('El servidor indicó FIRMADO, pero no se confirmó el documento archivado.');
-      state.firmasPorDocumento[id]=firmada;
-      aviso('Orden médica firmada y archivada.','ok');
+    aviso('Verificando si ya existe una firma o solicitud pendiente…');
+    const existente=await consultarFirmaOrden(reg);
+    verificar();
+    if(proceso.cancelado) return;
+    if(existente){
+      state.firmasPorDocumento[id]=existente;
+      state.firmaPendientes.delete(id);
+      aviso('Esta versión ya está firmada. Use Ver firmado.','ok');
       return;
     }
-    proceso.id_solicitud=txt(r.id_solicitud);
-    if(!proceso.id_solicitud) throw Error('El servidor no devolvió id_solicitud.');
-    aviso('Solicitud creada. El motor de firma debe procesarla; siga las indicaciones del firmador.');
+    const clave='IASYN_ORDEN_FIRMA_PENDIENTE_'+id+'_V'+solicitud.version_documento;
+    let pendiente=state.firmaPendientes.get(id)||'';
+    if(!pendiente){try{pendiente=txt(sessionStorage.getItem(clave));}catch(_e){}}
+    if(pendiente){
+      proceso.id_solicitud=pendiente;
+      state.firmaPendientes.set(id,pendiente);
+      aviso('Consultando solicitud anterior. No se generará otra firma.','warn');
+    }else{
+      if(!window.confirm('¿Enviar esta versión de la orden médica al motor de firma electrónica?')) return;
+      verificar();
+      if(proceso.cancelado) return;
+      aviso('Enviando solicitud al motor de firma…');
+      let r;
+      try{r=await postFirmaOrden('firmarDocumento',solicitud);}
+      catch(e){
+        // Una petición de firma puede haberse creado aunque se pierda la respuesta.
+        throw Error('No se confirmó la creación de la solicitud. Revise el motor y el historial antes de reintentar: '+txt(e?.message||e));
+      }
+      verificar();
+      if(estadoFirmaRespuesta(r)==='FIRMADO'){
+        const firmada=await consultarFirmaOrden(reg);
+        verificar();
+        if(!firmada) throw Error('El servidor informó FIRMADO, pero aún no se confirmó el archivo.');
+        state.firmasPorDocumento[id]=firmada;
+        aviso('Orden médica firmada y archivada.','ok');
+        return;
+      }
+      proceso.id_solicitud=txt(r.id_solicitud||r.data?.id_solicitud);
+      if(!proceso.id_solicitud) throw Error('El servidor no devolvió id_solicitud. Compruebe el historial antes de reintentar.');
+      state.firmaPendientes.set(id,proceso.id_solicitud);
+      try{sessionStorage.setItem(clave,proceso.id_solicitud);}catch(_e){}
+      aviso('Solicitud creada. Complete la firma en el programa firmador. Puede detener la espera sin cancelar la solicitud.');
+    }
+    // Espera acotada: no deja la interfaz atrapada durante 35 minutos.
     const inicio=Date.now();
-    while(Date.now()-inicio<35*60*1000){
-      await new Promise(resolve=>setTimeout(resolve,2000));
-      verificarContexto();
+    while(Date.now()-inicio<120000){
+      if(proceso.cancelado) return;
+      await pausaFirma(2000);
+      if(proceso.cancelado) return;
+      verificar();
       let estado;
       try{estado=await postFirmaOrden('obtenerEstadoFirmaElectronica',{id_solicitud:proceso.id_solicitud});}
-      catch(e){
-        // Una caída temporal de red no significa que la firma haya fallado.
-        if(sigueMismaAtencion()) aviso('Firma pendiente. No se pudo consultar el estado temporalmente; se reintentará.','warn');
-        continue;
-      }
-      verificarContexto();
-      const valor=txt(estado.estado_firma||estado.estado||estado.data?.estado_firma||estado.data?.estado).toUpperCase();
+      catch(e){aviso('No se pudo consultar el estado. Puede detener la espera y consultar después.','warn');continue;}
+      verificar();
+      if(proceso.cancelado) return;
+      const valor=estadoFirmaRespuesta(estado);
       if(valor==='FIRMADO'){
         let firmada=null;
-        for(let intento=0;intento<5&&!firmada;intento++){
-          if(intento) await new Promise(resolve=>setTimeout(resolve,1500));
-          verificarContexto();
+        for(let i=0;i<5&&!firmada;i++){
+          if(i) await pausaFirma(1500);
+          verificar();
+          if(proceso.cancelado) return;
           try{firmada=await consultarFirmaOrden(reg);}catch(_e){}
         }
-        if(!firmada) throw Error('Firma reportada, pero el PDF archivado aún no se confirmó. Consulte nuevamente antes de generar otra solicitud.');
+        if(!firmada) throw Error('El motor reportó firma, pero todavía no se confirmó el PDF archivado.');
         state.firmasPorDocumento[id]=firmada;
+        state.firmaPendientes.delete(id);
+        try{sessionStorage.removeItem(clave);}catch(_e){}
         aviso('Orden médica firmada electrónicamente y archivada.','ok');
         return;
       }
-      if(['ERROR','EXPIRADA','CANCELADA'].includes(valor)) throw Error(txt(estado.error)||'La firma terminó en estado '+valor+'.');
+      if(['ERROR','EXPIRADA','CANCELADA'].includes(valor)){
+        state.firmaPendientes.delete(id);
+        try{sessionStorage.removeItem(clave);}catch(_e){}
+        throw Error(txt(estado.error||estado.message)||'La solicitud terminó en estado '+valor+'.');
+      }
       if(valor==='TOMADA') aviso('El motor tomó la solicitud. Complete la firma en el programa correspondiente.');
     }
-    throw Error('La firma sigue pendiente. Consulte nuevamente el estado antes de intentar otra firma.');
+    aviso('La solicitud continúa pendiente. Se detuvo la espera automática; use Consultar firma pendiente para revisar sin duplicarla.','warn');
   }catch(e){
-    aviso('No se completó la firma: '+txt(e?.message||e),'err');
+    aviso('No se completó la verificación de firma: '+txt(e?.message||e),'err');
   }finally{
-    state.firmaProcesos.delete(id);
+    if(state.firmaProcesos.get(id)===proceso) state.firmaProcesos.delete(id);
     render();
   }
 }
