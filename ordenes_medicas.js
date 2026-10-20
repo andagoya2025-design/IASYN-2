@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.1-IASYN-CIE10-ANTIRREGRESIVO';
+const VERSION='1.4.2-IASYN-CIE10-FIRMA-ROBUSTA-ANTIRREGRESIVA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -46,6 +46,7 @@ const state={
   firmasPorDocumento:{},
   firmaProcesos:new Map(),
   firmaConsultaToken:0,
+  firmaEstadoError:{},
   ultimoAviso:null,
   diagnosticos:[],
   diagnosticosAtencion:'',
@@ -675,7 +676,7 @@ function instalarCSS(){
 .aom-doc-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
 .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top}
 .aom-doc-table th{background:#f8fafc;text-align:left}
-.aom-doc-bottom{position:absolute;left:17mm;right:17mm;bottom:15mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
+.aom-doc-bottom{position:relative;margin-top:24mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
 @media(max-width:760px){
   .aom-shell{padding:12px}
   .aom-head{align-items:stretch}
@@ -795,6 +796,7 @@ function filaHistorial(r){
   const firmado=!!state.firmasPorDocumento[id];
   const proceso=state.firmaProcesos.get(id);
   const firmando=!!proceso;
+  const errorFirma=txt(state.firmaEstadoError[id]);
 
   return `<div class="aom-row">
     <div class="aom-row-main">
@@ -806,7 +808,7 @@ function filaHistorial(r){
       ${noEditable?'':`<button type="button" class="aom-btn" data-aom-editar="${esc(id)}"><i class="bi bi-pencil-square"></i> Editar</button>`}
       <button type="button" class="aom-btn" data-aom-imprimir="${esc(id)}"><i class="bi bi-printer"></i> Imprimir</button>
       ${firmado?`<button type="button" class="aom-btn" data-aom-ver-firmado="${esc(id)}"><i class="bi bi-shield-check"></i> Ver firmado</button>`:''}
-      ${!noEditable&&!firmado?`<button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" ${firmando?'disabled':''}><i class="bi bi-pen"></i> ${firmando?'Firma en proceso…':'Firmar'}</button>`:''}
+      ${!noEditable&&!firmado?`<button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" ${firmando?'disabled':''}><i class="bi bi-pen"></i> ${firmando?'Firma en proceso…':'Firmar / Consultar firma'}</button>`:''}
       ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-slash-circle"></i> Anular</button>`}
     </div>
   </div>`;
@@ -1123,7 +1125,7 @@ function estilosImpresion(){
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
   ${document.getElementById('iasynOrdenMedicaCSS')?.textContent||''}
-  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm 48mm!important}.aom-doc-bottom{position:absolute!important;left:17mm!important;right:17mm!important;bottom:15mm!important}}
+  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm 48mm!important}.aom-doc-bottom{position:relative!important;margin-top:24mm!important;left:auto!important;right:auto!important;bottom:auto!important}}
   `;
 }
 
@@ -1222,7 +1224,7 @@ async function inicializar(){
  */
 async function postFirmaOrden(accion,data){
   const r=await post(accion,data);
-  if(!r||r.success===false||r.ok===false) throw Error(txt(r?.message||r?.error)||'El servidor rechazó '+accion+'.');
+  if(!r||typeof r!=='object'||r.success===false||r.ok===false||r.exito===false||['error','failed','rechazado'].includes(norm(r.status))) throw Error(txt(r?.message||r?.mensaje||r?.error)||'El servidor rechazó '+accion+'.');
   return r;
 }
 function firmaOrdenExacta(doc,id,version){
@@ -1230,7 +1232,7 @@ function firmaOrdenExacta(doc,id,version){
   const tipo=txt(doc?.tipo_documento).toUpperCase();
   const estado=txt(doc?.estado_firma||doc?.estado).toUpperCase();
   let detalle={};
-  try{detalle=JSON.parse(txt(doc?.detalle_json)||'{}');}catch(_e){}
+  detalle=parse(doc?.detalle_json);
   const v=Number(doc?.version_documento||detalle.version_documento||doc?.version||0);
   return tipo==='ORDEN_MEDICA' && origen===txt(id) && estado==='FIRMADO' && v===Number(version);
 }
@@ -1241,7 +1243,7 @@ async function consultarFirmaOrden(reg){
     tipo_documento:'ORDEN_MEDICA',id_documento_origen:id,id_orden:id,
     id_atencion:txt(reg.id_atencion),version_documento:version
   });
-  const docs=Array.isArray(r.documentos)?r.documentos:[];
+  const docs=Array.isArray(r.documentos)?r.documentos:Array.isArray(r.data?.documentos)?r.data.documentos:Array.isArray(r.data)?r.data:[];
   return docs.find(x=>firmaOrdenExacta(x,id,version))||null;
 }
 async function sincronizarFirmasOrdenes(idAtencion,tokenCarga){
@@ -1264,25 +1266,33 @@ async function sincronizarFirmasOrdenes(idAtencion,tokenCarga){
 async function solicitarFirmaOrden(id){
   id=txt(id);
   if(state.firmaProcesos.has(id)) return aviso('Ya existe una solicitud de firma en curso.','warn');
+  const idAtencionInicio=txt(contexto().id);
+  const tokenInicio=state.token;
+  const sigueMismaAtencion=()=>txt(contexto().id)===idAtencionInicio&&txt(state.idAtencion)===idAtencionInicio&&state.token===tokenInicio;
+  const verificarContexto=()=>{if(!sigueMismaAtencion()) throw Error('La atención cambió durante el proceso de firma. Consulte la orden original.');};
   try{
     const solicitud=prepararSolicitudFirmaOrden(id);
     if(state.firmasPorDocumento[id]) return verOrdenFirmada(id);
     // La consulta remota previa evita una firma duplicada tras recargar el navegador.
     const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===id);
     const existente=await consultarFirmaOrden(reg);
+    verificarContexto();
     if(existente){
       state.firmasPorDocumento[id]=existente;
       render();
       return aviso('Esta versión ya está firmada. Use Ver firmado.','ok');
     }
-    if(!window.confirm('¿Firmar electrónicamente esta versión de la orden médica?')) return;
+    if(!window.confirm('¿Enviar esta versión de la orden médica al motor de firma electrónica?')) return;
+    verificarContexto();
     const proceso={id_atencion:solicitud.id_atencion,id_solicitud:'',cancelado:false};
     state.firmaProcesos.set(id,proceso);
     render();
     aviso('Enviando orden médica para una firma electrónica…');
     const r=await postFirmaOrden('firmarDocumento',solicitud);
+    verificarContexto();
     if(txt(r.estado_firma).toUpperCase()==='FIRMADO'){
       const firmada=await consultarFirmaOrden(reg);
+      verificarContexto();
       if(!firmada) throw Error('El servidor indicó FIRMADO, pero no se confirmó el documento archivado.');
       state.firmasPorDocumento[id]=firmada;
       aviso('Orden médica firmada y archivada.','ok');
@@ -1290,21 +1300,34 @@ async function solicitarFirmaOrden(id){
     }
     proceso.id_solicitud=txt(r.id_solicitud);
     if(!proceso.id_solicitud) throw Error('El servidor no devolvió id_solicitud.');
-    aviso('Solicitud creada. Firme el PDF en Adobe y guárdelo.');
+    aviso('Solicitud creada. El motor de firma debe procesarla; siga las indicaciones del firmador.');
     const inicio=Date.now();
     while(Date.now()-inicio<35*60*1000){
       await new Promise(resolve=>setTimeout(resolve,2000));
-      const estado=await postFirmaOrden('obtenerEstadoFirmaElectronica',{id_solicitud:proceso.id_solicitud});
-      const valor=txt(estado.estado_firma||estado.estado).toUpperCase();
+      verificarContexto();
+      let estado;
+      try{estado=await postFirmaOrden('obtenerEstadoFirmaElectronica',{id_solicitud:proceso.id_solicitud});}
+      catch(e){
+        // Una caída temporal de red no significa que la firma haya fallado.
+        if(sigueMismaAtencion()) aviso('Firma pendiente. No se pudo consultar el estado temporalmente; se reintentará.','warn');
+        continue;
+      }
+      verificarContexto();
+      const valor=txt(estado.estado_firma||estado.estado||estado.data?.estado_firma||estado.data?.estado).toUpperCase();
       if(valor==='FIRMADO'){
-        const firmada=await consultarFirmaOrden(reg);
-        if(!firmada) throw Error('La firma fue reportada, pero aún no se pudo confirmar su archivo para esta versión.');
+        let firmada=null;
+        for(let intento=0;intento<5&&!firmada;intento++){
+          if(intento) await new Promise(resolve=>setTimeout(resolve,1500));
+          verificarContexto();
+          try{firmada=await consultarFirmaOrden(reg);}catch(_e){}
+        }
+        if(!firmada) throw Error('Firma reportada, pero el PDF archivado aún no se confirmó. Consulte nuevamente antes de generar otra solicitud.');
         state.firmasPorDocumento[id]=firmada;
         aviso('Orden médica firmada electrónicamente y archivada.','ok');
         return;
       }
       if(['ERROR','EXPIRADA','CANCELADA'].includes(valor)) throw Error(txt(estado.error)||'La firma terminó en estado '+valor+'.');
-      if(valor==='TOMADA') aviso('Adobe está abierto. Firme la orden y guarde el PDF.');
+      if(valor==='TOMADA') aviso('El motor tomó la solicitud. Complete la firma en el programa correspondiente.');
     }
     throw Error('La firma sigue pendiente. Consulte nuevamente el estado antes de intentar otra firma.');
   }catch(e){
@@ -1323,8 +1346,9 @@ async function verOrdenFirmada(id){
       tipo_documento:'ORDEN_MEDICA',id_documento_origen:txt(id),id_orden:txt(id),
       id_atencion:txt(reg.id_atencion),version_documento:datosDocumentoEmitido(reg).version
     });
-    if(!txt(r.pdf_firmado_base64)) throw Error('No se recibió el PDF firmado.');
-    const bin=atob(r.pdf_firmado_base64);
+    const pdf=txt(r.pdf_firmado_base64||r.data?.pdf_firmado_base64);
+    if(!pdf) throw Error('No se recibió el PDF firmado.');
+    const bin=atob(pdf.replace(/^data:application\/pdf;base64,/i,'').replace(/\s/g,''));
     const bytes=new Uint8Array(bin.length);
     for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
     const url=URL.createObjectURL(new Blob([bytes],{type:'application/pdf'}));
@@ -1388,9 +1412,9 @@ window.IASYN_ORDENES_MEDICAS={
     obtenerDiagnosticos:()=>state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?diagnosticosUnicosOrden(state.diagnosticos):[],
   obtenerContexto:contexto,
   obtenerItemsPlan:()=>itemsPlanActual(),
-  obtenerDatosEmision:()=>datosDocumentoDesdePlan(state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?state.diagnosticos:[]),
+  obtenerDatosEmision:()=>{if(!state.diagnosticosVerificados||state.diagnosticosAtencion!==txt(contexto().id)) throw Error('Los diagnósticos CIE-10 aún no han sido verificados.');return datosDocumentoDesdePlan(state.diagnosticos);},
   construirDocumento:docHTML,
-  imprimir:data=>imprimirDocumento(data||datosDocumentoDesdePlan(state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?state.diagnosticos:[]),false)
+  imprimir:data=>imprimirDocumento(data||window.IASYN_ORDENES_MEDICAS.obtenerDatosEmision(),false)
 };
 
 if(document.readyState==='loading'){
