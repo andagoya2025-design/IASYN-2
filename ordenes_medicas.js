@@ -1103,10 +1103,10 @@ function docHTML(data){
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
   const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
-  const contactoCentro=[centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
+  const contactoCentro=[centro.email,centro.telefono,centro.web].map(txt).filter(Boolean);
   const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
   const logoSeguro=/^https?:\/\//i.test(logo)||/^data:image\/(?:png|jpeg|jpg|gif|webp|svg\+xml);base64,/i.test(logo);
-  const logoHtml=logoSeguro?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt="" onerror="this.parentElement.parentElement.classList.add('no-logo');this.parentElement.remove()"></div>`:'';
+  const logoHtml=logoSeguro?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt=""></div>`:'';
   return `<article class="aom-paper" style="--aom-color:${esc(color)}">
     <header class="aom-doc-head${logoSeguro?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'Centro médico')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ' · ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
     <div class="aom-doc-title">ORDEN MÉDICA</div>
@@ -1114,22 +1114,76 @@ function docHTML(data){
     ${bloqueDiagnosticosOrden(d.diagnosticos||[])}
     <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
     ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
-    <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${ubicacion?`<div>${esc(ubicacion)}</div>`:''}${contactoCentro?`<div>${esc(contactoCentro)}</div>`:''}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}${data.estado?`<div class="aom-doc-status">Estado documental: ${esc(data.estado)} · Versión ${esc(data.version||1)}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
+    <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${ubicacion?`<div>${esc(ubicacion)}</div>`:''}${contactoCentro.map(x=>`<div>${esc(x)}</div>`).join('')}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}${data.estado?`<div class="aom-doc-status">Estado documental: ${esc(data.estado)} · Versión ${esc(data.version||1)}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
   </article>`;
 }
 
 function estilosImpresion(){
+  /* HTML autocontenido y estático: sin scripts, fuentes externas ni CSS de la interfaz ERP. */
   return `
-  @page{size:A4 portrait;margin:0}
+  @page{size:A4 portrait;margin:12mm 15mm}
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:#eef2f7;font-family:Arial,sans-serif;color:#111827}
+  html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111827}
+  .aom-paper{width:100%;min-height:272mm;margin:0;padding:0;position:relative;display:flex;flex-direction:column;background:#fff;color:#111827;font-family:Arial,Helvetica,sans-serif}
+  .aom-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid #8b1e5a;padding-bottom:10px;margin-bottom:18px;break-inside:avoid}
+  .aom-doc-head.no-logo{grid-template-columns:minmax(0,1fr) auto}
+  .aom-logo-wrap{width:60px;height:60px;display:block;overflow:hidden}
+  .aom-logo{max-width:60px;max-height:60px;object-fit:contain}
+  .aom-doc-brand{font-size:19px;font-weight:900;color:#8b1e5a;overflow-wrap:anywhere}
+  .aom-doc-sub{font-size:10.5px;color:#4b5563;margin-top:4px}
+  .aom-doc-date{text-align:right;font-size:11px;font-weight:700}
+  .aom-doc-title{text-align:center;font-size:19px;font-weight:900;letter-spacing:.04em;margin:13px 0 18px}
+  .aom-doc-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px 20px;font-size:12px;margin-bottom:18px;break-inside:avoid}
+  .aom-doc-label{color:#6b7280;font-weight:700}
+  .aom-doc-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
+  .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top;overflow-wrap:anywhere}
+  .aom-doc-table th{background:#f8fafc;text-align:left}
+  .aom-doc-table thead{display:table-header-group}
+  .aom-doc-table tr{break-inside:avoid;page-break-inside:avoid}
+  .aom-doc-bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:18mm;break-inside:avoid;page-break-inside:avoid}
+  .aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.55;overflow-wrap:anywhere}
+  .aom-doc-center-contact>div{margin-top:3px}
+  .aom-doc-sign{text-align:center;font-size:11.2px;line-height:1.3;break-inside:avoid}
+  .aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}
+  .aom-doc-sign strong{font-size:12.2px}
+  .aom-doc-status{font-size:9px;color:#64748b}
   .aom-print-toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:center;gap:8px;padding:10px;background:#fff;border-bottom:1px solid #e5e7eb}
   .aom-print-toolbar button{border:0;border-radius:10px;padding:9px 13px;font-weight:700;cursor:pointer}
-  .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
-  .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
-  ${document.getElementById('iasynOrdenMedicaCSS')?.textContent||''}
-  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm 15mm!important;display:block!important}.aom-doc-bottom{position:static!important;margin-top:auto!important;padding-top:15mm!important}}
-  `;
+  .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}
+  .aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
+  .aom-view{padding:18px;overflow:auto;background:#eef2f7}
+  .aom-stage{transform-origin:top left;margin:0 auto;width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 6px 24px #0002}
+  @media print{
+    html,body{background:#fff!important;overflow:visible!important}
+    .aom-print-toolbar{display:none!important}
+    .aom-view{padding:0!important;overflow:visible!important;background:#fff!important}
+    .aom-stage{transform:none!important;width:auto!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;box-shadow:none!important}
+    .aom-paper{min-height:272mm!important;width:100%!important;padding:0!important;display:flex!important;flex-direction:column!important}
+    .aom-doc-bottom{margin-top:auto!important;break-inside:avoid!important}
+  }`;
+}
+
+/* Firma IASYN: solo HTML estático, sin scripts ni atributos de eventos. */
+async function resolverLogoFirmaOrden(data){
+  const cfg=data?.detalle_json?.centro||{};
+  const fuente=txt(cfg.logo||state.configuracion?.logo);
+  if(/^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(fuente)) return fuente;
+  try{
+    const r=await postFirmaOrden('obtenerLogoInstitucionalFirma',{});
+    const imagen=txt(r?.data_url);
+    if(r?.disponible && /^data:image\/(?:png|jpeg|jpg|webp|gif);base64,/i.test(imagen)) return imagen;
+  }catch(e){console.warn('IASYN Órdenes: logo no incrustado',e);}
+  if(fuente) throw Error('No se pudo incrustar el logotipo institucional para firma. Verifique Configuración del Centro.');
+  return '';
+}
+
+async function htmlFirmaOrden(data){
+  const logo=await resolverLogoFirmaOrden(data);
+  const detalle=Object.assign({},data.detalle_json||{});
+  detalle.centro=Object.assign({},detalle.centro||{}, {logo});
+  const copia=Object.assign({},data,{detalle_json:detalle});
+  const cuerpo=docHTML(copia).replace(/\son[a-z]+=(?:"[^"]*"|'[^']*')/gi,'');
+  return '<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden médica</title><style>'+estilosImpresion()+'</style></head><body>'+cuerpo+'</body></html>';
 }
 
 function imprimirDocumento(data,autoPrint=false){
@@ -1270,7 +1324,7 @@ async function solicitarFirmaOrden(id){
   id=txt(id);
   if(state.firmaProcesos.has(id)) return aviso('Ya existe una solicitud de firma en curso.','warn');
   try{
-    const solicitud=prepararSolicitudFirmaOrden(id);
+    const solicitud=await prepararSolicitudFirmaOrden(id);
     if(state.firmasPorDocumento[id]) return verOrdenFirmada(id);
     // La consulta remota previa evita una firma duplicada tras recargar el navegador.
     const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===id);
@@ -1341,7 +1395,7 @@ async function verOrdenFirmada(id){
   }
 }
 
-function prepararSolicitudFirmaOrden(id){
+async function prepararSolicitudFirmaOrden(id){
   if(state.cargaFallida) throw Error('No se ha verificado el historial remoto de órdenes.');
   const ctx=contexto();
   if(!ctx.id || ctx.bloqueada) throw Error('No hay una atención válida para firmar.');
@@ -1357,7 +1411,7 @@ function prepararSolicitudFirmaOrden(id){
   if(ctx.idHistoria&&ctx.idHistoria!==d.id_historia) throw Error('La historia clínica no coincide con la atención.');
   if(ctx.idMedico&&ctx.idMedico!==d.id_medico) throw Error('El médico no coincide con la atención.');
   if(!itemsUnicos(d.detalle_json.items||[]).length) throw Error('La orden no contiene indicaciones.');
-  const html='<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Orden médica</title><style>'+estilosImpresion()+'</style></head><body>'+docHTML(d)+'</body></html>';
+  const html=await htmlFirmaOrden(d);
   return Object.freeze({
     tipo_documento:'ORDEN_MEDICA',
     id_documento_origen:d.id_orden,
