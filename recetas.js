@@ -4377,6 +4377,17 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           box-shadow:none!important;
         }
 
+        /* Ajuste quirurgico: compactar exclusivamente el encabezado de tratamiento. */
+        .auro-media-receta .auro-rx-tratamiento-section{
+          margin-top:2px!important;
+        }
+        .auro-media-receta .auro-rx-tratamiento-section > h4{
+          font-size:9px!important;
+          line-height:1.08!important;
+          margin:0 0 1px!important;
+          padding:0 0 1px!important;
+        }
+
         .auro-media-receta .auro-rx-diagnostico-unico-section{
           width:fit-content!important;
           max-width:100%!important;
@@ -4412,7 +4423,7 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
 
         .auro-media-receta .auro-rx-table th{
           font-size:9.4px!important;
-          padding:2px 2px!important;
+          padding:1px 2px!important;
           line-height:1.08!important;
           letter-spacing:0!important;
         }
@@ -4438,8 +4449,8 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
         /* IASYN2: cuadrantes inferiores, solo presentación; sin alterar motor de firma */
         .auro-media-receta .auro-rx-cuadrantes-inferiores{
           display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
-          gap:10px!important;margin-top:auto!important;min-height:29mm!important;
-          align-items:stretch!important;flex:0 0 auto!important;
+          gap:10px!important;margin-top:5px!important;min-height:29mm!important;
+          align-items:stretch!important;flex:1 1 auto!important;
         }
         .auro-media-receta .auro-rx-cuadrante-diagnosticos{
           min-width:0!important;padding-right:8px!important;
@@ -4471,13 +4482,28 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
         }
         .auro-media-receta .auro-rx-cuadrante-firma{
           min-width:0!important;display:flex!important;flex-direction:column!important;
-          justify-content:flex-end!important;padding:0 5px 3px!important;
+          justify-content:flex-end!important;align-items:center!important;padding:0 5px 8px!important;
         }
         .auro-media-receta .auro-rx-cuadrante-firma .auro-firma{
           text-align:center!important;padding-top:12px!important;
+          width:86%!important;max-width:86%!important;margin:0 auto!important;
+          align-self:center!important;
         }
         .auro-media-receta .auro-rx-cuadrante-firma .auro-linea{
           margin-top:0!important;
+        }
+
+        /* Solo texto bajo la raya; no se alteran coordenadas ni agente de firma. */
+        .auro-media-receta .auro-rx-cuadrante-firma .auro-firma{
+          line-height:1.10!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-firma .auro-firma > b{
+          font-size:7pt!important;
+          line-height:1.12!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-firma .auro-firma > span{
+          font-size:6pt!important;
+          line-height:1.10!important;
         }
         .auro-media-receta .auro-receta-footer{
           margin-top:auto!important;
