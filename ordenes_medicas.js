@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.3-IASYN-CIE10-FIRMA-ROBUSTA-ANTIRREGRESIVA';
+const VERSION='1.4.4-IASYN-CIE10-FIRMA-ROBUSTA-ANTIRREGRESIVA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -645,13 +645,13 @@ function instalarCSS(){
 .aom-notice.err{background:#fef2f2;border-color:#fecaca;color:#991b1b}
 .aom-history{margin-top:12px;border-top:1px solid #f1f5f9;padding-top:12px}
 .aom-history-title{font-size:12px;font-weight:850;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin-bottom:8px}
-.aom-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid #f1f5f9}
+.aom-row{display:flex;flex-direction:column;align-items:stretch;gap:12px;padding:15px 16px;margin:10px 0;border:1px solid #ecdce5;border-radius:14px;background:linear-gradient(135deg,#fff,#fffafd);box-shadow:0 2px 9px rgba(95,34,65,.045)}
 .aom-row:last-child{border-bottom:0}
 .aom-row-main{min-width:0}
-.aom-row-main strong{display:block;font-size:13px;overflow-wrap:anywhere}
+.aom-row-main strong{display:block;font-size:13px;overflow-wrap:anywhere;word-break:break-word;line-height:1.5;color:#711b4a}
 .aom-row-main small{display:block;color:#6b7280;margin-top:2px}
-.aom-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
-.aom-btn{border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:10px;padding:6px 9px;font-size:12px;font-weight:750}
+.aom-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-start;border-top:1px solid #f4e8ef;padding-top:11px}
+.aom-btn{border:1px solid #e2d7df;background:#fff;color:#57334a;border-radius:10px;padding:8px 11px;font-size:12px;font-weight:750;white-space:normal;cursor:pointer}
 .aom-btn:hover{background:#f9fafb}
 .aom-btn.danger{border-color:#fecaca;color:#991b1b;background:#fff7f7}
 .aom-empty{font-size:12.5px;color:#6b7280;padding:4px 0}
@@ -1227,7 +1227,24 @@ async function inicializar(){
  * Nunca se informa éxito sin confirmación remota FIRMADO.
  */
 async function postFirmaOrden(accion,data){
-  const r=await post(accion,data);
+  // Tiempo máximo por consulta. Una respuesta perdida de firmarDocumento NO autoriza reintento automático.
+  const b=apiUrl();
+  if(!b) throw Error('API_URL no está definida.');
+  const payload=Object.assign({},data||{});
+  const token=tokenSesionIASYN();
+  if(token&&!txt(payload.token)&&!txt(payload.session_token)) payload.token=token;
+  const controller=new AbortController();
+  const ms=accion==='firmarDocumento'?30000:12000;
+  const timer=setTimeout(()=>controller.abort(),ms);
+  let r;
+  try{
+    const http=await fetch(b,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({accion,data:payload}),signal:controller.signal});
+    if(!http.ok) throw Error('HTTP '+http.status);
+    r=await http.json();
+  }catch(e){
+    if(e?.name==='AbortError') throw Error('Tiempo de respuesta agotado ('+Math.round(ms/1000)+' s) en '+accion+'. Compruebe la solicitud antes de reintentar.');
+    throw e;
+  }finally{clearTimeout(timer);}
   if(!r||typeof r!=='object'||r.success===false||r.ok===false||r.exito===false||['error','failed','rechazado'].includes(norm(r.status))) throw Error(txt(r?.message||r?.mensaje||r?.error)||'El servidor rechazó '+accion+'.');
   return r;
 }
@@ -1293,19 +1310,24 @@ async function solicitarFirmaOrden(id){
     proceso={id_atencion:solicitud.id_atencion,id_solicitud:'',cancelado:false};
     state.firmaProcesos.set(id,proceso);
     render();
-    aviso('Verificando si ya existe una firma o solicitud pendiente…');
-    const existente=await consultarFirmaOrden(reg);
-    verificar();
-    if(proceso.cancelado) return;
-    if(existente){
-      state.firmasPorDocumento[id]=existente;
-      state.firmaPendientes.delete(id);
-      aviso('Esta versión ya está firmada. Use Ver firmado.','ok');
-      return;
-    }
+    aviso('Preparando firma de esta orden…');
     const clave='IASYN_ORDEN_FIRMA_PENDIENTE_'+id+'_V'+solicitud.version_documento;
     let pendiente=state.firmaPendientes.get(id)||'';
     if(!pendiente){try{pendiente=txt(sessionStorage.getItem(clave));}catch(_e){}}
+    // Solo consultar archivo antes de seguir si ya existe una solicitud pendiente conocida.
+    // Para nuevas firmas, evitar una llamada previa que retrasa/bloquea el flujo que antes funcionaba.
+    if(pendiente){
+      const existente=await consultarFirmaOrden(reg);
+      verificar();
+      if(proceso.cancelado) return;
+      if(existente){
+        state.firmasPorDocumento[id]=existente;
+        state.firmaPendientes.delete(id);
+        try{sessionStorage.removeItem(clave);}catch(_e){}
+        aviso('Esta versión ya está firmada. Use Ver firmado.','ok');
+        return;
+      }
+    }
     if(pendiente){
       proceso.id_solicitud=pendiente;
       state.firmaPendientes.set(id,pendiente);
