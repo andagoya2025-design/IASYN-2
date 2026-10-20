@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.1-FASE1-DIAGNOSTICOS-Y-ESTADO-FIRMA';
+const VERSION='1.4.1-IASYN-CIE10-ANTIRREGRESIVO';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -46,7 +46,13 @@ const state={
   firmasPorDocumento:{},
   firmaProcesos:new Map(),
   firmaConsultaToken:0,
-  ultimoAviso:null
+  ultimoAviso:null,
+  diagnosticos:[],
+  diagnosticosAtencion:'',
+  diagnosticosCargando:false,
+  diagnosticosVerificados:false,
+  diagnosticosError:'',
+  diagnosticosToken:0
 };
 
 const txt=v=>String(v??'').trim();
@@ -338,6 +344,73 @@ function itemsUnicos(lista){
   return out;
 }
 
+/* CIE-10: solo registros persistidos y activos de la atención exacta. */
+function normalizarDiagnosticoOrden(d){
+  d=d||{};
+  const estado=norm(d.estado||'Activo');
+  if(['inactivo','inactiva','anulado','anulada','eliminado','eliminada'].includes(estado)) return null;
+  const codigo=txt(d.codigo_cie10||d.diagnostico_cie10||d.cie10||d.codigo).toUpperCase();
+  const descripcion=txt(d.descripcion||d.diagnostico||d.nombre||d.detalle);
+  if(!codigo&&!descripcion) return null;
+  return {
+    id_diagnostico:txt(d.id_diagnostico),
+    codigo_cie10:codigo,
+    descripcion,
+    principal:d.principal===true||d.principal===1||['si','sí','true','1'].includes(norm(d.principal)),
+    tipo_diagnostico:txt(d.tipo_diagnostico||d.tipo)
+  };
+}
+function diagnosticosUnicosOrden(lista){
+  const vistos=new Set();
+  const salida=[];
+  (Array.isArray(lista)?lista:[]).forEach(d=>{
+    const x=normalizarDiagnosticoOrden(d);
+    if(!x) return;
+    const k=norm(x.codigo_cie10)+'|'+norm(x.descripcion);
+    if(vistos.has(k)) return;
+    vistos.add(k);salida.push(x);
+  });
+  if(salida.length&&!salida.some(x=>x.principal)) salida[0].principal=true;
+  return salida.sort((a,b)=>Number(b.principal)-Number(a.principal));
+}
+async function consultarDiagnosticosPersistidos(id){
+  id=txt(id);
+  if(!id) throw Error('No existe una atención para consultar los diagnósticos.');
+  const r=await get('listarDiagnosticosPorAtencion',{id_atencion:id});
+  if(r?.success===false||r?.ok===false) throw Error(txt(r.message||r.error)||'La consulta de diagnósticos fue rechazada.');
+  if(!Array.isArray(r)&&!Array.isArray(r?.data)&&!Array.isArray(r?.registros)) throw Error('Respuesta inválida al consultar diagnósticos CIE-10.');
+  const lista=arr(r);
+  if(lista.some(d=>txt(d.id_atencion)&&txt(d.id_atencion)!==id)) throw Error('La respuesta contiene diagnósticos de otra atención.');
+  return diagnosticosUnicosOrden(lista);
+}
+async function cargarDiagnosticosOrden(id){
+  id=txt(id);
+  const token=++state.diagnosticosToken;
+  state.diagnosticos=[];
+  state.diagnosticosAtencion=id;
+  state.diagnosticosVerificados=false;
+  state.diagnosticosCargando=!!id;
+  state.diagnosticosError='';
+  render();
+  if(!id){state.diagnosticosCargando=false;return [];}
+  try{
+    const lista=await consultarDiagnosticosPersistidos(id);
+    if(token!==state.diagnosticosToken||id!==txt(contexto().id)) return [];
+    state.diagnosticos=lista;
+    state.diagnosticosVerificados=true;
+    return lista;
+  }catch(e){
+    if(token===state.diagnosticosToken){state.diagnosticosError=txt(e.message||e);}
+    return [];
+  }finally{
+    if(token===state.diagnosticosToken){state.diagnosticosCargando=false;render();}
+  }
+}
+function bloqueDiagnosticosOrden(lista){
+  const dx=diagnosticosUnicosOrden(lista);
+  return `<section class="aom-diagnosticos"><div class="aom-diagnosticos-title">DIAGNÓSTICOS CIE-10</div>${dx.length?`<ol>${dx.map(x=>`<li><strong>${esc(x.codigo_cie10||'Sin código')}</strong>${x.descripcion?' — '+esc(x.descripcion):''}${x.principal?' <span>(Principal)</span>':''}${x.tipo_diagnostico?' · '+esc(x.tipo_diagnostico):''}</li>`).join('')}</ol>`:'<div>Sin diagnósticos CIE-10 registrados en esta atención.</div>'}</section>`;
+}
+
 function contextoPlanSeguro(ctx){
   const id=txt(ctx?.id);
   const idPlan=txt(window.planState?.atencionActual);
@@ -358,7 +431,7 @@ function itemsPlanActual(){
   return {ok:true,items:itemsUnicos(lista)};
 }
 
-function datosDocumentoDesdePlan(){
+function datosDocumentoDesdePlan(diagnosticosAtencion=[]){
   const ctx=contexto();
   const ver=contextoPlanSeguro(ctx);
   if(!ver.ok) throw Error(ver.motivo);
@@ -393,6 +466,7 @@ function datosDocumentoDesdePlan(){
       id_atencion:ctx.id,
       numero_consulta:ctx.numeroConsulta,
       items:plan.items,
+      diagnosticos:diagnosticosUnicosOrden(diagnosticosAtencion),
       observaciones_generales:'',
       paciente:{
         id_paciente:txt(ctx.idPaciente||paciente?.id_paciente||paciente?.id),
@@ -438,7 +512,7 @@ function datosDocumentoEmitido(reg){
     fecha_emision:txt(reg?.fecha_emision||d.fecha_emision),
     estado:txt(reg?.estado)||'Emitida',
     version:Number(reg?.version||d.version_documento||1)||1,
-    detalle_json:Object.assign({},d,{items})
+    detalle_json:Object.assign({},d,{items,diagnosticos:diagnosticosUnicosOrden(d.diagnosticos||[])})
   };
 }
 
@@ -513,7 +587,8 @@ function clonarDocumentoEmitido(reg){
   const d=parse(base.detalle_json);
   return Object.assign({},base,{
     detalle_json:Object.assign({},d,{
-      items:itemsUnicos(d.items||[])
+      items:itemsUnicos(d.items||[]),
+      diagnosticos:diagnosticosUnicosOrden(d.diagnosticos||[])
     })
   });
 }
@@ -549,6 +624,13 @@ function instalarCSS(){
   s.textContent=`
 #iasynOrdenMedicaFormalApp{margin-top:14px;font-family:inherit;color:#1f2937}
 #iasynOrdenMedicaFormalApp *{box-sizing:border-box}
+.aom-dx-live{border:1px solid #ead7e2;border-radius:12px;background:#fffafd;padding:10px 12px;margin-bottom:12px;font-size:12px}
+.aom-dx-live>strong{color:#8b1e5a}
+.aom-dx-error{color:#991b1b;margin-top:5px}
+.aom-diagnosticos{margin:8px 0 14px;padding:9px 12px;border:1px solid #ead7e2;border-radius:8px;font-size:11.5px;break-inside:avoid}
+.aom-diagnosticos-title{font-weight:800;color:#8b1e5a;margin-bottom:6px}
+.aom-diagnosticos ol{margin:0;padding-left:18px}.aom-diagnosticos li{margin:3px 0}
+
 .aom-shell{border:1px solid #ead7e2;border-radius:16px;background:#fff;padding:14px}
 .aom-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .aom-title{font-weight:850;color:#111827;display:flex;align-items:center;gap:8px}
@@ -673,6 +755,7 @@ function render(){
   });
   app.innerHTML=`
     <div class="aom-shell">
+      <div class="aom-dx-live"><strong>Diagnósticos de esta atención</strong>${state.diagnosticosCargando?'<div>Consultando diagnósticos CIE-10 guardados…</div>':state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?bloqueDiagnosticosOrden(state.diagnosticos):`<div class="aom-dx-error">${esc(state.diagnosticosError||'Diagnósticos pendientes de verificación.')}</div>`}</div>
       <div class="aom-head">
         <div>
           <div class="aom-title"><i class="bi bi-file-earmark-medical"></i> Documento formal de orden médica</div>
@@ -776,12 +859,24 @@ async function emitir(){
     return;
   }
 
+  const idEmision=txt(contexto().id);
+  if(!idEmision) return aviso('No existe una atención activa.','err');
+  if(state.diagnosticosCargando) return aviso('Espere a que termine la verificación de diagnósticos.','warn');
   let data;
-  try{data=datosDocumentoDesdePlan();}
-  catch(e){aviso(e.message||'No se pudo preparar la orden.','err');return;}
+  try{
+    // Refrescar desde la fuente oficial al emitir; no usar un caché potencialmente obsoleto.
+    const diagnosticos=await consultarDiagnosticosPersistidos(idEmision);
+    if(txt(contexto().id)!==idEmision||txt(state.idAtencion)!==idEmision) throw Error('Cambió la atención durante la consulta de diagnósticos.');
+    state.diagnosticos=diagnosticos;
+    state.diagnosticosAtencion=idEmision;
+    state.diagnosticosVerificados=true;
+    state.diagnosticosError='';
+    data=datosDocumentoDesdePlan(diagnosticos);
+  }catch(e){aviso('No se pudo verificar CIE-10: '+(e.message||e),'err');return;}
 
   if(!confirm(`Se emitirá una orden médica formal con ${data.detalle_json.items.length} ítem(s). ¿Continuar?`)) return;
 
+  if(txt(contexto().id)!==idEmision) return aviso('Cambió la atención. Emisión cancelada.','err');
   setGuardando(true);
   aviso('Emitiendo orden médica...');
   try{
@@ -998,28 +1093,10 @@ function imprimirPorId(id){
   imprimirDocumento(datosDocumentoEmitido(reg),true);
 }
 
-/* FASE 1: diagnósticos asociados a los ítems de la orden emitida.
- * No consulta otras atenciones ni inventa diagnósticos no registrados. */
-function diagnosticosOrdenFormal(items){
-  const vistos=new Set();
-  const resultado=[];
-  (Array.isArray(items)?items:[]).forEach(item=>{
-    const codigo=txt(item.codigo_cie10);
-    const descripcion=txt(item.diagnostico);
-    if(!codigo&&!descripcion) return;
-    const clave=norm(codigo)+'|'+norm(descripcion);
-    if(vistos.has(clave)) return;
-    vistos.add(clave);
-    resultado.push({codigo,descripcion});
-  });
-  return resultado;
-}
-
 function docHTML(data){
   const d=data.detalle_json||{};
   const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
-  const diagnosticos=diagnosticosOrdenFormal(items);
   const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
   const contactoCentro=[centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
@@ -1029,7 +1106,7 @@ function docHTML(data){
     <header class="aom-doc-head${logo?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'IASYN')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ' · ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
     <div class="aom-doc-title">ORDEN MÉDICA</div>
     <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
-    ${diagnosticos.length?`<section class="aom-doc-diagnosticos" style="margin:0 0 14px;break-inside:avoid;page-break-inside:avoid"><strong style="font-size:12px">DIAGNÓSTICOS CLÍNICOS ASOCIADOS A LA ORDEN</strong><div style="font-size:11.5px;line-height:1.55;margin-top:5px">${diagnosticos.map((dx,i)=>`<div>${i+1}. ${dx.codigo?`<strong>CIE-10: ${esc(dx.codigo)}</strong>`:''}${dx.codigo&&dx.descripcion?' — ':''}${esc(dx.descripcion)}</div>`).join('')}</div></section>`:''}
+    ${bloqueDiagnosticosOrden(d.diagnosticos||[])}
     <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
     ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
     <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${ubicacion?`<div>${esc(ubicacion)}</div>`:''}${contactoCentro?`<div>${esc(contactoCentro)}</div>`:''}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}${data.estado?`<div class="aom-doc-status">Estado documental: ${esc(data.estado)} · Versión ${esc(data.version||1)}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
@@ -1069,6 +1146,7 @@ async function cargar(){
   const ctx=contexto();
   state.contexto=ctx;
   state.idAtencion=ctx.id;
+  void cargarDiagnosticosOrden(ctx.id);
   state.editandoId='';
 
   if(!state.montado) montar();
@@ -1212,7 +1290,7 @@ async function solicitarFirmaOrden(id){
     }
     proceso.id_solicitud=txt(r.id_solicitud);
     if(!proceso.id_solicitud) throw Error('El servidor no devolvió id_solicitud.');
-    aviso('Solicitud enviada a IASYN. Esperando que el motor presente la selección de firma manual o automática.');
+    aviso('Solicitud creada. Firme el PDF en Adobe y guárdelo.');
     const inicio=Date.now();
     while(Date.now()-inicio<35*60*1000){
       await new Promise(resolve=>setTimeout(resolve,2000));
@@ -1226,7 +1304,7 @@ async function solicitarFirmaOrden(id){
         return;
       }
       if(['ERROR','EXPIRADA','CANCELADA'].includes(valor)) throw Error(txt(estado.error)||'La firma terminó en estado '+valor+'.');
-      if(valor==='TOMADA') aviso('IASYN tomó la orden. Complete la firma manual o automática en la ventana del motor.');
+      if(valor==='TOMADA') aviso('Adobe está abierto. Firme la orden y guarde el PDF.');
     }
     throw Error('La firma sigue pendiente. Consulte nuevamente el estado antes de intentar otra firma.');
   }catch(e){
@@ -1305,12 +1383,14 @@ window.IASYN_ORDENES_MEDICAS={
   estado:state,
   inicializar,
   cargar,
-  refrescar:refrescarEstadoLocal,
+    refrescar:refrescarEstadoLocal,
+    cargarDiagnosticos:()=>cargarDiagnosticosOrden(contexto().id),
+    obtenerDiagnosticos:()=>state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?diagnosticosUnicosOrden(state.diagnosticos):[],
   obtenerContexto:contexto,
   obtenerItemsPlan:()=>itemsPlanActual(),
-  obtenerDatosEmision:()=>datosDocumentoDesdePlan(),
+  obtenerDatosEmision:()=>datosDocumentoDesdePlan(state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?state.diagnosticos:[]),
   construirDocumento:docHTML,
-  imprimir:data=>imprimirDocumento(data||datosDocumentoDesdePlan(),false)
+  imprimir:data=>imprimirDocumento(data||datosDocumentoDesdePlan(state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?state.diagnosticos:[]),false)
 };
 
 if(document.readyState==='loading'){
