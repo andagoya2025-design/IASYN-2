@@ -2109,7 +2109,7 @@ if(!lista.length) return `<b>${safe(r?.diagnostico || '—')}</b>`;
       codigo = String(dx.codigo || '').trim();
       descripcion = String(dx.descripcion || dx.texto || '').trim();
       tipo = auroRecetaTipoDiagnosticoVisual(dx.tipo_diagnostico);
-      jerarquia = dx.principal ? 'Principal' : 'Asociado';
+      jerarquia = '';
     }else{
       codigo = String(r?.cie10 || r?.diagnostico_cie10 || '').trim();
       descripcion = String(r?.diagnostico || '').trim();
@@ -2122,7 +2122,6 @@ if(!lista.length) return `<b>${safe(r?.diagnostico || '—')}</b>`;
         <h4>Diagnóstico de la atención</h4>
         <div class="auro-rx-diagnostico-unico">
           ${codigo ? `<strong>${safe(codigo)}</strong>` : ''}
-          ${jerarquia ? `<span class="auro-rx-dx-jerarquia">${safe(jerarquia)}</span>` : ''}
           ${tipo ? `<span class="auro-rx-dx-tipo ${recetaNormalizarPlano(tipo) === 'definitivo' ? 'definitivo' : ''}">${safe(tipo)}</span>` : ''}
           ${descripcion ? `<span class="auro-rx-diagnostico-unico-name">${safe(descripcion)}</span>` : ''}
         </div>
@@ -2145,7 +2144,6 @@ if(!lista.length) return `<b>${safe(r?.diagnostico || '—')}</b>`;
               <div class="auro-rx-diagnostico-card ${dx.principal ? 'principal' : 'asociado'}">
                 <div class="auro-rx-diagnostico-card-head">
                   <strong>${safe(dx.codigo || 'S/C')}</strong>
-                  <span class="auro-rx-dx-jerarquia">${dx.principal ? 'Principal' : 'Asociado'}</span>
                   ${tipo ? `<span class="auro-rx-dx-tipo ${recetaNormalizarPlano(tipo) === 'definitivo' ? 'definitivo' : ''}">${safe(tipo)}</span>` : ''}
                 </div>
                 <div class="auro-rx-diagnostico-card-name">${safe(dx.descripcion || dx.texto || '—')}</div>
@@ -4144,14 +4142,20 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
         <div class="auro-receta-grid">${datosPaciente}</div>
         ${!esAdministrativo ? `<div class="auro-rx-alergias-linea"><span>Antecedentes de alergias</span><b>${safe(alergias)}</b></div>` : ''}
         <div class="auro-receta-section auro-rx-tratamiento-section"><h4>Tratamiento prescrito</h4><div class="auro-receta-box">${auroRecetaMedicamentosPacienteHTML(r.medicamento)}</div></div>
-        ${diagnosticoUnicoPaciente}
-        ${diagnosticosMultiplesPaciente}
+        ${!esAdministrativo ? `<div class="auro-rx-cuadrantes-inferiores">
+          <div class="auro-rx-cuadrante-diagnosticos">
+            ${diagnosticoUnicoPaciente}
+            ${diagnosticosMultiplesPaciente}
+            <div class="auro-centro-contacto">${ubicacion ? `<div>${safe(ubicacion)}</div>` : ''}${contacto ? `<div>${safe(contacto)}</div>` : ''}</div>
+          </div>
+          <div class="auro-rx-cuadrante-firma"><div class="auro-firma"><div class="auro-linea"></div><b>${safe(medico.nombre)}</b>${medico.especialidad ? `<br><span>${safe(medico.especialidad)}</span>` : ''}${registros.map(x=>`<br><span>${safe(x)}</span>`).join('')}<br><span>Firma y sello</span></div></div>
+        </div>` : ''}
         ${esAdministrativo && r.indicaciones ? `<div class="auro-receta-section"><h4>Indicaciones para el paciente</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.indicaciones, '—')}</div></div>` : ''}
         ${esAdministrativo && r.recomendaciones ? `<div class="auro-receta-section"><h4>Observaciones internas / recomendaciones</h4><div class="auro-receta-box">${recetaBloqueTextoPremium(r.recomendaciones, '—')}</div></div>` : ''}
-        <div class="auro-receta-footer">
-          <div class="auro-centro-contacto">${ubicacion ? `<div>${safe(ubicacion)}</div>` : ''}${contacto ? `<div>${safe(contacto)}</div>` : ''}${esAdministrativo ? `<div style="margin-top:5px;color:#64748b">ID receta: ${safe(idReceta)} · ID atención: ${safe(idAtencion)} · ID médico: ${safe(idMedico)}</div>` : ''}</div>
+        ${esAdministrativo ? `<div class="auro-receta-footer">
+          <div class="auro-centro-contacto">${ubicacion ? `<div>${safe(ubicacion)}</div>` : ''}${contacto ? `<div>${safe(contacto)}</div>` : ''}<div style="margin-top:5px;color:#64748b">ID receta: ${safe(idReceta)} · ID atención: ${safe(idAtencion)} · ID médico: ${safe(idMedico)}</div></div>
           <div class="auro-firma"><div class="auro-linea"></div><b>${safe(medico.nombre)}</b>${medico.especialidad ? `<br><span>${safe(medico.especialidad)}</span>` : ''}${registros.map(x=>`<br><span>${safe(x)}</span>`).join('')}<br><span>Firma y sello</span></div>
-        </div>
+        </div>` : ''}
       </div>`;
   }
 
@@ -4431,6 +4435,50 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
         .auro-media-receta .auro-rx-w-cant{width:9%!important}
         .auro-media-receta .auro-rx-w-ind{width:42%!important}
 
+        /* IASYN2: cuadrantes inferiores, solo presentación; sin alterar motor de firma */
+        .auro-media-receta .auro-rx-cuadrantes-inferiores{
+          display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+          gap:10px!important;margin-top:auto!important;min-height:29mm!important;
+          align-items:stretch!important;flex:0 0 auto!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-diagnosticos{
+          min-width:0!important;padding-right:8px!important;
+          border-right:1px dotted #d98bb4!important;
+          display:flex!important;flex-direction:column!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-diagnosticos .auro-receta-section{
+          width:100%!important;max-width:100%!important;margin-top:0!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-diagnosticos .auro-rx-diagnosticos-grid{
+          display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
+          gap:5px!important;border:0!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-diagnosticos .auro-rx-diagnostico-card{
+          padding:2px 3px 3px 0!important;border-right:0!important;min-width:0!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-diagnosticos .auro-rx-diagnostico-card-head{
+          gap:3px!important;margin-bottom:2px!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-diagnosticos .auro-rx-diagnostico-unico{
+          display:flex!important;flex-wrap:wrap!important;align-items:baseline!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-diagnosticos .auro-rx-diagnostico-unico-name{
+          display:block!important;flex-basis:100%!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-diagnosticos .auro-centro-contacto{
+          margin-top:auto!important;padding-top:4px!important;font-size:7.5px!important;
+          overflow-wrap:anywhere!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-firma{
+          min-width:0!important;display:flex!important;flex-direction:column!important;
+          justify-content:flex-end!important;padding:0 5px 3px!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-firma .auro-firma{
+          text-align:center!important;padding-top:12px!important;
+        }
+        .auro-media-receta .auro-rx-cuadrante-firma .auro-linea{
+          margin-top:0!important;
+        }
         .auro-media-receta .auro-receta-footer{
           margin-top:auto!important;
           padding-top:5px!important;
@@ -6519,11 +6567,8 @@ function auroRecetaFirmaInstalarEventosMotor(){
     }catch(_e){ return ''; }
   }
 
-  async function auroRecetaFirmaHtmlCanonico(receta, diagnosticosVerificados){
+  async function auroRecetaFirmaHtmlCanonico(receta){
     const persistida=normalizarRecetaGuardada(receta||{});
-    if(Array.isArray(diagnosticosVerificados) && diagnosticosVerificados.length){
-      persistida.diagnosticos=diagnosticosVerificados;
-    }
     if(!persistida.id_receta || !persistida.id_atencion){
       throw new Error('La receta no tiene identidad clínica completa.');
     }
@@ -6718,21 +6763,7 @@ function auroRecetaFirmaInstalarEventosMotor(){
       return {success:false,estado:'RECETA_NO_GUARDADA',message:'La receta no está persistida en Google Sheets.'};
     }
 
-    /* IASYN2 DX-FIRMA: solo lectura. Se completa la copia en memoria
-       antes de calcular el HTML y su hash; nunca se altera la receta remota. */
-    const diagnosticosFirma=auroRecetaDiagnosticosNormalizados(
-      await auroRecetaConsultarDiagnosticosAtencion(idAtn,true)
-    );
-    if(!diagnosticosFirma.length){
-      return {success:false,estado:'DIAGNOSTICOS_NO_VERIFICADOS',
-        message:'No fue posible verificar los diagnósticos de la atención. No se firmó una receta potencialmente incompleta.'};
-    }
-    if(auroRecetaFirmaAtencionActual()!==idAtn){
-      return {success:false,estado:'ATENCION_CAMBIADA',
-        message:'La atención cambió durante la verificación de diagnósticos.'};
-    }
-    const recetaParaFirma={...persistida,diagnosticos:diagnosticosFirma};
-    const html=await auroRecetaFirmaHtmlCanonico(recetaParaFirma,diagnosticosFirma);
+    const html=await auroRecetaFirmaHtmlCanonico(persistida);
     const sha=await auroRecetaFirmaSha256(html);
 
     return {
