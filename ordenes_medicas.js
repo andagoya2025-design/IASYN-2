@@ -279,7 +279,7 @@ function normalizarConfig(c){
   c=c||{};
   if(c.datos&&typeof c.datos==='object') c=c.datos;
   return {
-    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social)||'IASYN',
+    nombre:txt(c.nombre_clinica||c.nombre_centro||c.nombre_comercial||c.razon_social)||'',
     subtitulo:txt(c.subtitulo_clinica||c.descripcion_clinica||c.eslogan_clinica),
     razon_social:txt(c.razon_social),
     ruc:txt(c.ruc),
@@ -301,7 +301,9 @@ async function cargarAuxiliares(ctx){
   let cfg=normalizarConfig(configGlobal());
   try{
     const remoto=await get('obtenerConfiguracion');
-    cfg=normalizarConfig(Object.assign({},configGlobal(),remoto||{}));
+    const respuesta=remoto?.configuracion||remoto?.datos||remoto?.data||remoto||{};
+    const remota=respuesta&&typeof respuesta==='object'&&!Array.isArray(respuesta)?respuesta:{};
+    cfg=normalizarConfig(Object.assign({},configGlobal(),remota));
   }catch(e){}
   state.configuracion=cfg;
   try{
@@ -665,7 +667,7 @@ function instalarCSS(){
 .aom-editor-remove{grid-column:1/-1;justify-self:end}
 .aom-editor-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:12px 0 4px;padding:11px 12px;border:1px solid #f0d9e6;border-radius:13px;background:#fff8fc}.aom-editor-toolbar span{font-size:12px;color:#6b7280}.aom-editor-field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:#7a174f;font-weight:900;margin-bottom:4px}.aom-editor-custom{grid-column:2/3}.aom-editor-hint{grid-column:1/-1;font-size:11px;color:#64748b;margin-top:-2px}.aom-editor-add{border:1px solid #f3c8df;background:#fdf2f8;color:#8b1e5a}
 .aom-modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
-.aom-paper{width:210mm;min-height:297mm;background:#fff;color:#111827;padding:15mm 17mm 48mm;margin:0 auto;font-family:Arial,sans-serif;position:relative}
+.aom-paper{width:210mm;min-height:297mm;background:#fff;color:#111827;padding:15mm 17mm 15mm;margin:0 auto;font-family:Arial,sans-serif;position:relative;display:flex;flex-direction:column}
 .aom-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--aom-color,#8b1e5a);padding-bottom:10px;margin-bottom:18px}.aom-doc-head.no-logo{grid-template-columns:minmax(0,1fr) auto}.aom-logo-wrap{width:60px;height:60px;display:grid;place-items:center;overflow:hidden}.aom-logo{max-width:100%;max-height:100%;object-fit:contain}.aom-doc-date{text-align:right;font-size:11.5px;font-weight:750}
 .aom-doc-brand{font-size:20px;font-weight:950;color:var(--aom-color,#8b1e5a);letter-spacing:.035em}
 .aom-doc-sub{font-size:10.5px;color:#4b5563;line-height:1.45;margin-top:4px}
@@ -674,8 +676,8 @@ function instalarCSS(){
 .aom-doc-label{color:#6b7280;font-weight:700}
 .aom-doc-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
 .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top}
-.aom-doc-table th{background:#f8fafc;text-align:left}
-.aom-doc-bottom{position:absolute;left:17mm;right:17mm;bottom:15mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
+.aom-doc-table th{background:#f8fafc;text-align:left}.aom-doc-table thead{display:table-header-group}.aom-doc-table tr{break-inside:avoid;page-break-inside:avoid}.aom-doc-head,.aom-doc-grid,.aom-doc-sign{break-inside:avoid;page-break-inside:avoid}
+.aom-doc-bottom{position:static;margin-top:auto;padding-top:15mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
 @media(max-width:760px){
   .aom-shell{padding:12px}
   .aom-head{align-items:stretch}
@@ -1095,15 +1097,18 @@ function imprimirPorId(id){
 
 function docHTML(data){
   const d=data.detalle_json||{};
+  // Documento emitido: preservar la instantánea institucional original.
+  // No sustituir datos históricos con cambios posteriores de Configuración del Centro.
   const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
   const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
   const contactoCentro=[centro.telefono,centro.email,centro.web].map(txt).filter(Boolean).join(' · ');
   const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
-  const logoHtml=logo?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt="Logo institucional"></div>`:'';
+  const logoSeguro=/^https?:\/\//i.test(logo)||/^data:image\/(?:png|jpeg|jpg|gif|webp|svg\+xml);base64,/i.test(logo);
+  const logoHtml=logoSeguro?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt="" onerror="this.parentElement.parentElement.classList.add('no-logo');this.parentElement.remove()"></div>`:'';
   return `<article class="aom-paper" style="--aom-color:${esc(color)}">
-    <header class="aom-doc-head${logo?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'IASYN')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ' · ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
+    <header class="aom-doc-head${logoSeguro?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'Centro médico')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ' · ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
     <div class="aom-doc-title">ORDEN MÉDICA</div>
     <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
     ${bloqueDiagnosticosOrden(d.diagnosticos||[])}
@@ -1123,7 +1128,7 @@ function estilosImpresion(){
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}.aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto}.aom-stage{transform-origin:top left;margin:0 auto}
   ${document.getElementById('iasynOrdenMedicaCSS')?.textContent||''}
-  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm 48mm!important}.aom-doc-bottom{position:absolute!important;left:17mm!important;right:17mm!important;bottom:15mm!important}}
+  @media print{html,body{background:#fff}.aom-print-toolbar{display:none!important}.aom-view{padding:0;overflow:visible}.aom-stage{transform:none!important;width:auto!important;height:auto!important}.aom-paper{margin:0!important;width:210mm!important;min-height:297mm!important;position:relative!important;padding:15mm 17mm 15mm!important;display:block!important}.aom-doc-bottom{position:static!important;margin-top:auto!important;padding-top:15mm!important}}
   `;
 }
 
