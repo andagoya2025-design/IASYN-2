@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.1-IASYN-CIE10-ANTIRREGRESIVO';
+const VERSION='1.4.1-IASYN-CIE10-ANTIRREGRESIVO-PRESENTACION-CANDIDATA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -677,7 +677,7 @@ function instalarCSS(){
 .aom-doc-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
 .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top}
 .aom-doc-table th{background:#f8fafc;text-align:left}.aom-doc-table thead{display:table-header-group}.aom-doc-table tr{break-inside:avoid;page-break-inside:avoid}.aom-doc-head,.aom-doc-grid,.aom-doc-sign{break-inside:avoid;page-break-inside:avoid}
-.aom-doc-bottom{position:static;margin-top:auto;padding-top:15mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px}.aom-doc-status{margin-top:5px;font-size:9.2px;color:#64748b}
+.aom-doc-bottom{position:static;margin-top:auto;padding-top:15mm;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;page-break-inside:avoid}.aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}.aom-doc-sign{text-align:center;font-size:11.2px;page-break-inside:avoid}.aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}.aom-doc-sign strong{font-size:12.4px} .aom-contact-row{display:flex;align-items:flex-start;gap:7px;margin:4px 0;min-width:0}.aom-contact-row span{min-width:0;overflow-wrap:anywhere}.aom-contact-icon{display:block;flex:0 0 13px;width:13px;height:13px;color:var(--aom-color,#8b1e5a);margin-top:1px}.aom-contact-legal{margin-top:6px;font-size:9px}
 @media(max-width:760px){
   .aom-shell{padding:12px}
   .aom-head{align-items:stretch}
@@ -1095,6 +1095,20 @@ function imprimirPorId(id){
   imprimirDocumento(datosDocumentoEmitido(reg),true);
 }
 
+
+ function iconoInstitucional(tipo){
+   const trazos={
+     ubicacion:'<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/>',
+     correo:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+     telefono:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.7L7.1 10a16 16 0 0 0 6.9 6.9l1.6-1.9a2 2 0 0 1 1.7-.6l3 .5a2 2 0 0 1 1.7 2Z"/>',
+     web:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>'
+   };
+   return '<svg class="aom-contact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(trazos[tipo]||'')+'</svg>';
+ }
+ function filaContactoInstitucional(tipo,valor){
+   return txt(valor)?'<div class="aom-contact-row">'+iconoInstitucional(tipo)+'<span>'+esc(valor)+'</span></div>':'';
+ }
+
 function docHTML(data){
   const d=data.detalle_json||{};
   // Documento emitido: preservar la instantánea institucional original.
@@ -1103,7 +1117,7 @@ function docHTML(data){
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
   const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
-  const contactoCentro=[centro.email,centro.telefono,centro.web].map(txt).filter(Boolean);
+  const contactoInstitucional=filaContactoInstitucional('ubicacion',ubicacion)+filaContactoInstitucional('correo',centro.email)+filaContactoInstitucional('telefono',centro.telefono)+filaContactoInstitucional('web',centro.web);
   const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
   const logoSeguro=/^https?:\/\//i.test(logo)||/^data:image\/(?:png|jpeg|jpg|gif|webp|svg\+xml);base64,/i.test(logo);
   const logoHtml=logoSeguro?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt=""></div>`:'';
@@ -1114,7 +1128,7 @@ function docHTML(data){
     ${bloqueDiagnosticosOrden(d.diagnosticos||[])}
     <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
     ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
-    <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${ubicacion?`<div>${esc(ubicacion)}</div>`:''}${contactoCentro.map(x=>`<div>${esc(x)}</div>`).join('')}${centro.razon_social?`<div>${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}${data.estado?`<div class="aom-doc-status">Estado documental: ${esc(data.estado)} · Versión ${esc(data.version||1)}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
+    <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${contactoInstitucional}${centro.razon_social?`<div class="aom-contact-legal">${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
   </article>`;
 }
 
@@ -1146,7 +1160,7 @@ function estilosImpresion(){
   .aom-doc-sign{text-align:center;font-size:11.2px;line-height:1.3;break-inside:avoid}
   .aom-doc-line{border-top:1px solid #111827;margin:0 0 6px}
   .aom-doc-sign strong{font-size:12.2px}
-  .aom-doc-status{font-size:9px;color:#64748b}
+     .aom-contact-row{display:flex;align-items:flex-start;gap:7px;margin:4px 0;min-width:0}.aom-contact-row span{min-width:0;overflow-wrap:anywhere}.aom-contact-icon{display:block;flex:0 0 13px;width:13px;height:13px;color:var(--aom-color,#8b1e5a);margin-top:1px}.aom-contact-legal{margin-top:6px;font-size:9px}
   .aom-print-toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:center;gap:8px;padding:10px;background:#fff;border-bottom:1px solid #e5e7eb}
   .aom-print-toolbar button{border:0;border-radius:10px;padding:9px 13px;font-weight:700;cursor:pointer}
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}
@@ -1218,9 +1232,12 @@ function imprimirDocumento(data,autoPrint=false){
       header.classList.remove('no-logo');
     }catch(e){console.warn('IASYN Órdenes: no se pudo cargar el logo del visor',e);}
   };
-  void cargarLogo();
+  const logoListo=cargarLogo();
   if(autoPrint){
-    w.addEventListener('load',()=>setTimeout(()=>w.print(),180),{once:true});
+    w.addEventListener('load',()=>{
+      void Promise.race([logoListo,new Promise(resolve=>setTimeout(resolve,1800))])
+        .then(()=>{if(!w.closed) w.print();});
+    },{once:true});
   }
 }
 
