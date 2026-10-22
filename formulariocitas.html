@@ -323,17 +323,19 @@
             <div class="row g-3">
               <div class="col-md-6">
                 <label class="form-label">Cédula / documento *</label>
-                <input id="numero_documento" type="text" inputmode="numeric" maxlength="10" class="form-control" required placeholder="Ej. 0912345678" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
-                <div class="micro-help">10 dígitos, sin espacios ni guiones.</div>
+                <input id="numero_documento" type="text" inputmode="numeric" maxlength="32" class="form-control" required placeholder="Documento de identidad">
+                <div class="micro-help">Ingrese el documento válido según su país.</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">Nombres completos *</label>
-                <input id="nombre_completo" class="form-control" required autocomplete="name" placeholder="Nombre y apellido">
+                <input id="nombres" class="form-control" required autocomplete="given-name" placeholder="Nombres según documento">
+                <label class="form-label mt-3">Apellidos *</label>
+                <input id="apellidos" class="form-control" required autocomplete="family-name" placeholder="Apellidos según documento">
               </div>
               <div class="col-md-6">
                 <label class="form-label">WhatsApp / teléfono *</label>
-                <input id="whatsapp" type="text" inputmode="numeric" maxlength="10" autocomplete="off" class="form-control" required placeholder="Ej. 0999999999" oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
-                <div class="micro-help">10 dígitos y empieza con 09. Ej. 0991234567.</div>
+                <input id="whatsapp" type="text" inputmode="numeric" maxlength="20" autocomplete="tel" class="form-control" required placeholder="Teléfono con código de país">
+                <div class="micro-help">Incluya el código de país cuando corresponda.</div>
               </div>
               <div class="col-md-6">
                 <label class="form-label">Correo opcional</label>
@@ -351,13 +353,20 @@
             Al reservar, el horario queda apartado y deja de estar disponible para otros pacientes. Secretaría revisará los datos y confirmará los detalles por WhatsApp.
           </div>
 
-          <div id="statusBox" class="status"></div>
+          <div id="privacyBox" class="mini-note mt-3" style="background:#f8fafc;border-color:#e2e8f0;color:#334155">
+            <label for="acepta_privacidad"><input type="checkbox" id="acepta_privacidad" required> He leído el <button type="button" class="btn btn-link p-0 align-baseline" onclick="abrirAvisoPrivacidad()">aviso de privacidad</button> y autorizo el uso de mis datos para gestionar esta solicitud de cita.</label>
+          </div>
+          <div id="statusBox" class="status" role="status" aria-live="polite"></div>
 
           <div id="formMainActions" class="d-flex gap-2 flex-wrap mt-4">
             <button type="submit" class="btn-auro flex-fill"><i class="bi bi-calendar-check me-1"></i> Reservar cita</button>
             <button type="button" class="btn-line" onclick="cargarDatosIniciales()"><i class="bi bi-arrow-clockwise me-1"></i> Actualizar horarios</button>
           </div>
         </form>
+        <div id="privacyModal" class="modal" tabindex="-1" aria-labelledby="privacyTitle" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered"><div class="modal-content"><div class="modal-header"><h5 id="privacyTitle" class="modal-title">Aviso de privacidad</h5><button type="button" class="btn-close" aria-label="Cerrar" onclick="cerrarAvisoPrivacidad()"></button></div>
+          <div class="modal-body"><p><b>Responsable:</b> <span id="privacyResponsable">Establecimiento de salud</span>.</p><p>Los datos se solicitan exclusivamente para gestionar la reserva, identificar al solicitante y comunicarse sobre la cita. Para consultas sobre sus datos, utilice los canales de contacto oficiales del establecimiento.</p><p>La aceptación no constituye confirmación definitiva de la cita.</p></div><div class="modal-footer"><button type="button" class="btn btn-secondary" onclick="cerrarAvisoPrivacidad()">Cerrar</button></div></div></div>
+        </div>
         <div class="demo" id="pieCentroFormulario">Formulario web de citas</div>
       </main>
     </div>
@@ -405,6 +414,10 @@
 
     let configuracionCentro = {};
 
+    function escaparHtml(v){return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function abrirAvisoPrivacidad(){const m=document.getElementById('privacyModal');if(m){m.style.display='block';m.classList.add('show');m.setAttribute('aria-hidden','false');}}
+    function cerrarAvisoPrivacidad(){const m=document.getElementById('privacyModal');if(m){m.style.display='none';m.classList.remove('show');m.setAttribute('aria-hidden','true');}}
+    function validarAceptacionPrivacidad(){const c=document.getElementById('acepta_privacidad');if(c?.checked)return true;setStatus('err','Debe leer y aceptar el aviso de privacidad.');c?.focus();return false;}
     function valorConfigFormulario(clave, valorDefault){
       const v = configuracionCentro && configuracionCentro[clave] !== undefined
         ? configuracionCentro[clave]
@@ -509,6 +522,7 @@
       if(tituloEl) tituloEl.textContent = 'Agenda tu cita | ' + nombre;
       document.title = 'Agenda tu cita | ' + nombre;
       if(pieEl) pieEl.textContent = nombre + ' · Formulario web de citas';
+      document.getElementById('privacyResponsable').textContent = nombre;
 
       mostrarContactoCentro('centroDireccion', direccion);
       mostrarContactoCentro('centroEmail', email);
@@ -698,7 +712,6 @@
         const nombre = ((m.nombres || '') + ' ' + (m.apellidos || '')).trim();
         return nombre || id;
       }
-      if(String(id) === 'MED-001') return 'Dra. Aurora';
       return id || 'Médico';
     }
 
@@ -726,7 +739,7 @@
       }
 
       box.className = 'doctor-specialty-card show';
-      box.innerHTML = '<i class="bi bi-heart-pulse"></i><div><small>Especialidad</small><b>' + especialidad.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</b></div>';
+      box.innerHTML = '<i class="bi bi-heart-pulse"></i><div><small>Especialidad</small><b>' + escaparHtml(especialidad) + '</b></div>';
     }
 
     function resumenFechaLarga(iso){
@@ -746,7 +759,7 @@
       const medico = medicoNombre(idMedico);
       const fechaTxt = fecha ? resumenFechaLarga(fecha) : 'Seleccione una fecha';
       const horaTxt = horaInicio ? (horaInicio + (horaFin ? ' - ' + horaFin : '')) : 'Seleccione una hora disponible';
-      box.innerHTML = '<div><span class="muted">Disponibilidad para:</span> <b>' + medico + '</b></div>' +
+      box.innerHTML = '<div><span class="muted">Disponibilidad para:</span> <b>' + escaparHtml(medico) + '</b></div>' +
         '<div><span class="muted">Fecha:</span> <b>' + fechaTxt + '</b></div>' +
         '<div><span class="muted">Hora:</span> <b>' + horaTxt + '</b></div>' +
         (mensajeExtra ? '<div class="mt-1">' + mensajeExtra + '</div>' : '');
@@ -771,12 +784,14 @@
         const resultados = await Promise.allSettled([
           apiGet('listarDisponibilidad'),
           apiGet('listarMedicosActivos'),
-          apiGet('listarCitas'),
-          apiGet('listarPacientes')
+          Promise.resolve([]), // Citas de terceros: no descargar en portal público
+          Promise.resolve([])  // Pacientes de terceros: no descargar en portal público
         ]);
 
-        disponibilidad = resultados[0].status === 'fulfilled' && Array.isArray(resultados[0].value) ? resultados[0].value : [];
-        medicos = resultados[1].status === 'fulfilled' && Array.isArray(resultados[1].value) ? resultados[1].value : [];
+        if(resultados[0].status !== 'fulfilled' || !Array.isArray(resultados[0].value)) throw new Error('No se pudo verificar la disponibilidad.');
+        disponibilidad = resultados[0].value;
+        if(resultados[1].status !== 'fulfilled' || !Array.isArray(resultados[1].value)) throw new Error('No se pudo obtener el listado de médicos.');
+        medicos = resultados[1].value;
         citas = resultados[2].status === 'fulfilled' && Array.isArray(resultados[2].value) ? resultados[2].value : [];
         pacientes = resultados[3].status === 'fulfilled' && Array.isArray(resultados[3].value) ? resultados[3].value : [];
 
@@ -830,7 +845,7 @@
       sel.innerHTML = '<option value="">Seleccione médico</option>' + lista.map(m => {
         const id = String(m.id_medico || '').trim();
         const nombre = (((m.nombres || '') + ' ' + (m.apellidos || '')).trim() || m.nombre_completo || m.nombre || id);
-        return '<option value="' + id + '">' + nombre + '</option>';
+        return '<option value="' + escaparHtml(id) + '">' + escaparHtml(nombre) + '</option>';
       }).join('');
 
       if(actual && [...sel.options].some(o => o.value === actual)){
@@ -886,7 +901,7 @@
 
         selServicio.innerHTML = '<option value="">Seleccione servicio</option>' + serviciosMedico.map(s => {
           const nombre = nombreServicioVista(s);
-          return '<option value="' + nombre.replace(/"/g,'&quot;') + '">' + nombre + '</option>';
+          return '<option value="' + escaparHtml(nombre) + '">' + escaparHtml(nombre) + '</option>';
         }).join('');
 
         selServicio.disabled = false;
@@ -954,7 +969,7 @@
     }
 
     function limpiarErroresCampos(){
-      ['numero_documento','nombre_completo','whatsapp','email','id_medico','fecha_cita','servicio'].forEach(id => {
+      ['numero_documento','nombres','apellidos','whatsapp','email','id_medico','fecha_cita','servicio'].forEach(id => {
         const el = document.getElementById(id);
         if(el) el.classList.remove('field-error');
       });
@@ -1151,27 +1166,25 @@
       if(!data.numero_documento){
         errores.push('Ingrese la cédula del paciente.');
         marcarCampoError('numero_documento');
-      } else if(!/^\d{10}$/.test(doc)){
-        errores.push('La cédula debe tener exactamente 10 dígitos.');
+      } else if(!/^[A-Za-z0-9-]{5,32}$/.test(String(data.numero_documento).trim())){
+        errores.push('Revise el número de documento.');
         marcarCampoError('numero_documento');
-      } else if(!validarCedulaEcuador(doc)){
+      } else if(String(valorConfigFormulario('pais','')).toUpperCase().includes('ECUADOR') && !validarCedulaEcuador(doc)){
         errores.push('La cédula ingresada no es válida. Revise el número.');
         marcarCampoError('numero_documento');
       }
 
-      if(!data.nombre_completo){
-        errores.push('Ingrese nombres completos.');
-        marcarCampoError('nombre_completo');
-      } else if(!nombreCompletoValido(data.nombre_completo)){
-        errores.push('Ingrese nombre y apellido. Mínimo 2 palabras y 8 caracteres.');
-        marcarCampoError('nombre_completo');
+      if(!data.nombres){errores.push('Ingrese los nombres.');marcarCampoError('nombres');}
+      if(!data.apellidos){errores.push('Ingrese los apellidos.');marcarCampoError('apellidos');}
+      if(data.nombres && data.apellidos && !nombreCompletoValido(data.nombre_completo)){
+        errores.push('Revise nombres y apellidos.');marcarCampoError('nombres');marcarCampoError('apellidos');
       }
 
       if(!data.whatsapp){
         errores.push('Ingrese WhatsApp o teléfono.');
         marcarCampoError('whatsapp');
-      } else if(!whatsappValido(wa)){
-        errores.push('El WhatsApp/teléfono debe tener 10 dígitos y empezar con 09.');
+      } else if(!/^\+?\d{8,15}$/.test(String(data.whatsapp).replace(/[\s()-]/g,''))){
+        errores.push('Ingrese un número de teléfono válido con 8 a 15 dígitos.');
         marcarCampoError('whatsapp');
       }
 
@@ -1188,6 +1201,7 @@
         marcarCampoError('email');
       }
 
+      if(!validarAceptacionPrivacidad()) return false;
       if(errores.length){
         setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> Revise la información:<ul class="validation-list"><li>' + errores.join('</li><li>') + '</li></ul>');
         desplazarPrimerErrorFormulario();
@@ -1237,7 +1251,7 @@
     }
 
     function mensajeDuplicidadReserva(duplicada){
-      const c = duplicada && duplicada.cita ? duplicada.cita : {};
+      const c = {}; // No exponer información de terceros en un formulario público
       const paciente = extraerNombrePacienteCita(c);
       const fecha = formatearFechaBonita(normalizarFecha(c.fecha_cita || c.fecha || ''));
       const hora = formatearHoraVista(c.hora_inicio);
@@ -1315,7 +1329,7 @@
     }
 
     function confirmarNuevaReservaConCitaFutura(data){
-      const existente = buscarCitaFuturaActivaPaciente(data);
+      const existente = null; // Avisos de citas futuras requieren endpoint autenticado y privado
       if(!existente) return true;
 
       const fecha = formatearFechaBonita(normalizarFecha(existente.fecha_cita || existente.fecha || ''));
@@ -1374,7 +1388,10 @@
 
       const data = {
         numero_documento: document.getElementById('numero_documento').value.trim(),
-        nombre_completo: document.getElementById('nombre_completo').value.trim(),
+        nombres: document.getElementById('nombres').value.trim().replace(/\s+/g,' '),
+        apellidos: document.getElementById('apellidos').value.trim().replace(/\s+/g,' '),
+        nombre_completo: [document.getElementById('nombres').value.trim(),document.getElementById('apellidos').value.trim()].join(' ').replace(/\s+/g,' '),
+        acepta_privacidad: document.getElementById('acepta_privacidad').checked,
         whatsapp: document.getElementById('whatsapp').value.trim(),
         telefono: document.getElementById('whatsapp').value.trim(),
         email: document.getElementById('email').value.trim(),
@@ -1396,7 +1413,8 @@
       const identidadInicial = validarIdentidadDocumentoLocal(data);
       if(!identidadInicial.ok){
         marcarCampoError('numero_documento');
-        marcarCampoError('nombre_completo');
+        marcarCampoError('nombres');
+        marcarCampoError('apellidos');
         setStatus('err','<i class="bi bi-person-x-fill me-1"></i> ' + identidadInicial.mensaje);
         desplazarPrimerErrorFormulario();
         return;
@@ -1420,10 +1438,9 @@
       setStatus('info','Verificando disponibilidad actual y reservando el horario seleccionado...');
 
       try{
-        const refresco = await Promise.allSettled([apiGet('listarDisponibilidad'), apiGet('listarCitas'), apiGet('listarPacientes')]);
-        if(refresco[0].status === 'fulfilled' && Array.isArray(refresco[0].value)) disponibilidad = refresco[0].value;
-        if(refresco[1].status === 'fulfilled' && Array.isArray(refresco[1].value)) citas = refresco[1].value;
-        if(refresco[2].status === 'fulfilled' && Array.isArray(refresco[2].value)) pacientes = refresco[2].value;
+        const refresco = await apiGet('listarDisponibilidad');
+        if(!Array.isArray(refresco)) throw new Error('No se pudo verificar la disponibilidad actual. Intente nuevamente.');
+        disponibilidad = refresco;
 
         const disponibleAhora = disponibilidadActualDisponible();
         if(!disponibleAhora){
@@ -1434,7 +1451,8 @@
         const identidadActual = validarIdentidadDocumentoLocal(data);
         if(!identidadActual.ok){
           marcarCampoError('numero_documento');
-          marcarCampoError('nombre_completo');
+          marcarCampoError('nombres');
+          marcarCampoError('apellidos');
           setStatus('err','<i class="bi bi-person-x-fill me-1"></i> ' + identidadActual.mensaje);
           desplazarPrimerErrorFormulario();
           return;
@@ -1469,8 +1487,7 @@
           'Su reserva ha sido registrada correctamente.\n\n' +
           '\u26A0\uFE0F IMPORTANTE: Este comprobante NO confirma definitivamente la cita. La reserva permanece pendiente de confirmación por Secretaría.\n\n' +
           '\uD83D\uDD16 Código: ' + codigoReserva + '\n' +
-          '\uD83D\uDC64 Paciente: ' + pacienteNombre + '\n' +
-          (cedulaPaciente ? '\uD83E\uDEAA Cédula: ' + cedulaPaciente + '\n' : '') +
+          '' +
           '\uD83D\uDCC5 Fecha: ' + formatearFechaBonita(data.fecha_cita) + '\n' +
           '\uD83D\uDD54 Hora: ' + data.hora_inicio + ' - ' + data.hora_fin + '\n' +
           '\uD83D\uDC69\u200D\u2695\uFE0F Médico: ' + medicoNombre(data.id_medico) + '\n' +
@@ -1482,13 +1499,12 @@
           'Hola, acabo de realizar una reserva mediante el formulario de ' + nombreCentroMensaje + '.\n\n' +
           'Solicito por favor la confirmación de mi cita.\n\n' +
           '\uD83D\uDD16 Código: ' + codigoReserva + '\n' +
-          '\uD83D\uDC64 Paciente: ' + pacienteNombre + '\n' +
-          (cedulaPaciente ? '\uD83E\uDEAA Cédula: ' + cedulaPaciente + '\n' : '') +
+          '' +
           '\uD83D\uDCC5 Fecha: ' + formatearFechaBonita(data.fecha_cita) + '\n' +
           '\uD83D\uDD54 Hora: ' + data.hora_inicio + ' - ' + data.hora_fin + '\n' +
           '\uD83D\uDC69\u200D\u2695\uFE0F Médico: ' + medicoNombre(data.id_medico) + '\n' +
           '\uD83E\uDE7A Servicio: ' + (data.servicio || data.motivo || 'No especificado') + '\n' +
-          '\uD83D\uDCF1 WhatsApp del paciente: ' + whatsappPaciente + '\n\n' +
+          '\n' +
           'Quedo pendiente de la confirmación por Secretaría. Gracias.';
 
         const wa = normalizarWhatsApp(data.whatsapp);
@@ -1501,15 +1517,15 @@
             <h4><i class="bi bi-check-circle-fill me-1"></i> Horario reservado correctamente</h4>
             <div>Su horario ha quedado reservado y ya no estará disponible para otros pacientes. Secretaría revisará la información y se comunicará por WhatsApp para confirmar los detalles de la cita.</div>
             <div class="success-grid">
-              <div class="success-item"><small>Paciente</small><b>${pacienteNombre}</b></div>
-              <div class="success-item"><small>Cédula</small><b>${cedulaPaciente}</b></div>
-              <div class="success-item"><small>Estado</small><b>${estadoCita}</b></div>
+              <div class="success-item"><small>Paciente</small><b>${escaparHtml(pacienteNombre)}</b></div>
+              <div class="success-item"><small>Cédula</small><b>${escaparHtml(cedulaPaciente)}</b></div>
+              <div class="success-item"><small>Estado</small><b>${escaparHtml(estadoCita)}</b></div>
               <div class="success-item"><small>Fecha</small><b>${formatearFechaBonita(data.fecha_cita)}</b></div>
               <div class="success-item"><small>Hora</small><b>${data.hora_inicio} - ${data.hora_fin}</b></div>
               <div class="success-item"><small>Médico</small><b>${medicoNombre(data.id_medico)}</b></div>
-              <div class="success-item"><small>Servicio</small><b>${data.servicio || data.motivo || 'No especificado'}</b></div>
-              <div class="success-item"><small>WhatsApp</small><b>${whatsappPaciente}</b></div>
-              <div class="success-item"><small>Código de reserva</small><b>${codigoReserva}</b></div>
+              <div class="success-item"><small>Servicio</small><b>${escaparHtml(data.servicio || data.motivo || 'No especificado')}</b></div>
+              <div class="success-item"><small>WhatsApp</small><b>${escaparHtml(whatsappPaciente)}</b></div>
+              <div class="success-item"><small>Código de reserva</small><b>${escaparHtml(codigoReserva)}</b></div>
             </div>
             <div class="success-note"><i class="bi bi-exclamation-triangle-fill me-1"></i> <b>Importante:</b> su reserva fue registrada, pero permanece <b>pendiente de confirmación por Secretaría</b>. Guardar el comprobante no confirma definitivamente la cita.</div>
             <div class="success-actions">
@@ -1523,7 +1539,7 @@
         activarModoReservaCompletada();
       }catch(err){
         console.error(err);
-        setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> ' + err.message);
+        setStatus('err','<i class="bi bi-exclamation-triangle me-1"></i> ' + escaparHtml(err.message));
         await cargarDatosIniciales(true);
       }finally{
         enviandoCita = false;
