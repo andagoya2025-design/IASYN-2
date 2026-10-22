@@ -43,6 +43,8 @@
     .form-label{font-weight:850;color:#334155;margin-bottom:7px}
     .form-control,.form-select{border-radius:15px;padding:11px 13px;border-color:#e2e8f0}
     .form-control:focus,.form-select:focus{border-color:var(--primary2);box-shadow:0 0 0 .2rem rgba(194,59,131,.12)}
+    button.calendar-day-mini{font:inherit;cursor:pointer;width:100%;border:1px solid transparent;text-align:center;}
+    button.calendar-day-mini:focus-visible{outline:3px solid var(--primary);outline-offset:2px;}
     .btn-auro{background:linear-gradient(135deg,var(--primary),var(--primary2));border:0;color:#fff;border-radius:16px;padding:12px 16px;font-weight:900;box-shadow:0 14px 30px rgba(139,30,90,.23)}
     .btn-auro:hover{color:#fff;filter:saturate(1.06)}
     .btn-line{background:#fff;color:#334155;border:1px solid var(--line);border-radius:16px;padding:12px 16px;font-weight:900}
@@ -402,7 +404,9 @@
       const url = API_URL + '?' + query.toString();
       const res = await fetch(url);
       if(!res.ok) throw new Error('Error HTTP ' + res.status);
-      return await res.json();
+      const respuesta = await res.json();
+      if(respuesta && respuesta.success === false) throw new Error(respuesta.message || 'La consulta fue rechazada por el servidor.');
+      return respuesta;
     }
 
     async function apiPost(accion, data){
@@ -665,9 +669,11 @@
     }
 
     function seleccionarDiaMini(iso){
+      if(!horariosDisponiblesPorFecha(iso).length) return;
       document.getElementById('fecha_cita').value = iso;
       sincronizarMiniDesdeInput();
       renderHorasDisponibles();
+      actualizarResumenSeleccion();
       const slots = document.getElementById('slots');
       if(slots) slots.scrollIntoView({behavior:'smooth', block:'nearest'});
     }
@@ -701,7 +707,9 @@
           iso === today ? 'today' : ''
         ].join(' ');
         const texto = disponible ? total + ' hora' + (total === 1 ? '' : 's') : 'sin hora';
-        html += `<div class="${css}"><span class="num">${day}</span><span class="qty">${texto}</span></div>`;
+        html += disponible
+          ? `<button type="button" class="${css}" aria-label="Seleccionar ${iso}: ${texto}" onclick="seleccionarDiaMini('${iso}')"><span class="num">${day}</span><span class="qty">${texto}</span></button>`
+          : `<div class="${css}" aria-disabled="true"><span class="num">${day}</span><span class="qty">${texto}</span></div>`;
       }
       grid.innerHTML = html;
     }
@@ -782,7 +790,7 @@
       document.getElementById('loadingSlots').classList.add('show');
       try{
         const resultados = await Promise.allSettled([
-          apiGet('listarDisponibilidad'),
+          apiGet('listarDisponibilidadActiva'),
           apiGet('listarMedicosActivos'),
           Promise.resolve([]), // Citas de terceros: no descargar en portal público
           Promise.resolve([])  // Pacientes de terceros: no descargar en portal público
@@ -1438,7 +1446,7 @@
       setStatus('info','Verificando disponibilidad actual y reservando el horario seleccionado...');
 
       try{
-        const refresco = await apiGet('listarDisponibilidad');
+        const refresco = await apiGet('listarDisponibilidadActiva');
         if(!Array.isArray(refresco)) throw new Error('No se pudo verificar la disponibilidad actual. Intente nuevamente.');
         disponibilidad = refresco;
 
