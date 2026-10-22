@@ -324,24 +324,26 @@
 
             <div class="row g-3">
               <div class="col-md-6">
-                <label class="form-label">Cédula / documento *</label>
-                <input id="numero_documento" type="text" inputmode="numeric" maxlength="32" class="form-control" required placeholder="Documento de identidad">
-                <div class="micro-help">Ingrese el documento válido según su país.</div>
+                <label class="form-label" for="numero_documento">Cédula / documento *</label>
+                <input id="numero_documento" type="text" inputmode="numeric" maxlength="10" autocomplete="off" class="form-control" required placeholder="Ej. 0912345678">
+                <div id="ayudaDocumento" class="micro-help">Cédula ecuatoriana: exactamente 10 dígitos válidos.</div>
               </div>
               <div class="col-md-6">
-                <label class="form-label">Nombres completos *</label>
-                <input id="nombres" class="form-control" required autocomplete="given-name" placeholder="Nombres según documento">
-                <label class="form-label mt-3">Apellidos *</label>
-                <input id="apellidos" class="form-control" required autocomplete="family-name" placeholder="Apellidos según documento">
+                <label class="form-label" for="whatsapp">WhatsApp / teléfono *</label>
+                <input id="whatsapp" type="tel" inputmode="numeric" maxlength="10" autocomplete="tel" class="form-control" required placeholder="Ej. 0991234567">
+                <div id="ayudaTelefono" class="micro-help">Celular ecuatoriano: 10 dígitos, empieza con 09.</div>
               </div>
               <div class="col-md-6">
-                <label class="form-label">WhatsApp / teléfono *</label>
-                <input id="whatsapp" type="text" inputmode="numeric" maxlength="20" autocomplete="tel" class="form-control" required placeholder="Teléfono con código de país">
-                <div class="micro-help">Incluya el código de país cuando corresponda.</div>
+                <label class="form-label" for="nombres">Nombres *</label>
+                <input id="nombres" class="form-control" required autocomplete="given-name" maxlength="100" placeholder="Ej. María Fernanda">
               </div>
               <div class="col-md-6">
-                <label class="form-label">Correo opcional</label>
-                <input id="email" type="email" class="form-control" autocomplete="email" placeholder="correo@ejemplo.com">
+                <label class="form-label" for="apellidos">Apellidos *</label>
+                <input id="apellidos" class="form-control" required autocomplete="family-name" maxlength="100" placeholder="Ej. López García">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="email">Correo electrónico (opcional)</label>
+                <input id="email" type="email" class="form-control" autocomplete="email" maxlength="254" placeholder="correo@ejemplo.com">
               </div>
               <div class="col-12">
                 <label class="form-label">Observación</label>
@@ -542,6 +544,7 @@
         console.error('No se pudo cargar la configuración del centro:', error);
         configuracionCentro = {};
       }
+      aplicarRestriccionesContacto();
       aplicarConfiguracionCentroFormulario();
     }
 
@@ -1165,6 +1168,35 @@
       return p ? soloDigitos(p.whatsapp || p.telefono || p.celular || '') : '';
     }
 
+    // IASYN-2: restricciones por país; Ecuador por defecto, configurable por establecimiento.
+    function paisFormularioEcuador(){
+      const pais = String(valorConfigFormulario('pais','Ecuador')).trim().toUpperCase();
+      return ['EC','ECU','ECUADOR','ECUADOR (EC)'].includes(pais);
+    }
+    function aplicarRestriccionesContacto(){
+      const ec = paisFormularioEcuador();
+      const documento = document.getElementById('numero_documento');
+      const telefono = document.getElementById('whatsapp');
+      if(!documento || !telefono) return;
+      documento.maxLength = ec ? 10 : 32;
+      telefono.maxLength = ec ? 10 : 15;
+      documento.inputMode = ec ? 'numeric' : 'text';
+      telefono.inputMode = 'numeric';
+      documento.placeholder = ec ? 'Ej. 0912345678' : 'Documento de identidad';
+      telefono.placeholder = ec ? 'Ej. 0991234567' : 'Teléfono (8 a 15 dígitos)';
+      document.getElementById('ayudaDocumento').textContent = ec ? 'Cédula ecuatoriana: exactamente 10 dígitos válidos.' : 'Documento de identidad: 5 a 32 caracteres.';
+      document.getElementById('ayudaTelefono').textContent = ec ? 'Celular ecuatoriano: 10 dígitos, empieza con 09.' : 'Teléfono: 8 a 15 dígitos; incluya el código de país si corresponde.';
+      documento.value = ec ? documento.value.replace(/\D/g,'').slice(0,10) : documento.value.replace(/[^A-Za-z0-9-]/g,'').slice(0,32);
+      telefono.value = telefono.value.replace(/\D/g,'').slice(0,ec ? 10 : 15);
+    }
+    document.getElementById('numero_documento').addEventListener('input', function(){
+      const ec = paisFormularioEcuador();
+      this.value = ec ? this.value.replace(/\D/g,'').slice(0,10) : this.value.replace(/[^A-Za-z0-9-]/g,'').slice(0,32);
+    });
+    document.getElementById('whatsapp').addEventListener('input', function(){
+      this.value = this.value.replace(/\D/g,'').slice(0,paisFormularioEcuador() ? 10 : 15);
+    });
+    aplicarRestriccionesContacto();
     function validarFormularioAntesDeEnviar(data){
       limpiarErroresCampos();
       const errores = [];
@@ -1172,13 +1204,13 @@
       const wa = soloDigitos(data.whatsapp);
 
       if(!data.numero_documento){
-        errores.push('Ingrese la cédula del paciente.');
+        errores.push('Ingrese la cédula o documento del paciente.');
         marcarCampoError('numero_documento');
-      } else if(!/^[A-Za-z0-9-]{5,32}$/.test(String(data.numero_documento).trim())){
-        errores.push('Revise el número de documento.');
+      } else if(paisFormularioEcuador() && (!/^\d{10}$/.test(data.numero_documento) || !validarCedulaEcuador(data.numero_documento))){
+        errores.push('La cédula ecuatoriana debe tener 10 dígitos y ser válida.');
         marcarCampoError('numero_documento');
-      } else if(String(valorConfigFormulario('pais','')).toUpperCase().includes('ECUADOR') && !validarCedulaEcuador(doc)){
-        errores.push('La cédula ingresada no es válida. Revise el número.');
+      } else if(!paisFormularioEcuador() && !/^[A-Za-z0-9-]{5,32}$/.test(data.numero_documento)){
+        errores.push('Revise el documento de identidad.');
         marcarCampoError('numero_documento');
       }
 
@@ -1191,8 +1223,8 @@
       if(!data.whatsapp){
         errores.push('Ingrese WhatsApp o teléfono.');
         marcarCampoError('whatsapp');
-      } else if(!/^\+?\d{8,15}$/.test(String(data.whatsapp).replace(/[\s()-]/g,''))){
-        errores.push('Ingrese un número de teléfono válido con 8 a 15 dígitos.');
+      } else if(paisFormularioEcuador() ? !/^09\d{8}$/.test(data.whatsapp) : !/^\d{8,15}$/.test(data.whatsapp)){
+        errores.push(paisFormularioEcuador() ? 'El celular debe tener 10 dígitos y comenzar con 09.' : 'Ingrese un teléfono de 8 a 15 dígitos.');
         marcarCampoError('whatsapp');
       }
 
