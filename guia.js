@@ -592,7 +592,45 @@ CONTRATO ANTIRREGRESIVO
     window.setTimeout(orientarEntradaDiagnostico,120);
   }
 
-  window.addEventListener('aurosanax:diagnosticos-actualizados',refrescarGuiaDiagnosticoSiActiva);
+  /* IASYN2 — puente observador para atención antigua/activa.
+     Solo actualiza la orientación visual; no cambia el contexto clínico.
+     El evento de guardado no se interpreta como persistencia confirmada
+     salvo que el emisor lo declare y coincida la atención seleccionada. */
+  function idAtencionParaGuia(){
+    try{
+      if(typeof window.getIdAtencionActiva==='function'){
+        const id=texto(window.getIdAtencionActiva(),'');
+        if(id)return id;
+      }
+    }catch(_e){}
+    return texto(window.auroAtencionSeleccionadaId ||
+      (window.currentAttention && window.currentAttention.id_atencion) ||
+      (window.atencionActual && window.atencionActual.id_atencion),'');
+  }
+
+  function recibirDiagnosticosActualizados(evento){
+    const d=evento && evento.detail && typeof evento.detail==='object'?evento.detail:{};
+    const idEvento=texto(d.id_atencion,'');
+    const idActual=idAtencionParaGuia();
+    // Evitar notificaciones de otra atención o respuestas diferidas.
+    if(idEvento && (!idActual || idEvento!==idActual))return;
+    refrescarGuiaDiagnosticoSiActiva();
+  }
+
+  function recibirCambioAtencionParaGuia(evento){
+    const d=evento && evento.detail && typeof evento.detail==='object'?evento.detail:{};
+    const idEvento=texto(d.id_atencion || (d.atencion && d.atencion.id_atencion),'');
+    window.setTimeout(function(){
+      const idActual=idAtencionParaGuia();
+      if(idEvento && (!idActual || idActual!==idEvento))return;
+      refrescarGuiaDiagnosticoSiActiva();
+    },180);
+  }
+
+  window.addEventListener('aurosanax:diagnosticos-actualizados',recibirDiagnosticosActualizados);
+  ['aurosanax:atencion-seleccionada','aurosanax:atencion-iniciada','aurosanax:atencion-actualizada'].forEach(function(nombre){
+    window.addEventListener(nombre,recibirCambioAtencionParaGuia);
+  });
 
   window.addEventListener('resize',function(){if(posicionUsuario)aplicarPosicionUsuario();});
   window.addEventListener('aurosanax:guia-contexto',recibirContexto);
