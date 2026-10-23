@@ -592,6 +592,57 @@ CONTRATO ANTIRREGRESIVO
     window.setTimeout(orientarEntradaDiagnostico,120);
   }
 
+  /* ============================================================
+     IASYN2 GUÍA — PLAN (AMPLIACIÓN OBSERVADORA ANTIRREGRESIVA)
+     Solo presentación. No lee valores clínicos, no guarda, no prescribe.
+     No modifica plan.js, su navegación ni sus eventos propietarios.
+  ============================================================ */
+  let planPantallaActivaAnterior=false;
+
+  function orientarEntradaPlan(){
+    try{
+      if(preferencias.activa===false)return;
+      const pantalla=document.getElementById('hc_plan');
+      if(!pantalla || !pantalla.classList.contains('active'))return;
+      // No interrumpir una guía minimizada ni reabrirla sin solicitud del usuario.
+      const existente=mounts.get('plan');
+      if(existente && existente.oculta)return;
+      // No desplazar una guía de otro módulo si el usuario la mantiene abierta.
+      const actual=mounts.get(activo);
+      if(actual && !actual.oculta && activo!=='plan')return;
+      montar('plan',null,{
+        tipo:'info',titulo:'Asistente de Plan',
+        resumen:'Revise el plan clínico correspondiente a la atención activa. Complete únicamente los campos que correspondan según su criterio profesional.',
+        siguiente:'Verifique medicamentos, órdenes, interconsultas y evaluaciones; confirme el guardado desde el propio módulo Plan.',
+        detalle:'La información visible no demuestra persistencia. Esta guía no prescribe, no crea recetas, no guarda, no firma y no modifica información clínica. Las recetas mantienen su flujo propio.',
+        expandible:true,expandida:false,ocultable:true
+      });
+    }catch(error){console.warn('IASYN2 GUÍA: orientación de Plan omitida de forma segura.',error);}
+  }
+
+  function observarEntradaPlan(){
+    const pantalla=document.getElementById('hc_plan');
+    if(!pantalla)return;
+    planPantallaActivaAnterior=pantalla.classList.contains('active');
+    const observer=new MutationObserver(function(){
+      const activaAhora=pantalla.classList.contains('active');
+      if(activaAhora && !planPantallaActivaAnterior){
+        window.setTimeout(orientarEntradaPlan,180);
+      }
+      planPantallaActivaAnterior=activaAhora;
+    });
+    observer.observe(pantalla,{attributes:true,attributeFilter:['class']});
+    if(planPantallaActivaAnterior)window.setTimeout(orientarEntradaPlan,180);
+  }
+
+  function refrescarGuiaPlanSiActiva(){
+    const pantalla=document.getElementById('hc_plan');
+    if(!pantalla || !pantalla.classList.contains('active'))return;
+    const existente=mounts.get('plan');
+    if(existente && existente.oculta)return;
+    window.setTimeout(orientarEntradaPlan,120);
+  }
+
   /* IASYN2 — puente observador para atención antigua/activa.
      Solo actualiza la orientación visual; no cambia el contexto clínico.
      El evento de guardado no se interpreta como persistencia confirmada
@@ -659,12 +710,14 @@ CONTRATO ANTIRREGRESIVO
       asegurarAsistenteDisponible();
       observarEntradaHistoria();
       observarEntradaDiagnostico();
+      observarEntradaPlan();
     },{once:true});
   }else{
     setTimeout(function(){
       asegurarAsistenteDisponible();
       observarEntradaHistoria();
       observarEntradaDiagnostico();
+      observarEntradaPlan();
     },0);
   }
 
