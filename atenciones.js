@@ -2614,7 +2614,7 @@
         '</div>' +
       '</div>' +
       '<div class="auro-atencion-info-grid">' +
-        auroAtencionDato('Fecha', fechaVisual(a.fecha_atencion)) +
+        auroAtencionDato('Fecha de atención', fechaVisual(a.fecha_atencion)) +
         auroAtencionDato(auroAtencionEtiquetaHora(a), horaVisualAtencion(a.hora_atencion || '—')) +
         auroAtencionDato('Tipo', a.tipo_atencion || '—') +
         auroAtencionDatoHTML('Médico', auroAtencionMedicoHTML(a)) +
@@ -2889,7 +2889,7 @@
       '<div class="auro-atenciones-desktop">' +
         '<div class="table-responsive">' +
           '<table class="table table-modern align-middle mb-0">' +
-            '<thead><tr><th>Consulta</th><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Especialidad / médico</th><th>Estado</th><th>Acción</th></tr></thead>' +
+            '<thead><tr><th>Consulta</th><th>Fecha de atención</th><th>Hora</th><th>Tipo</th><th>Especialidad / médico</th><th>Estado</th><th>Acción</th></tr></thead>' +
             '<tbody>' + filasTabla + '</tbody>' +
           '</table>' +
         '</div>' +
@@ -2971,6 +2971,41 @@
     nueva.__auroAtencionesWrapped = true;
     window[nombre] = nueva;
   }
+
+  /* IASYN2 · Sincronización antirregresiva del tipo desde Anamnesis.
+     El evento se emite únicamente tras confirmar la escritura remota.
+     Se refresca desde Sheets, sin crear ni editar una atención aquí. */
+  window.addEventListener('aurosanax:tipo-atencion-confirmado', function(evento){
+    const detalle = evento && evento.detail ? evento.detail : {};
+    const id = String(detalle.id_atencion || '').trim();
+    const tipo = String(detalle.tipo_atencion || '').trim();
+    if(!id || !tipo) return;
+
+    // Evitar repintar datos de otro paciente si cambió el contexto.
+    const pacienteAlRecibir = String(idPacienteActivo() || '').trim();
+    const local = leerLocal().find(function(a){
+      return String(a.id_atencion || '').trim() === id;
+    });
+    if(local && pacienteAlRecibir && String(local.id_paciente || '').trim() !== pacienteAlRecibir) return;
+
+    // Invalidar caché: Sheets es la fuente de verdad, no el evento.
+    atencionesSheetsCargadas = false;
+    const actualizar = async function(){
+      await cargarAtencionesDesdeSheets(true);
+      if(String(idPacienteActivo() || '').trim() !== pacienteAlRecibir) return;
+      const actual = leerLocal().find(function(a){
+        return String(a.id_atencion || '').trim() === id;
+      });
+      if(!actual || String(actual.tipo_atencion || '').trim() !== tipo) return;
+      renderAtencionesPaciente();
+      if(String(atencionActivaId || '').trim() === id){
+        renderDetalleAtencion(actual);
+      }
+    };
+    actualizar().catch(function(error){
+      console.warn(MODULO, 'No se pudo refrescar el tipo de atención.', error);
+    });
+  });
 
   document.addEventListener('DOMContentLoaded', function(){
     setTimeout(function(){
