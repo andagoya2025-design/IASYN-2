@@ -2213,7 +2213,7 @@
       .auro-familiares-card > .clinical-note{margin-left:12px;margin-right:12px}
     }
 
-  
+
     /* IASYN2 DASHBOARD · RELIEVE VISUAL 3D V1 · SOLO PRESENTACIÓN
        Alcance exclusivo: #dashboard. Sin cambios de HTML, JS, datos ni configuración. */
     #dashboard .hero{
@@ -9295,7 +9295,8 @@ async function guardarHistoriaClinicaERP(){
         {
           detail: {
             id_historia: editingHistoryId,
-            id_paciente: idPaciente
+            id_paciente: idPaciente,
+            operacion: esEdicion ? 'edicion' : 'creacion'
           }
         }
       ));
@@ -12609,6 +12610,8 @@ if(typeof showScreen==='function'){
 <script src="pacientes.js?v=20260824_1"></script>
 <!-- AUROSANAX - Módulo Agenda Médica -->
 <script src="agenda.js?v=20260824_1"></script>
+<!-- IASYN2: guía contextual aislada; no participa en persistencia clínica -->
+<script src="guia.js?v=EIC_GUIA_V1"></script>
 <script id="auro-erp-inicio-despues-seguridad">
   /* AUROSANAX: preparar el ERP, pero no cargar datos antes de validar la sesión. */
   window.__auroErpInicializacionPromesa = null;
