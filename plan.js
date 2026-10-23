@@ -1,711 +1,6165 @@
-// PRELIMINAR: no instalar sin revisar index.html y pacientes.js vigentes de IASYN2.
-// Eventos aurosanax:* conservados por compatibilidad; no renombrar emisores.
-/*
-======================================================================
-IASYN2 / EIC — guia.js (adaptación preliminar)
-ASISTENTE CONTEXTUAL PREMIUM DEL ERP
-Adaptación V1 basada en archivo donante con VERSION 1.3.7; no equivale a donante 1.3.9
-======================================================================
+/****************************************************************
+ IASYN ERP
+ plan.js
+ ACTUALIZACIÓN QUIRÚRGICA: CONTEXTO UNIFICADO POR ATENCIÓN v20.1
+ MODULACIÓN PLAN - FASE 5 EVALUACIONES / NAVEGACIÓN SEGURA
+ ---------------------------------------------------------------
+ OBJETIVO:
+ - Mantener Fase 3 estable.
+ - Agregar módulo de Evaluaciones y mantener utilidades:
+   auroPlanSetValue()
+   auroPlanGetValue()
+ - Integrar EVALUACIONES sin romper medicamentos, órdenes ni interconsultas.
+ - NO tocar botón Guardar historia / Actualizar plan.
+ - NO usar MutationObserver.
+ - NO interceptar navegación.
+ - NO tocar Dashboard, Pacientes, Agenda, Atenciones ni Recetas emitidas.
 
-CONTRATO ANTIRREGRESIVO
-- Presentación y capacitación únicamente.
-- NO guarda datos clínicos.
-- NO crea pacientes, historias, citas ni atenciones.
-- NO modifica IDs clínicos.
-- NO realiza fetch, POST, consultas ni persistencia clínica.
-- Solo conserva posición y activación visual en localStorage.
-- NO firma, NO finaliza atenciones y NO dispara botones propietarios.
-- Los módulos informan hechos ya confirmados; la guía solo orienta.
-- Si este archivo falla o no carga, el ERP conserva su flujo propietario.
-- Todo el CSS está encapsulado en iasyn-guia-*.
-======================================================================
-*/
-(function iasynGuiaBootstrap(window, document){
-  'use strict';
+ CONTIENE:
+ - Estado temporal por id_atencion.
+ - Limpieza del Plan al cambiar consulta.
+ - Medicamentos del Plan.
+ - Órdenes médicas.
+ - Interconsulta:
+   * agregar interconsulta temporal
+   * eliminar interconsulta temporal
+   * recopilar interconsulta desde campos visibles
+   * limpiar interconsulta
+   * guardar/restaurar por consulta
+ - Responsive móvil Android/teléfono.
+ - Persistencia JSON uniforme para medicamentos, órdenes, interconsultas y evaluaciones.
+ - Captura automática de interconsulta al actualizar el Plan.
+ - Edición segura de medicamentos sin alterar persistencia por id_atencion.
+ - Vías visibles con nombre completo, conservando valores internos compatibles.
+ - Ayudas rápidas para frecuencia, duración e indicaciones.
+ - Ampliación controlada de la tabla solo en escritorio.
+ - IASYN mejora antirregresiva 2026-09:
+   * búsqueda enriquecida de medicamentos
+   * presentaciones y vías compatibles cuando el catálogo las provee
+   * vía libre segura
+   * limpiar campos rápidos
+   * indicaciones autoexpandibles + editor ampliado sin truncado
+   * CIE-10 visual con punto sin cambiar persistencia
+****************************************************************/
 
-  if(!window || !document) return;
-  if(window.IASYNGuia && window.IASYNGuia.__iasynGuiaMotor === true) return;
 
-  const VERSION='IASYN2-ADAPTACION-V1-DONANTE-1.3.7';
-  const STYLE_ID='iasynGuiaStyles';
-  const HOST_ID='iasynGuiaFloatingHost';
-  const mounts=new Map();
-  let activo='';
-  let posicionUsuario=null;
-  const PREF_KEY='iasyn2_guia_preferencias_v1';
-  let preferencias=cargarPreferencias();
+/* ============================================================
+   IASYN - NOTA DE AISLAMIENTO / COMPATIBILIDAD
+   ------------------------------------------------------------
+   Este módulo no contiene URLs directas a AUROSANAX, Google Drive
+   ni Apps Script. El backend se obtiene desde API_URL, cuya fuente
+   autoritativa debe ser index.html de IASYN.
 
-  function cargarPreferencias(){
-    try{
-      const raw=window.localStorage.getItem(PREF_KEY);
-      const p=raw?JSON.parse(raw):{};
-      return {
-        activa:p.activa!==false,
-        x:Number.isFinite(Number(p.x))?Number(p.x):null,
-        y:Number.isFinite(Number(p.y))?Number(p.y):null
-      };
-    }catch(_e){ return {activa:true,x:null,y:null}; }
-  }
+   Se conservan temporalmente eventos `aurosanax:*`, aliases globales
+   de Diagnóstico/Seguridad y la clave `aurosanax_recetas_emitidas_v1`
+   porque siguen siendo contratos internos compartidos entre módulos.
+   Renombrarlos solo en plan.js rompería la sincronización clínica.
+   No representan una conexión activa con AUROSANAX PRUEBA.
+============================================================ */
 
-  function guardarPreferencias(){
-    try{
-      window.localStorage.setItem(PREF_KEY,JSON.stringify({
-        activa:preferencias.activa!==false,
-        x:Number.isFinite(preferencias.x)?preferencias.x:null,
-        y:Number.isFinite(preferencias.y)?preferencias.y:null
-      }));
-    }catch(_e){}
-  }
 
-  function texto(v,f){ const t=String(v==null?'':v).trim(); return t || String(f||'').trim(); }
-  function tipo(v){ const t=String(v||'info').trim().toLowerCase(); return ['info','ok','warning','neutral'].includes(t)?t:'info'; }
-  function esMovil(){ return window.matchMedia('(max-width:700px)').matches; }
+/* ============================================================
+   UTILIDADES SEGURAS
+============================================================ */
 
-  function normalizar(c){
-    c=c&&typeof c==='object'?c:{};
-    return {
-      tipo:tipo(c.tipo), titulo:texto(c.titulo,'Asistente IASYN2'),
-      resumen:texto(c.resumen,''), detalle:texto(c.detalle,''), siguiente:texto(c.siguiente,''),
-      expandible:c.expandible!==false, expandida:c.expandida===true, ocultable:c.ocultable!==false,
-      etiquetaAbrir:texto(c.etiquetaAbrir,'Más información'), etiquetaCerrar:texto(c.etiquetaCerrar,'Ver menos')
-    };
-  }
+function auroPlanSetValue(id, value){
+    const el = document.getElementById(id);
+    if(el) el.value = value || '';
+}
 
-  function inyectarEstilos(){
-    if(document.getElementById(STYLE_ID)) return;
-    const s=document.createElement('style');
-    s.id=STYLE_ID;
-    s.textContent=`
-      #${HOST_ID}{
-        position:fixed;top:150px;right:18px;z-index:2147482000;
-        width:min(340px,calc(100vw - 36px));pointer-events:none;font:inherit;
-        max-height:calc(100vh - 168px);
-      }
-      .iasyn-guia-card,.iasyn-guia-launcher{box-sizing:border-box;font:inherit}
-      .iasyn-guia-card{
-        pointer-events:auto;width:100%;color:#172033;
-        background:linear-gradient(145deg,#fff 0%,#fff7fd 100%);
-        border:1px solid rgba(217,70,239,.34);border-radius:18px;
-        box-shadow:0 18px 55px rgba(76,29,149,.20),0 5px 18px rgba(162,28,175,.13);
-        overflow:hidden;animation:iasynGuiaEntrada .22s ease-out
-      }
-      .iasyn-guia-card[data-tipo="ok"]{border-color:rgba(16,185,129,.48)}
-      .iasyn-guia-card[data-tipo="warning"]{border-color:rgba(245,158,11,.55)}
-      .iasyn-guia-top{
-        display:flex;align-items:flex-start;gap:9px;cursor:grab;touch-action:none;
-        user-select:none;-webkit-user-select:none;padding:12px 12px 10px;
-        background:linear-gradient(120deg,rgba(192,38,211,.13),rgba(236,72,153,.08))
-      }
-      .iasyn-guia-icon{
-        width:32px;height:32px;flex:0 0 32px;border-radius:10px;display:grid;place-items:center;
-        background:linear-gradient(135deg,#c026d3,#ec4899);color:#fff;font-weight:900;
-        box-shadow:0 7px 18px rgba(192,38,211,.28)
-      }
-      .iasyn-guia-card[data-tipo="ok"] .iasyn-guia-icon{background:linear-gradient(135deg,#059669,#10b981)}
-      .iasyn-guia-copy{min-width:0;flex:1}
-      .iasyn-guia-brand{font-size:10.5px;font-weight:900;letter-spacing:.055em;text-transform:uppercase;color:#9d174d}
-      .iasyn-guia-title{margin:2px 0 0;font-size:15px;font-weight:850;line-height:1.2;color:#3b174f}
-      .iasyn-guia-close{
-        pointer-events:auto;appearance:none;border:0;background:rgba(255,255,255,.82);color:#6b7280;
-        width:30px;height:30px;border-radius:9px;cursor:pointer;font-size:19px;line-height:1;
-        display:grid;place-items:center
-      }
-      .iasyn-guia-close:hover{background:#fff;color:#831843}
-      .iasyn-guia-top:active{cursor:grabbing}
-      .iasyn-guia-body{padding:11px 12px 12px}
-      .iasyn-guia-summary{margin:0;color:#4b5563;font-size:13px;line-height:1.42}
-      .iasyn-guia-next{
-        margin:9px 0 0;padding:9px 10px;border-radius:11px;
-        background:linear-gradient(135deg,rgba(217,70,239,.12),rgba(236,72,153,.09));
-        color:#701a75;font-size:13px;font-weight:800;line-height:1.34
-      }
-      .iasyn-guia-detail{
-        margin:9px 0 0;padding-top:9px;border-top:1px solid rgba(148,163,184,.22);
-        color:#64748b;font-size:12.25px;line-height:1.42
-      }
-      .iasyn-guia-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}
-      .iasyn-guia-btn{
-        appearance:none;border:1px solid rgba(192,38,211,.24);background:#fff;color:#86198f;
-        min-height:34px;padding:6px 10px;border-radius:10px;font:inherit;font-size:12px;font-weight:800;cursor:pointer
-      }
-      .iasyn-guia-btn:hover{background:#fdf4ff}
-      .iasyn-guia-mode{
-        display:flex;align-items:center;justify-content:space-between;gap:10px;
-        margin-top:10px;padding-top:9px;border-top:1px solid rgba(148,163,184,.22);
-        color:#64748b;font-size:12px;font-weight:800
-      }
-      .iasyn-guia-switch{
-        appearance:none;border:1px solid rgba(192,38,211,.28);background:#f8fafc;color:#64748b;
-        min-width:76px;height:32px;padding:0 10px;border-radius:999px;font:inherit;font-size:11.5px;
-        font-weight:900;cursor:pointer
-      }
-      .iasyn-guia-switch[data-activa="true"]{background:#fdf4ff;color:#86198f;border-color:rgba(192,38,211,.45)}
+function auroPlanGetValue(id){
+    const el = document.getElementById(id);
+    return el ? String(el.value || '') : '';
+}
 
-      /* Estado cerrado: avatar mínimo, no pastilla horizontal. */
-      .iasyn-guia-launcher{
-        pointer-events:auto;display:none;margin-left:auto;width:46px;height:46px;padding:0;
-        align-items:center;justify-content:center;border:1px solid rgba(217,70,239,.42);
-        background:linear-gradient(135deg,#a21caf,#ec4899);color:#fff;border-radius:50%;
-        box-shadow:0 10px 28px rgba(162,28,175,.27);cursor:grab;
-        touch-action:none;user-select:none;-webkit-user-select:none
-      }
-      .iasyn-guia-launcher.is-visible{display:flex}
-      .iasyn-guia-launcher[data-activa="false"]{opacity:.42;filter:saturate(.45)}
-      .iasyn-guia-launcher:active{cursor:grabbing}
-      .iasyn-guia-launcher:hover{transform:translateY(-1px);box-shadow:0 13px 32px rgba(162,28,175,.31)}
-      .iasyn-guia-robot{width:29px;height:29px;display:block;pointer-events:none}
-      .iasyn-guia-robot *{pointer-events:none}
-      @keyframes iasynGuiaEntrada{from{opacity:0;transform:translateY(-7px) scale(.985)}to{opacity:1;transform:none}}
+function escapeHtmlPlan(txt){
+    return String(txt || '').replace(/[&<>'"]/g, c => ({
+        '&':'&amp;',
+        '<':'&lt;',
+        '>':'&gt;',
+        "'":'&#39;',
+        '"':'&quot;'
+    }[c]));
+}
 
-      @media(max-width:700px){
-        #${HOST_ID}{
-          top:calc(env(safe-area-inset-top,0px) + 82px);right:10px;bottom:auto;
-          width:min(360px,calc(100vw - 20px));max-height:calc(100vh - 104px)
+function escapeHtmlMed(txt){
+    return escapeHtmlPlan(txt);
+}
+
+function normalizarTextoPlan(t){
+    return String(t || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g,'')
+        .trim();
+}
+
+
+/* ============================================================
+   IASYN PLAN - COMPATIBILIDAD TEXTO / JSON COMPACTO
+   Intervención quirúrgica para receta_medica e indicaciones_paciente.
+   - Los registros nuevos se guardan como arreglos JSON compactos.
+   - Los registros antiguos en texto continúan siendo compatibles.
+   - La interfaz siempre recibe texto legible; nunca muestra JSON bruto.
+============================================================ */
+
+function auroPlanListaClinicaDesdeValor(valor){
+    const raw = String(valor ?? '').trim();
+    if(!raw) return [];
+
+    if(raw.startsWith('[') || raw.startsWith('{')){
+        try{
+            let datos = JSON.parse(raw);
+            if(!Array.isArray(datos)) datos = [datos];
+
+            const lista = datos.map(function(item){
+                if(typeof item === 'string') return item.trim();
+                if(!item || typeof item !== 'object') return '';
+
+                if(item.texto) return String(item.texto).trim();
+                if(item.descripcion) return String(item.descripcion).trim();
+                if(item.indicacion) return String(item.indicacion).trim();
+                if(item.recomendacion) return String(item.recomendacion).trim();
+
+                /* Compatibilidad defensiva si alguna versión guardó medicamentos estructurados. */
+                const med = String(item.med || item.medicamento || item.nombre || '').trim();
+                if(med){
+                    const partes = [
+                        med,
+                        item.pres || item.presentacion || '',
+                        item.via || '',
+                        item.frec || item.frecuencia || '',
+                        (item.dur || item.duracion) ? 'por ' + (item.dur || item.duracion) : '',
+                        item.ind || item.indicaciones || ''
+                    ].map(function(x){ return String(x || '').trim(); }).filter(Boolean);
+                    return partes.join(' - ');
+                }
+
+                return '';
+            }).filter(Boolean);
+
+            if(lista.length) return lista;
+        }catch(e){
+            /* Si no es JSON válido, se conserva como texto histórico. */
         }
-        .iasyn-guia-card{border-radius:16px}
-        .iasyn-guia-top{padding:12px}
-        .iasyn-guia-body{padding:11px 12px 12px}
-        .iasyn-guia-launcher{width:44px;height:44px;font-size:16px}
-      }
-      @media(prefers-reduced-motion:reduce){.iasyn-guia-card{animation:none}.iasyn-guia-launcher:hover{transform:none}}
-    `;
-    document.head.appendChild(s);
-  }
-
-  function host(){
-    inyectarEstilos();
-    let h=document.getElementById(HOST_ID);
-    if(!h){
-      h=document.createElement('div'); h.id=HOST_ID; h.setAttribute('aria-live','polite'); document.body.appendChild(h);
-    }
-    return h;
-  }
-
-  function posicionPredeterminada(h){
-    h.style.bottom='auto';
-    if(Number.isFinite(preferencias.x) && Number.isFinite(preferencias.y)){
-      const p=limitarPosicion(h,preferencias.x,preferencias.y);
-      h.style.right='auto';h.style.left=p.left+'px';h.style.top=p.top+'px';
-      posicionUsuario=p;
-      return;
-    }
-    h.style.left='auto';
-    if(esMovil()){
-      h.style.right='10px';
-      h.style.top='calc(env(safe-area-inset-top,0px) + 82px)';
-    }else{
-      h.style.right='18px';
-      h.style.top='92px';
-    }
-    posicionUsuario=null;
-  }
-
-  function recordarPosicion(p){
-    if(!p)return;
-    posicionUsuario=p;
-    preferencias.x=p.left;
-    preferencias.y=p.top;
-    guardarPreferencias();
-  }
-
-  function limitarPosicion(h,left,top){
-    const margen=8, r=h.getBoundingClientRect();
-    const ancho=r.width||Math.min(esMovil()?360:340,window.innerWidth-20);
-    const alto=Math.min(r.height||80,window.innerHeight-(margen*2));
-    return {
-      left:Math.max(margen,Math.min(left,window.innerWidth-ancho-margen)),
-      top:Math.max(margen,Math.min(top,window.innerHeight-alto-margen))
-    };
-  }
-
-  function aplicarPosicionUsuario(){
-    const h=document.getElementById(HOST_ID); if(!h || !posicionUsuario)return;
-    const p=limitarPosicion(h,posicionUsuario.left,posicionUsuario.top);
-    h.style.right='auto';h.style.bottom='auto';h.style.left=p.left+'px';h.style.top=p.top+'px';posicionUsuario=p;
-  }
-
-  function activarArrastre(r){
-    const asa=r.nodes.card.querySelector('.iasyn-guia-top');
-    if(!asa || asa.dataset.iasynDrag==='1')return;
-    asa.dataset.iasynDrag='1'; let drag=null;
-    asa.addEventListener('pointerdown',function(e){
-      if(e.button!=null && e.button!==0)return;
-      if(e.target && e.target.closest && e.target.closest('button'))return;
-      const h=host(), rect=h.getBoundingClientRect();
-      drag={id:e.pointerId,dx:e.clientX-rect.left,dy:e.clientY-rect.top};
-      try{asa.setPointerCapture(e.pointerId);}catch(_e){}
-      e.preventDefault();
-    });
-    asa.addEventListener('pointermove',function(e){
-      if(!drag || drag.id!==e.pointerId)return;
-      const h=host(),p=limitarPosicion(h,e.clientX-drag.dx,e.clientY-drag.dy);
-      h.style.right='auto';h.style.bottom='auto';h.style.left=p.left+'px';h.style.top=p.top+'px';recordarPosicion(p);e.preventDefault();
-    });
-    function terminar(e){ if(!drag || (e.pointerId!=null && drag.id!==e.pointerId))return; drag=null; }
-    asa.addEventListener('pointerup',terminar); asa.addEventListener('pointercancel',terminar);
-  }
-
-
-  function activarArrastreLauncher(r){
-    const launcher=r.nodes.launcher;
-    if(!launcher || launcher.dataset.iasynDrag==='1')return;
-    launcher.dataset.iasynDrag='1';
-    let drag=null;
-    const UMBRAL=6;
-
-    launcher.addEventListener('pointerdown',function(e){
-      if(e.button!=null && e.button!==0)return;
-      const h=host(), rect=h.getBoundingClientRect();
-      drag={
-        id:e.pointerId,
-        inicioX:e.clientX,
-        inicioY:e.clientY,
-        dx:e.clientX-rect.left,
-        dy:e.clientY-rect.top,
-        movido:false
-      };
-      try{launcher.setPointerCapture(e.pointerId);}catch(_e){}
-      e.preventDefault();
-    });
-
-    launcher.addEventListener('pointermove',function(e){
-      if(!drag || drag.id!==e.pointerId)return;
-      if(!drag.movido && (Math.abs(e.clientX-drag.inicioX)>=UMBRAL || Math.abs(e.clientY-drag.inicioY)>=UMBRAL)){
-        drag.movido=true;
-      }
-      if(!drag.movido)return;
-      const h=host(), p=limitarPosicion(h,e.clientX-drag.dx,e.clientY-drag.dy);
-      h.style.right='auto';h.style.bottom='auto';
-      h.style.left=p.left+'px';h.style.top=p.top+'px';
-      recordarPosicion(p);
-      e.preventDefault();
-    });
-
-    function terminar(e){
-      if(!drag || (e.pointerId!=null && drag.id!==e.pointerId))return;
-      const fueArrastre=drag.movido;
-      drag=null;
-      if(!fueArrastre){
-        ocultarOtros(r.id);
-        activo=r.id;
-        r.oculta=false;
-        pintar(r);
-      }
-      if(e && e.preventDefault)e.preventDefault();
     }
 
-    launcher.addEventListener('pointerup',terminar);
-    launcher.addEventListener('pointercancel',function(){drag=null;});
-    launcher.addEventListener('click',function(e){e.preventDefault();});
-  }
+    return raw
+        .split(/\r?\n+/)
+        .map(function(linea){ return String(linea || '').trim(); })
+        .filter(Boolean);
+}
 
-  function crearNodo(id){
-    const card=document.createElement('section'); card.className='iasyn-guia-card'; card.dataset.iasynGuiaId=id; card.setAttribute('aria-label','Asistente IASYN2');
-    const top=document.createElement('div'); top.className='iasyn-guia-top';
-    const icon=document.createElement('div'); icon.className='iasyn-guia-icon'; icon.textContent='A';
-    const copy=document.createElement('div'); copy.className='iasyn-guia-copy';
-    const brand=document.createElement('div'); brand.className='iasyn-guia-brand'; brand.textContent='Asistente IASYN2';
-    const title=document.createElement('h3'); title.className='iasyn-guia-title';
-    const close=document.createElement('button'); close.type='button'; close.className='iasyn-guia-close'; close.setAttribute('aria-label','Ocultar asistente'); close.textContent='×';
-    copy.append(brand,title); top.append(icon,copy,close);
+function auroPlanValorClinicoATexto(valor){
+    return auroPlanListaClinicaDesdeValor(valor).join('\n');
+}
 
-    const body=document.createElement('div'); body.className='iasyn-guia-body';
-    const summary=document.createElement('p'); summary.className='iasyn-guia-summary';
-    const next=document.createElement('div'); next.className='iasyn-guia-next';
-    const detail=document.createElement('div'); detail.className='iasyn-guia-detail';
-    const actions=document.createElement('div'); actions.className='iasyn-guia-actions';
-    const toggle=document.createElement('button'); toggle.type='button'; toggle.className='iasyn-guia-btn'; toggle.setAttribute('aria-expanded','false');
-    actions.append(toggle);
-    const mode=document.createElement('div'); mode.className='iasyn-guia-mode';
-    const modeLabel=document.createElement('span'); modeLabel.textContent='Asistente';
-    const modeSwitch=document.createElement('button'); modeSwitch.type='button'; modeSwitch.className='iasyn-guia-switch';
-    mode.append(modeLabel,modeSwitch);
-    body.append(summary,next,detail,actions,mode); card.append(top,body);
+function auroPlanTextoClinicoAJSON(valor){
+    const lista = auroPlanListaClinicaDesdeValor(valor);
+    return lista.length ? JSON.stringify(lista) : '';
+}
 
-    const launcher=document.createElement('button');
-    launcher.type='button'; launcher.className='iasyn-guia-launcher';
-    launcher.innerHTML='<svg class="iasyn-guia-robot" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 5V2.8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="16" cy="2.5" r="1.5" fill="currentColor"/><rect x="6" y="7" width="20" height="17" rx="6" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="15" r="2" fill="currentColor"/><circle cx="20" cy="15" r="2" fill="currentColor"/><path d="M11.5 20c1.2 1 2.7 1.5 4.5 1.5s3.3-.5 4.5-1.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6 14H3.5v5H6M26 14h2.5v5H26" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
-    launcher.setAttribute('aria-label','Abrir o mover Asistente IASYN2');
-    launcher.setAttribute('title','Asistente IASYN2');
-    return {card,title,summary,next,detail,actions,toggle,close,launcher,modeSwitch};
-  }
+/* ============================================================
+   IASYN PLAN 29 - FECHA CLÍNICA LOCAL SEGURA
+   - Usa fecha local del navegador, no UTC.
+   - Formato estable para fecha_plan: YYYY-MM-DD.
+   - No modifica creado_en ni actualizado_en.
+============================================================ */
+function auroPlanFechaClinicaLocal(){
+    const ahora = new Date();
+    const y = ahora.getFullYear();
+    const m = String(ahora.getMonth() + 1).padStart(2, '0');
+    const d = String(ahora.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
 
-  function ocultarOtros(id){
-    mounts.forEach(function(r,k){
-      if(k!==id){ r.nodes.card.style.display='none'; r.nodes.launcher.classList.remove('is-visible'); }
-    });
-  }
 
-  function pintar(r){
-    const c=r.config,n=r.nodes;
-    n.card.dataset.tipo=c.tipo;n.title.textContent=c.titulo;
-    n.summary.textContent=c.resumen;n.summary.hidden=!c.resumen;
-    n.next.textContent=c.siguiente?'Siguiente paso: '+c.siguiente:'';n.next.hidden=!c.siguiente;
-    n.detail.textContent=c.detalle;n.detail.hidden=!c.detalle || !r.expandida;
-    n.toggle.textContent=r.expandida?c.etiquetaCerrar:c.etiquetaAbrir;
-    n.toggle.setAttribute('aria-expanded',r.expandida?'true':'false');
-    n.toggle.hidden=!c.expandible || !c.detalle;n.actions.hidden=n.toggle.hidden;
-    const activa=preferencias.activa!==false;
-    n.modeSwitch.dataset.activa=activa?'true':'false';
-    n.modeSwitch.textContent=activa?'ACTIVO':'INACTIVO';
-    n.modeSwitch.setAttribute('aria-pressed',activa?'true':'false');
-    n.launcher.dataset.activa=activa?'true':'false';
-    n.launcher.setAttribute('title',activa?'Asistente activo':'Asistente inactivo');
-    n.launcher.setAttribute('aria-label',(activa?'Asistente activo. ':'Asistente inactivo. ')+'Abrir o mover Asistente IASYN2');
-    if(r.oculta){ n.card.style.display='none';n.launcher.classList.add('is-visible'); }
-    else{ n.card.style.display='';n.launcher.classList.remove('is-visible'); }
-  }
+/* ============================================================
+   UX CLÍNICA SEGURA PARA MEDICAMENTOS
+   - No modifica nombres de propiedades ni estructura JSON.
+   - Mantiene compatibilidad con protocolos, Plan y Recetas.
+============================================================ */
 
-  function montar(id,_contenedor,config){
-    const clave=texto(id,'');if(!clave)return null;
-    const h=host();ocultarOtros(clave);activo=clave;
-    let r=mounts.get(clave);
-    if(!r){
-      const nodes=crearNodo(clave);
-      r={id:clave,nodes,config:normalizar(config),expandida:false,oculta:false};
-      activarArrastre(r);
-      activarArrastreLauncher(r);
-      nodes.toggle.addEventListener('click',function(){r.expandida=!r.expandida;pintar(r);});
-      nodes.close.addEventListener('click',function(){r.oculta=true;pintar(r);});
-      nodes.modeSwitch.addEventListener('click',function(){
-        preferencias.activa=!(preferencias.activa!==false);
-        guardarPreferencias();
-        pintar(r);
-      });
-      h.append(nodes.card,nodes.launcher);mounts.set(clave,r);
-    }else{
-      r.config=normalizar(config);r.expandida=r.config.expandida;r.oculta=false;
-    }
-    pintar(r);return r.nodes.card;
-  }
+window.auroPlanMedicamentoEditandoIndice =
+    Number.isInteger(window.auroPlanMedicamentoEditandoIndice)
+        ? window.auroPlanMedicamentoEditandoIndice
+        : null;
+const AURO_PLAN_VIAS_COMPLETAS = {
+    'VO': 'Vía oral',
+    'ORAL': 'Vía oral',
+    'VÍA ORAL': 'Vía oral',
+    'VIA ORAL': 'Vía oral',
+    'IM': 'Vía intramuscular',
+    'INTRAMUSCULAR': 'Vía intramuscular',
+    'VÍA INTRAMUSCULAR': 'Vía intramuscular',
+    'VIA INTRAMUSCULAR': 'Vía intramuscular',
+    'IV': 'Vía intravenosa',
+    'INTRAVENOSA': 'Vía intravenosa',
+    'VÍA INTRAVENOSA': 'Vía intravenosa',
+    'VIA INTRAVENOSA': 'Vía intravenosa',
+    'SC': 'Vía subcutánea',
+    'SUBCUTÁNEA': 'Vía subcutánea',
+    'SUBCUTANEA': 'Vía subcutánea',
+    'VÍA SUBCUTÁNEA': 'Vía subcutánea',
+    'VIA SUBCUTANEA': 'Vía subcutánea',
+    'VAGINAL': 'Vía vaginal',
+    'VÍA VAGINAL': 'Vía vaginal',
+    'VIA VAGINAL': 'Vía vaginal',
+    'TÓPICA': 'Vía tópica',
+    'TOPICA': 'Vía tópica',
+    'VÍA TÓPICA': 'Vía tópica',
+    'VIA TOPICA': 'Vía tópica',
+    'SUBLINGUAL': 'Vía sublingual',
+    'VÍA SUBLINGUAL': 'Vía sublingual',
+    'VIA SUBLINGUAL': 'Vía sublingual',
+    'OFTÁLMICA': 'Vía oftálmica',
+    'OFTALMICA': 'Vía oftálmica',
+    'VÍA OFTÁLMICA': 'Vía oftálmica',
+    'VIA OFTALMICA': 'Vía oftálmica',
+    'ÓTICA': 'Vía ótica',
+    'OTICA': 'Vía ótica',
+    'VÍA ÓTICA': 'Vía ótica',
+    'VIA OTICA': 'Vía ótica',
+    'INHALATORIA': 'Vía inhalatoria',
+    'VÍA INHALATORIA': 'Vía inhalatoria',
+    'VIA INHALATORIA': 'Vía inhalatoria',
+    'RECTAL': 'Vía rectal',
+    'VÍA RECTAL': 'Vía rectal',
+    'VIA RECTAL': 'Vía rectal',
+    'NASAL': 'Vía nasal',
+    'VÍA NASAL': 'Vía nasal',
+    'VIA NASAL': 'Vía nasal'
+};
 
-  function actualizar(id,config){
-    const r=mounts.get(texto(id,''));if(!r)return false;
-    ocultarOtros(r.id);activo=r.id;r.config=normalizar(Object.assign({},r.config,config||{}));r.oculta=false;pintar(r);return true;
-  }
-  function mostrar(id){ const r=mounts.get(texto(id,''));if(!r)return false;ocultarOtros(r.id);activo=r.id;r.oculta=false;pintar(r);return true; }
-  function ocultar(id){ const r=mounts.get(texto(id,''));if(!r)return false;r.oculta=true;posicionPredeterminada(host());pintar(r);return true; }
-  function desmontar(id){
-    const clave=texto(id,''),r=mounts.get(clave);if(!r)return false;
-    r.nodes.card.remove();r.nodes.launcher.remove();mounts.delete(clave);if(activo===clave)activo='';return true;
-  }
+const AURO_PLAN_FRECUENCIAS_RAPIDAS = [
+    'Dosis única',
+    'Cada 4 horas',
+    'Cada 6 horas',
+    'Cada 8 horas',
+    'Cada 12 horas',
+    'Cada 24 horas',
+    'Cada mañana',
+    'Cada noche',
+    'Dos veces al día',
+    'Tres veces al día',
+    'Según necesidad',
+    'Según esquema médico'
+];
 
-  function recibirContexto(evento){
-    try{
-      const d=evento&&evento.detail&&typeof evento.detail==='object'?evento.detail:{};
-      const id=texto(d.id,'');if(!id)return;
-      const existente=mounts.get(id);
-      if(preferencias.activa===false){
-        if(existente){ existente.config=normalizar(d.config||{}); existente.oculta=true; pintar(existente); }
-        return;
-      }
-      montar(id,null,d.config||{});
-    }catch(error){console.warn('IASYN2 GUÍA: contexto ignorado de forma segura.',error);}
-  }
+const AURO_PLAN_DURACIONES_RAPIDAS = [
+    '1 día',
+    '2 días',
+    '3 días',
+    '5 días',
+    '7 días',
+    '10 días',
+    '14 días',
+    '21 días',
+    '30 días',
+    '3 a 5 días',
+    '5 a 7 días',
+    '7 noches',
+    'Tratamiento continuo',
+    'Según evolución',
+    'Según indicación médica'
+];
 
-  function recibirPacienteConfirmado(evento){
-    try{
-      const d=evento&&evento.detail&&typeof evento.detail==='object'?evento.detail:{};
-      if(!texto(d.id_paciente,''))return;
-      if(preferencias.activa===false)return;
-      const esEdicion=String(d.operacion||'')==='edicion';
-      const desdeAgenda=String(d.origen||'')==='agenda';
-      montar('pacientes',null,{
-        tipo:'info',titulo:esEdicion?'Aviso de actualización de paciente':'Aviso de registro de paciente',
-        resumen:esEdicion?'El módulo de Pacientes notificó una actualización. Verifique el registro en Pacientes.':'El módulo de Pacientes notificó un registro. Verifique el registro en Pacientes.',
-        siguiente:desdeAgenda?'Continúe el flujo de la cita desde Agenda.':'Abra la historia clínica del paciente para continuar.',
-        detalle:'Antes de crear la primera atención, el paciente debe tener una Historia Clínica. La guía solo orienta: no crea historias, no inicia atenciones y no modifica información médica.',
-        expandible:true,expandida:false,ocultable:true
-      });
-    }catch(error){console.warn('IASYN2 GUÍA: no se pudo mostrar la orientación de Pacientes.',error);}
-  }
+const AURO_PLAN_INDICACIONES_RAPIDAS = [
+    'Tomar después de alimentos.',
+    'Tomar antes de alimentos.',
+    'Tomar con alimentos.',
+    'Aplicar antes de dormir.',
+    'Aplicar por la noche.',
+    'Aplicar una capa fina.',
+    'Agitar antes de usar.',
+    'Uso externo.',
+    'Completar el tratamiento.',
+    'No suspender aunque mejoren los síntomas.',
+    'Según necesidad.',
+    'Según indicación médica.'
+];
 
-  function recibirHistoriaCreada(evento){
-    try{
-      const d=evento&&evento.detail&&typeof evento.detail==='object'?evento.detail:{};
-      const idHistoria=texto(d.id_historia,'');
-      const idPaciente=texto(d.id_paciente,'');
-      if(!idHistoria || !idPaciente)return;
-      if(preferencias.activa===false)return;
-      const esEdicion=String(d.operacion||'')==='edicion';
-      montar('historia',null,{
-        tipo:'ok',
-        titulo:esEdicion?'Historia clínica actualizada':'Historia clínica creada',
-        resumen:esEdicion
-          ?'El módulo de Historia Clínica notificó una actualización. Verifique el estado del registro.'
-          :'El módulo de Historia Clínica notificó una creación. Verifique el estado del registro.',
-        siguiente:esEdicion
-          ?'Puede continuar con el flujo clínico del paciente.'
-          :'Ya puede crear la primera atención del paciente.',
-        detalle:esEdicion
-          ?'El asistente confirma la actualización y únicamente orienta; no crea atenciones ni modifica información clínica.'
-          :'Flujo recomendado: Paciente → Historia Clínica → Atención. El asistente únicamente orienta y no crea atenciones ni modifica información clínica.',
-        expandible:true,expandida:false,ocultable:true
-      });
-    }catch(error){console.warn('IASYN2 GUÍA: no se pudo mostrar la orientación de Historia Clínica.',error);}
-  }
+function auroPlanNombreViaCompleta(valor){
+    const original = String(valor || '').trim();
+    if(!original) return '';
 
-  /* ============================================================
-     IASYN2 GUÍA ADAPTACIÓN V1 — ORIENTACIÓN AL ENTRAR A HISTORIA
-     - Solo observa el contexto ya disponible en el ERP.
-     - NO consulta backend, NO guarda y NO modifica datos clínicos.
-     - Solo abre la guía si hay paciente seleccionado SIN Historia Clínica.
-  ============================================================ */
-  let historiaPantallaActivaAnterior=false;
+    const clave = original
+        .toUpperCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g,'')
+        .trim();
 
-  function idPacienteHistoriaActual(){
-    const selector=document.getElementById('hcPacienteSelect');
-    return texto(
-      (selector&&selector.value) ||
-      window.activePatientId ||
-      '',
-      ''
+    const coincidencia = Object.keys(AURO_PLAN_VIAS_COMPLETAS).find(k =>
+        k.normalize('NFD').replace(/[\u0300-\u036f]/g,'') === clave
     );
-  }
 
-  function pacienteTieneHistoriaConfirmada(idPaciente){
-    const id=texto(idPaciente,'');
-    if(!id)return false;
+    return coincidencia
+        ? AURO_PLAN_VIAS_COMPLETAS[coincidencia]
+        : original;
+}
 
-    const candidatas=[
-      window.historiaActual,
-      window.currentHistoria
+function auroPlanOpcionesRapidasUnicas(opciones){
+    const vistas = new Set();
+    const salida = [];
+
+    (Array.isArray(opciones) ? opciones : []).forEach(function(opcion){
+        const valor = String(opcion || '').trim();
+        if(!valor) return;
+
+        const clave = normalizarTextoPlan(valor);
+        if(!clave || vistas.has(clave)) return;
+
+        vistas.add(clave);
+        salida.push(valor);
+    });
+
+    return salida;
+}
+
+function auroPlanInstalarDatalist(idCampo, idLista, opciones, placeholder){
+    const campo = document.getElementById(idCampo);
+    if(!campo) return;
+
+    if(placeholder && !String(campo.getAttribute('placeholder') || '').trim()){
+        campo.setAttribute('placeholder', placeholder);
+    }
+
+    if(campo.tagName === 'INPUT'){
+        let lista = document.getElementById(idLista);
+
+        if(!lista){
+            lista = document.createElement('datalist');
+            lista.id = idLista;
+            document.body.appendChild(lista);
+        }
+
+        lista.innerHTML = auroPlanOpcionesRapidasUnicas(opciones)
+            .map(op => `<option value="${escapeHtmlPlan(op)}"></option>`)
+            .join('');
+
+        campo.setAttribute('list', idLista);
+        campo.setAttribute('autocomplete', 'off');
+    }
+}
+
+function auroPlanAbrirSugerenciasRapidas(idCampo){
+    const campo = document.getElementById(idCampo);
+    if(!campo) return;
+
+    campo.focus();
+
+    try{
+        if(typeof campo.showPicker === 'function'){
+            campo.showPicker();
+        }
+    }catch(e){}
+}
+
+function auroPlanLimpiarCampoRapido(idCampo){
+    const campo = document.getElementById(idCampo);
+    if(!campo) return;
+
+    campo.value = '';
+    campo.dispatchEvent(new Event('input', {bubbles:true}));
+    campo.dispatchEvent(new Event('change', {bubbles:true}));
+
+    requestAnimationFrame(function(){
+        auroPlanAbrirSugerenciasRapidas(idCampo);
+    });
+}
+
+function auroPlanInstalarLimpiezaRapidaCampo(idCampo, etiqueta){
+    const campo = document.getElementById(idCampo);
+    if(!campo) return null;
+
+    const idBoton = 'auroPlanLimpiarRapido_' + idCampo;
+    let boton = document.getElementById(idBoton);
+
+    if(!boton){
+        boton = document.createElement('button');
+        boton.type = 'button';
+        boton.id = idBoton;
+        boton.className = 'auro-plan-limpiar-rapido';
+        boton.setAttribute('aria-label', 'Limpiar ' + String(etiqueta || 'campo'));
+        boton.title = 'Limpiar y elegir otra sugerencia';
+        boton.innerHTML = '<i class="bi bi-x-circle me-1"></i> Limpiar';
+
+        boton.addEventListener('click', function(){
+            auroPlanLimpiarCampoRapido(idCampo);
+        });
+
+        campo.insertAdjacentElement('afterend', boton);
+    }
+
+    return boton;
+}
+
+function auroPlanInstalarAyudaIndicaciones(){
+    const campo = document.getElementById('hcMedIndicaciones');
+    if(!campo || document.getElementById('auroPlanIndicacionRapida')) return;
+
+    const selector = document.createElement('select');
+    selector.id = 'auroPlanIndicacionRapida';
+    selector.className = 'form-select form-select-sm auro-plan-ayuda-select';
+    selector.setAttribute('aria-label', 'Sugerencias rápidas de indicaciones');
+    selector.innerHTML =
+        '<option value="">Elegir indicación rápida...</option>' +
+        auroPlanOpcionesRapidasUnicas(AURO_PLAN_INDICACIONES_RAPIDAS)
+            .map(op => `<option value="${escapeHtmlPlan(op)}">${escapeHtmlPlan(op)}</option>`)
+            .join('');
+
+    selector.addEventListener('change', function(){
+        const valor = String(selector.value || '').trim();
+        if(!valor) return;
+
+        const actual = String(campo.value || '').trim();
+
+        if(!actual){
+            campo.value = valor;
+        }else if(!normalizarTextoPlan(actual).includes(normalizarTextoPlan(valor))){
+            campo.value = actual.replace(/\s+$/,'') + '\n' + valor;
+        }
+
+        campo.dispatchEvent(new Event('input', {bubbles:true}));
+        selector.value = '';
+        campo.focus();
+    });
+
+    campo.insertAdjacentElement('afterend', selector);
+}
+
+function auroPlanActualizarOpcionesVia(){
+    const campo = document.getElementById('hcMedVia');
+    if(!campo) return;
+
+    if(campo.tagName === 'SELECT'){
+        Array.from(campo.options || []).forEach(op => {
+            const valor = String(op.value || '').trim();
+            if(!valor || valor === '__AURO_OTRA_VIA__') return;
+            op.textContent = auroPlanNombreViaCompleta(valor);
+        });
+    }else if(campo.tagName === 'INPUT'){
+        auroPlanInstalarDatalist(
+            'hcMedVia',
+            'auroPlanViasLista',
+            [
+                'Vía oral','Vía intramuscular','Vía intravenosa','Vía subcutánea',
+                'Vía vaginal','Vía tópica','Vía sublingual','Vía oftálmica',
+                'Vía ótica','Vía inhalatoria','Vía rectal','Vía nasal'
+            ],
+            'Ej.: Vía oral'
+        );
+    }
+}
+
+/* ============================================================
+   IASYN PLAN 30 - VÍA LIBRE SEGURA
+   - Conserva hcMedVia como control canónico.
+   - Permite una vía no listada sin cambiar la estructura persistida.
+   - Nunca guarda el marcador técnico "__AURO_OTRA_VIA__".
+============================================================ */
+function auroPlanInstalarEntradaViaLibre(){
+    const campo = document.getElementById('hcMedVia');
+    if(!campo || campo.tagName !== 'SELECT') return null;
+
+    let entrada = document.getElementById('hcMedViaLibre');
+
+    if(!entrada){
+        entrada = document.createElement('input');
+        entrada.type = 'text';
+        entrada.id = 'hcMedViaLibre';
+        entrada.className = 'form-control form-control-sm mt-2 d-none';
+        entrada.placeholder = 'Escriba otra vía';
+        entrada.setAttribute('autocomplete', 'off');
+        entrada.setAttribute('aria-label', 'Escribir otra vía de administración');
+        campo.insertAdjacentElement('afterend', entrada);
+
+        entrada.addEventListener('input', function(){
+            const valor = String(entrada.value || '').trim();
+            let opcionLibre = Array.from(campo.options || []).find(op =>
+                op.dataset && op.dataset.auroViaLibre === '1'
+            );
+
+            if(!valor){
+                if(opcionLibre) opcionLibre.remove();
+                campo.value = Array.from(campo.options || []).some(op =>
+                    op.value === '__AURO_OTRA_VIA__'
+                ) ? '__AURO_OTRA_VIA__' : '';
+                return;
+            }
+
+            if(!opcionLibre){
+                opcionLibre = document.createElement('option');
+                opcionLibre.dataset.auroViaLibre = '1';
+                campo.appendChild(opcionLibre);
+            }
+
+            opcionLibre.value = valor;
+            opcionLibre.textContent = auroPlanNombreViaCompleta(valor);
+            campo.value = valor;
+            campo.dispatchEvent(new Event('change', {bubbles:true}));
+        });
+    }
+
+    return entrada;
+}
+
+function auroPlanMostrarEntradaViaLibre(){
+    const entrada = auroPlanInstalarEntradaViaLibre();
+    const boton = document.getElementById('auroPlanBtnOtraViaRapida');
+    if(!entrada) return;
+
+    entrada.value = '';
+    entrada.classList.remove('d-none');
+    entrada.focus();
+
+    if(boton){
+        boton.classList.add('activo');
+        boton.setAttribute('aria-expanded', 'true');
+    }
+}
+
+function auroPlanOcultarEntradaViaLibre(){
+    const campo = document.getElementById('hcMedVia');
+    const entrada = document.getElementById('hcMedViaLibre');
+    const boton = document.getElementById('auroPlanBtnOtraViaRapida');
+
+    if(entrada){
+        entrada.value = '';
+        entrada.classList.add('d-none');
+    }
+
+    if(boton){
+        boton.classList.remove('activo');
+        boton.setAttribute('aria-expanded', 'false');
+    }
+
+    if(campo && campo.tagName === 'SELECT'){
+        Array.from(campo.options || [])
+            .filter(op => op.dataset && op.dataset.auroViaLibre === '1')
+            .forEach(op => op.remove());
+    }
+}
+
+function auroPlanInstalarAccesoViaLibreRapido(){
+    const campo = document.getElementById('hcMedVia');
+    if(!campo || campo.tagName !== 'SELECT') return null;
+
+    const entrada = auroPlanInstalarEntradaViaLibre();
+    if(!entrada) return null;
+
+    let boton = document.getElementById('auroPlanBtnOtraViaRapida');
+
+    if(!boton){
+        boton = document.createElement('button');
+        boton.type = 'button';
+        boton.id = 'auroPlanBtnOtraViaRapida';
+        boton.className = 'auro-plan-via-libre-rapida';
+        boton.setAttribute('aria-label', 'Escribir otra vía de administración');
+        boton.setAttribute('aria-expanded', 'false');
+        boton.title = 'Mostrar u ocultar una vía diferente';
+        boton.innerHTML = '<i class="bi bi-pencil-square me-1"></i> Otra vía';
+
+        boton.addEventListener('click', function(){
+            const visible = !entrada.classList.contains('d-none');
+            if(visible){
+                auroPlanOcultarEntradaViaLibre();
+            }else{
+                /*
+                  Solo muestra el campo libre. El valor canónico no cambia
+                  hasta que el profesional escriba una vía.
+                */
+                entrada.classList.remove('d-none');
+                entrada.focus();
+                boton.classList.add('activo');
+                boton.setAttribute('aria-expanded', 'true');
+            }
+        });
+
+        entrada.insertAdjacentElement('afterend', boton);
+    }
+
+    return boton;
+}
+
+/* ============================================================
+   IASYN PLAN 31 - INDICACIONES CÓMODAS SIN LÍMITE FORZADO
+   - Autoexpande el textarea mientras se edita.
+   - Ofrece editor amplio sincronizado.
+   - NO impone 200 caracteres ni trunca información clínica.
+============================================================ */
+function auroPlanAjustarIndicacionesMedicamento(expandido){
+    const campo = document.getElementById('hcMedIndicaciones');
+    if(!campo || campo.tagName !== 'TEXTAREA') return;
+
+    const alturaCompacta = 44;
+    const alturaMaxima = 132;
+
+    if(expandido){
+        campo.style.height = 'auto';
+        const altura = Math.min(
+            Math.max(campo.scrollHeight || alturaCompacta, alturaCompacta),
+            alturaMaxima
+        );
+        campo.style.height = altura + 'px';
+        campo.style.overflowY =
+            (campo.scrollHeight || 0) > alturaMaxima ? 'auto' : 'hidden';
+        campo.classList.add('auro-plan-indicaciones-expandida');
+        return;
+    }
+
+    campo.style.height = alturaCompacta + 'px';
+    campo.style.overflowY =
+        (campo.scrollHeight || 0) > alturaCompacta ? 'auto' : 'hidden';
+    campo.classList.remove('auro-plan-indicaciones-expandida');
+}
+
+function auroPlanInstalarIndicacionesAutoExpandibles(){
+    const campo = document.getElementById('hcMedIndicaciones');
+    if(!campo || campo.tagName !== 'TEXTAREA') return;
+
+    if(campo.dataset.auroAutoExpand === '1'){
+        auroPlanAjustarIndicacionesMedicamento(document.activeElement === campo);
+        return;
+    }
+
+    campo.dataset.auroAutoExpand = '1';
+    campo.classList.add('auro-plan-indicaciones-controladas');
+
+    campo.addEventListener('focus', function(){
+        auroPlanAjustarIndicacionesMedicamento(true);
+    });
+    campo.addEventListener('input', function(){
+        auroPlanAjustarIndicacionesMedicamento(true);
+    });
+    campo.addEventListener('blur', function(){
+        auroPlanAjustarIndicacionesMedicamento(false);
+    });
+
+    auroPlanAjustarIndicacionesMedicamento(false);
+}
+
+function auroPlanCerrarIndicacionesAmpliadas(){
+    const capa = document.getElementById('auroPlanIndicacionesAmpliadasCapa');
+    const boton = document.getElementById('auroPlanBtnAmpliarIndicaciones');
+
+    if(capa){
+        capa.classList.add('d-none');
+        capa.setAttribute('aria-hidden', 'true');
+    }
+
+    if(boton){
+        boton.classList.remove('activo');
+        boton.setAttribute('aria-expanded', 'false');
+        boton.innerHTML = '<i class="bi bi-arrows-angle-expand me-1"></i> Ampliar';
+    }
+}
+
+function auroPlanAbrirIndicacionesAmpliadas(){
+    const campo = document.getElementById('hcMedIndicaciones');
+    const capa = document.getElementById('auroPlanIndicacionesAmpliadasCapa');
+    const editor = document.getElementById('auroPlanIndicacionesAmpliadasEditor');
+    const boton = document.getElementById('auroPlanBtnAmpliarIndicaciones');
+
+    if(!campo || !capa || !editor) return;
+
+    editor.value = String(campo.value || '');
+    capa.classList.remove('d-none');
+    capa.setAttribute('aria-hidden', 'false');
+
+    if(boton){
+        boton.classList.add('activo');
+        boton.setAttribute('aria-expanded', 'true');
+        boton.innerHTML = '<i class="bi bi-arrows-angle-contract me-1"></i> Cerrar';
+    }
+
+    requestAnimationFrame(function(){
+        editor.focus();
+        editor.setSelectionRange(editor.value.length, editor.value.length);
+    });
+}
+
+function auroPlanInstalarEditorIndicacionesAmpliado(){
+    const campo = document.getElementById('hcMedIndicaciones');
+    if(!campo) return null;
+
+    let boton = document.getElementById('auroPlanBtnAmpliarIndicaciones');
+
+    if(!boton){
+        boton = document.createElement('button');
+        boton.type = 'button';
+        boton.id = 'auroPlanBtnAmpliarIndicaciones';
+        boton.className = 'auro-plan-ampliar-indicaciones';
+        boton.setAttribute('aria-label', 'Ampliar indicaciones del medicamento');
+        boton.setAttribute('aria-expanded', 'false');
+        boton.title = 'Abrir un editor amplio sin modificar el tamaño del formulario';
+        boton.innerHTML = '<i class="bi bi-arrows-angle-expand me-1"></i> Ampliar';
+
+        const limpiar = document.getElementById('auroPlanLimpiarRapido_hcMedIndicaciones');
+        (limpiar || campo).insertAdjacentElement('afterend', boton);
+    }
+
+    let capa = document.getElementById('auroPlanIndicacionesAmpliadasCapa');
+
+    if(!capa){
+        capa = document.createElement('div');
+        capa.id = 'auroPlanIndicacionesAmpliadasCapa';
+        capa.className = 'auro-plan-indicaciones-capa d-none';
+        capa.setAttribute('aria-hidden', 'true');
+        capa.innerHTML = `
+          <div class="auro-plan-indicaciones-dialogo"
+               role="dialog"
+               aria-modal="true"
+               aria-labelledby="auroPlanIndicacionesAmpliadasTitulo">
+            <div class="auro-plan-indicaciones-dialogo-cabecera">
+              <div id="auroPlanIndicacionesAmpliadasTitulo" class="auro-plan-indicaciones-dialogo-titulo">
+                Indicaciones del medicamento
+              </div>
+              <button type="button"
+                      id="auroPlanIndicacionesAmpliadasCerrar"
+                      class="auro-plan-indicaciones-dialogo-cerrar"
+                      aria-label="Cerrar editor ampliado">×</button>
+            </div>
+            <textarea id="auroPlanIndicacionesAmpliadasEditor"
+                      class="form-control auro-plan-indicaciones-editor"
+                      rows="10"
+                      placeholder="Escriba las indicaciones completas"></textarea>
+            <div class="auro-plan-indicaciones-dialogo-pie">
+              <span>El contenido se sincroniza automáticamente con Indicaciones. Sin truncado automático.</span>
+              <button type="button"
+                      id="auroPlanIndicacionesAmpliadasListo"
+                      class="btn btn-sm btn-primary">Listo</button>
+            </div>
+          </div>`;
+        document.body.appendChild(capa);
+    }
+
+    const editor = document.getElementById('auroPlanIndicacionesAmpliadasEditor');
+    const cerrar = document.getElementById('auroPlanIndicacionesAmpliadasCerrar');
+    const listo = document.getElementById('auroPlanIndicacionesAmpliadasListo');
+
+    if(boton.dataset.auroEditorIndicaciones !== '1'){
+        boton.dataset.auroEditorIndicaciones = '1';
+        boton.addEventListener('click', function(){
+            if(capa.classList.contains('d-none')){
+                auroPlanAbrirIndicacionesAmpliadas();
+            }else{
+                auroPlanCerrarIndicacionesAmpliadas();
+            }
+        });
+    }
+
+    if(editor && editor.dataset.auroEditorIndicaciones !== '1'){
+        editor.dataset.auroEditorIndicaciones = '1';
+
+        editor.addEventListener('input', function(){
+            if(campo.value !== editor.value){
+                campo.value = editor.value;
+                campo.dispatchEvent(new Event('input', {bubbles:true}));
+            }
+        });
+
+        campo.addEventListener('input', function(){
+            if(document.activeElement !== editor && editor.value !== campo.value){
+                editor.value = String(campo.value || '');
+            }
+        });
+    }
+
+    if(cerrar && cerrar.dataset.auroEditorIndicaciones !== '1'){
+        cerrar.dataset.auroEditorIndicaciones = '1';
+        cerrar.addEventListener('click', auroPlanCerrarIndicacionesAmpliadas);
+    }
+
+    if(listo && listo.dataset.auroEditorIndicaciones !== '1'){
+        listo.dataset.auroEditorIndicaciones = '1';
+        listo.addEventListener('click', auroPlanCerrarIndicacionesAmpliadas);
+    }
+
+    if(capa.dataset.auroEditorIndicaciones !== '1'){
+        capa.dataset.auroEditorIndicaciones = '1';
+        capa.addEventListener('click', function(evento){
+            if(evento.target === capa) auroPlanCerrarIndicacionesAmpliadas();
+        });
+    }
+
+    return boton;
+}
+
+function auroPlanInstalarAyudasMedicamentos(){
+    auroPlanActualizarOpcionesVia();
+    auroPlanInstalarEntradaViaLibre();
+    auroPlanInstalarAccesoViaLibreRapido();
+
+    auroPlanInstalarDatalist(
+        'hcMedFrecuencia',
+        'auroPlanFrecuenciasLista',
+        AURO_PLAN_FRECUENCIAS_RAPIDAS,
+        'Ej.: Cada 12 horas'
+    );
+
+    auroPlanInstalarDatalist(
+        'hcMedDuracion',
+        'auroPlanDuracionesLista',
+        AURO_PLAN_DURACIONES_RAPIDAS,
+        'Ej.: 7 días'
+    );
+
+    auroPlanInstalarLimpiezaRapidaCampo('hcMedPresentacion', 'presentación');
+    auroPlanInstalarLimpiezaRapidaCampo('hcMedFrecuencia', 'frecuencia');
+    auroPlanInstalarLimpiezaRapidaCampo('hcMedDuracion', 'duración');
+    auroPlanInstalarLimpiezaRapidaCampo('hcMedIndicaciones', 'indicaciones');
+
+    auroPlanInstalarIndicacionesAutoExpandibles();
+    auroPlanInstalarAyudaIndicaciones();
+    auroPlanInstalarEditorIndicacionesAmpliado();
+    auroPlanPrepararControlesEdicionMedicamento();
+    auroPlanActualizarEncabezadosTablaMedicamentos();
+}
+
+function auroPlanBuscarBotonAgregarMedicamento(){
+    const botones = Array.from(
+        document.querySelectorAll('#hc_plan button, button')
+    );
+
+    return botones.find(btn =>
+        String(btn.getAttribute('onclick') || '')
+            .includes('agregarMedicamentoDesdeFormulario')
+    ) || null;
+}
+
+function auroPlanPrepararControlesEdicionMedicamento(){
+    const boton = auroPlanBuscarBotonAgregarMedicamento();
+    if(!boton) return;
+
+    boton.id = boton.id || 'auroPlanBtnAgregarMedicamento';
+    boton.classList.add('auro-plan-btn-medicamento-principal');
+
+    let cancelar = document.getElementById('auroPlanBtnCancelarEdicionMedicamento');
+
+    if(!cancelar){
+        cancelar = document.createElement('button');
+        cancelar.type = 'button';
+        cancelar.id = 'auroPlanBtnCancelarEdicionMedicamento';
+        cancelar.className = 'btn btn-sm btn-outline-secondary ms-2 d-none';
+        cancelar.innerHTML = '<i class="bi bi-x-circle me-1"></i> Cancelar edición';
+        cancelar.addEventListener('click', cancelarEdicionMedicamentoPlan);
+        boton.insertAdjacentElement('afterend', cancelar);
+    }
+
+    let aviso = document.getElementById('auroPlanAvisoEdicionMedicamento');
+
+    if(!aviso){
+        aviso = document.createElement('div');
+        aviso.id = 'auroPlanAvisoEdicionMedicamento';
+        aviso.className = 'auro-plan-aviso-edicion d-none';
+        aviso.setAttribute('role', 'status');
+
+        const contenedor = boton.parentElement || boton;
+        contenedor.insertAdjacentElement('beforebegin', aviso);
+    }
+
+    auroPlanActualizarEstadoEdicionMedicamento();
+}
+
+function auroPlanActualizarEstadoEdicionMedicamento(){
+    const boton = auroPlanBuscarBotonAgregarMedicamento();
+    const cancelar = document.getElementById('auroPlanBtnCancelarEdicionMedicamento');
+    const aviso = document.getElementById('auroPlanAvisoEdicionMedicamento');
+    const indice = window.auroPlanMedicamentoEditandoIndice;
+    const editando = Number.isInteger(indice) &&
+        indice >= 0 &&
+        indice < (window.medicamentosPlanSeleccionados || []).length;
+
+    if(boton){
+        boton.innerHTML = editando
+            ? '<i class="bi bi-check-circle me-1"></i> Actualizar medicamento'
+            : '<i class="bi bi-plus-circle me-1"></i> Agregar medicamento';
+    }
+
+    if(cancelar){
+        cancelar.classList.toggle('d-none', !editando);
+    }
+
+    if(aviso){
+        aviso.classList.toggle('d-none', !editando);
+        aviso.innerHTML = editando
+            ? '<i class="bi bi-pencil-square me-1"></i> Editando medicamento ' + (indice + 1) + '. Revise los datos y presione “Actualizar medicamento”.'
+            : '';
+    }
+}
+
+function auroPlanActualizarEncabezadosTablaMedicamentos(){
+    const tbody = document.getElementById('hcMedicamentosTableBody');
+    const tabla = tbody?.closest('table');
+    if(!tabla) return;
+
+    tabla.classList.add('auro-plan-tabla-medicamentos');
+
+    const encabezados = tabla.querySelectorAll('thead th');
+
+    if(encabezados[2]) encabezados[2].textContent = 'Vía';
+    if(encabezados[7]) encabezados[7].textContent = 'Trat. continuo';
+    if(encabezados[8]) encabezados[8].textContent = 'Acciones';
+}
+
+
+/* ============================================================
+   UTILIDADES JSON SEGURAS DEL PLAN
+   - Mantienen la interfaz actual.
+   - Evitan duplicados antes de guardar.
+   - Permiten cargar JSON sin afectar Recetas.
+============================================================ */
+
+function auroPlanParseJSONSeguro(valor, fallback){
+    if(valor === null || valor === undefined || valor === ''){
+        return fallback;
+    }
+
+    if(typeof valor === 'object'){
+        return valor;
+    }
+
+    const texto = String(valor || '').trim();
+
+    if(!texto){
+        return fallback;
+    }
+
+    try{
+        return JSON.parse(texto);
+    }catch(e){
+        return fallback;
+    }
+}
+
+function auroPlanClaveUnica(partes){
+    return (partes || [])
+        .map(v => normalizarTextoPlan(v))        .join('|');
+}
+
+function auroPlanOrdenesUnicas(lista){
+    const mapa = new Map();
+
+    (Array.isArray(lista) ? lista : []).forEach(item => {
+        const orden = String(item?.orden || '').trim();
+        if(!orden) return;
+
+        const normalizada = {
+            ...(item && typeof item === 'object' ? item : {}),
+            orden: orden,
+            cat: String(item?.cat || item?.categoria || 'OTROS').trim() || 'OTROS',
+            obs: String(item?.obs || item?.observacion || '').trim()
+        };
+
+        const clave = auroPlanClaveUnica([
+            normalizada.orden,
+            normalizada.cat,
+            normalizada.obs
+        ]);
+
+        if(!mapa.has(clave)){
+            mapa.set(clave, normalizada);
+        }
+    });
+
+    return Array.from(mapa.values());
+}
+
+/* ============================================================
+   IASYN FIX QUIRÚRGICO INTERCONSULTA 2026-08-22
+   - Una misma interconsulta no se duplica al completar motivo/observaciones.
+   - Conserva datos clínicos existentes ante campos vacíos/default.
+   - Mantiene separadas interconsultas con profesionales explícitamente distintos.
+   - No cambia estructura JSON, id_atencion ni contratos de persistencia.
+============================================================ */
+function auroPlanInterconsultasUnicas(lista){
+    const resultado = [];
+
+    function normalizarItem(item){
+        return {
+            tipo: String(item?.tipo || '').trim(),
+            especialidad: String(item?.especialidad || '').trim(),
+            prioridad: String(item?.prioridad || 'Normal').trim() || 'Normal',
+            profesional: String(item?.profesional || '').trim(),
+            estado: String(item?.estado || 'Pendiente').trim() || 'Pendiente',
+            motivo: String(item?.motivo || '').trim(),
+            observaciones: String(item?.observaciones || item?.observacion || '').trim()
+        };
+    }
+
+    function tieneContenido(item){
+        return !!(
+            item.tipo ||
+            item.especialidad ||
+            item.profesional ||
+            item.motivo ||
+            item.observaciones
+        );
+    }function mismaInterconsulta(a, b){
+        const tipoA = normalizarTextoPlan(a?.tipo);
+        const tipoB = normalizarTextoPlan(b?.tipo);
+        const espA = normalizarTextoPlan(a?.especialidad);
+        const espB = normalizarTextoPlan(b?.especialidad);
+        const profA = normalizarTextoPlan(a?.profesional);
+        const profB = normalizarTextoPlan(b?.profesional);
+
+        if(tipoA !== tipoB) return false;
+        if(espA !== espB) return false;
+
+        /*
+          Profesional forma parte de la identidad solo cuando ambos
+          registros lo tienen explícitamente informado. Esto permite
+          completar después una interconsulta sin crear un duplicado.
+        */
+        if(profA && profB && profA !== profB) return false;
+
+        return true;
+    }
+
+    function fusionar(existing, incoming){
+        const salida = {...existing};
+
+        if(incoming.tipo) salida.tipo = incoming.tipo;
+        if(incoming.especialidad) salida.especialidad = incoming.especialidad;
+        if(incoming.profesional) salida.profesional = incoming.profesional;
+
+        /*
+          "Normal" es el valor inicial del formulario y no debe degradar
+          una prioridad clínica ya más específica.
+        */
+        const prioridadExistente = normalizarTextoPlan(salida.prioridad);
+        const prioridadNueva = normalizarTextoPlan(incoming.prioridad);
+
+        if(
+            incoming.prioridad &&
+            (
+                !salida.prioridad ||
+                prioridadNueva !== 'normal' ||
+                prioridadExistente === 'normal'
+            )
+        ){
+            salida.prioridad = incoming.prioridad;
+        }
+
+        /*
+          "Pendiente" es el estado inicial y no debe sobrescribir
+          un estado posterior ya registrado.
+        */
+        const estadoExistente = normalizarTextoPlan(salida.estado);
+        const estadoNuevo = normalizarTextoPlan(incoming.estado);
+
+        if(
+            incoming.estado &&
+            (
+                !salida.estado ||
+                estadoNuevo !== 'pendiente' ||
+                estadoExistente === 'pendiente'
+            )
+        ){
+            salida.estado = incoming.estado;
+        }
+
+        /*
+          Motivo y observaciones son datos clínicos editables:
+          un valor nuevo no vacío completa/actualiza; un campo vacío
+          nunca borra información ya registrada.
+        */
+        if(incoming.motivo) salida.motivo = incoming.motivo;
+        if(incoming.observaciones) salida.observaciones = incoming.observaciones;
+
+        salida.prioridad = String(salida.prioridad || 'Normal').trim() || 'Normal';
+        salida.estado = String(salida.estado || 'Pendiente').trim() || 'Pendiente';
+
+        return salida;
+    }
+
+    (Array.isArray(lista) ? lista : []).forEach(item => {
+        const normalizada = normalizarItem(item);
+        if(!tieneContenido(normalizada)) return;
+
+        const indice = resultado.findIndex(actual =>
+            mismaInterconsulta(actual, normalizada)
+        );
+
+        if(indice === -1){
+            resultado.push(normalizada);
+            return;
+        }
+
+        resultado[indice] = fusionar(resultado[indice], normalizada);
+    });
+
+    return resultado;
+}
+
+function auroPlanEvaluacionesSeleccionadasJSON(){
+    return AURO_PLAN_EVALUACIONES
+        .filter(item => {
+            const el = document.getElementById(item.id);
+            return !!(el && el.checked);
+        })
+        .map(item => ({
+            id: item.id,
+            texto: item.texto,
+            seleccionado: true
+        }));
+}
+
+
+/* ============================================================
+   ESTADO TEMPORAL DEL PLAN POR ATENCIÓN
+============================================================ */
+
+window.planState = window.planState || {
+    atencionActual: '',
+    cache: {}
+};
+
+window.medicamentosPlanSeleccionados = Array.isArray(window.medicamentosPlanSeleccionados)
+    ? window.medicamentosPlanSeleccionados
+    : [];
+
+window.ordenesMedicasPlanSeleccionadas = Array.isArray(window.ordenesMedicasPlanSeleccionadas)
+    ? window.ordenesMedicasPlanSeleccionadas
+    : [];
+
+window.interconsultasPlanSeleccionadas = Array.isArray(window.interconsultasPlanSeleccionadas)
+    ? window.interconsultasPlanSeleccionadas
+    : [];
+
+
+/* ============================================================
+   CATÁLOGO BASE DE MEDICAMENTOS
+============================================================ */
+
+window.MEDICAMENTOS_IASYN_BASE = window.MEDICAMENTOS_IASYN_BASE || [
+    {cat:'GINECOLOGÍA', med:'Tinidazol', pres:'500 mg tableta', via:'VO', frec:'según esquema médico', dur:'según indicación', ind:'Tomar después de alimentos'},
+    {cat:'GINECOLOGÍA', med:'Metronidazol', pres:'500 mg tableta', via:'VO', frec:'cada 12 horas', dur:'7 días', ind:'Tomar después de alimentos'},
+    {cat:'GINECOLOGÍA', med:'Clotrimazol', pres:'óvulo vaginal', via:'Vaginal', frec:'cada noche', dur:'7 noches', ind:'Aplicar antes de dormir'},
+    {cat:'GINECOLOGÍA', med:'Fluconazol', pres:'150 mg cápsula', via:'VO', frec:'dosis única', dur:'1 día', ind:'Según indicación médica'},
+    {cat:'GINECOLOGÍA', med:'Secnidazol', pres:'1 g tableta', via:'VO', frec:'dosis única', dur:'1 día', ind:'Tomar después de alimentos'},
+    {cat:'DOLOR / INFLAMACIÓN', med:'Ibuprofeno', pres:'400 mg tableta', via:'VO', frec:'cada 8 horas', dur:'3 a 5 días', ind:'Tomar después de alimentos'},
+    {cat:'DOLOR / INFLAMACIÓN', med:'Paracetamol', pres:'500 mg tableta', via:'VO', frec:'cada 8 horas', dur:'3 a 5 días', ind:'Si dolor o fiebre'},
+    {cat:'DOLOR / INFLAMACIÓN', med:'Ketorolaco', pres:'10 mg tableta', via:'VO', frec:'cada 8 horas', dur:'máximo 3 días', ind:'Tomar después de alimentos'},
+    {cat:'MEDICINA GENERAL', med:'Amoxicilina + ácido clavulánico', pres:'875/125 mg tableta', via:'VO', frec:'cada 12 horas', dur:'7 días', ind:'Tomar con alimentos'},
+    {cat:'MEDICINA GENERAL', med:'Cefalexina', pres:'500 mg cápsula', via:'VO', frec:'cada 6 horas', dur:'7 días', ind:''},
+    {cat:'DERMATOLOGÍA / ESTÉTICA', med:'Mupirocina', pres:'ungüento', via:'Tópica', frec:'cada 8 horas', dur:'5 a 7 días', ind:'Aplicar capa fina'},
+    {cat:'DERMATOLOGÍA / ESTÉTICA', med:'Ácido fusídico', pres:'crema', via:'Tópica', frec:'cada 8 horas', dur:'7 días', ind:'Aplicar capa fina'},
+    {cat:'DERMATOLOGÍA / ESTÉTICA', med:'Hidrocortisona', pres:'1% crema', via:'Tópica', frec:'cada 12 horas', dur:'3 a 5 días', ind:'Aplicar capa fina'},
+    {cat:'UROLOGÍA', med:'Fenazopiridina', pres:'100 mg tableta', via:'VO', frec:'cada 8 horas', dur:'2 días', ind:'Uso sintomático según indicación'},
+    {cat:'OTROS', med:'Probióticos', pres:'cápsula/sobre', via:'VO', frec:'cada día', dur:'10 a 30 días', ind:''}
+];
+
+/* Compatibilidad temporal con módulos heredados que aún consulten el nombre anterior. */
+window.MEDICAMENTOS_AUROSANAX_BASE = window.MEDICAMENTOS_IASYN_BASE;
+
+
+/* ============================================================
+   CATÁLOGO BASE DE ÓRDENES MÉDICAS
+============================================================ */
+
+window.ORDENES_MEDICAS_IASYN_BASE = window.ORDENES_MEDICAS_IASYN_BASE || [
+    {cat:'LABORATORIOS', orden:'Biometría hemática completa'},
+    {cat:'LABORATORIOS', orden:'Glucosa en ayunas'},
+    {cat:'LABORATORIOS', orden:'Insulina basal'},
+    {cat:'LABORATORIOS', orden:'Hemoglobina glicosilada HbA1c'},
+    {cat:'LABORATORIOS', orden:'Perfil lipídico'},
+    {cat:'LABORATORIOS', orden:'Perfil hepático'},
+    {cat:'LABORATORIOS', orden:'Perfil renal'},
+    {cat:'LABORATORIOS', orden:'TSH'},
+    {cat:'LABORATORIOS', orden:'T4 libre'},
+    {cat:'LABORATORIOS', orden:'Vitamina D'},
+    {cat:'LABORATORIOS', orden:'Ferritina'},
+    {cat:'LABORATORIOS', orden:'Uroanálisis'},
+    {cat:'LABORATORIOS', orden:'Urocultivo + antibiograma'},
+    {cat:'GINECOLOGÍA', orden:'Papanicolaou'},
+    {cat:'GINECOLOGÍA', orden:'Colposcopia'},
+    {cat:'GINECOLOGÍA', orden:'Biopsia cervical'},
+    {cat:'GINECOLOGÍA', orden:'Cultivo vaginal'},
+    {cat:'GINECOLOGÍA', orden:'Examen fresco de secreción vaginal'},
+    {cat:'GINECOLOGÍA', orden:'Prueba HPV'},
+    {cat:'IMÁGENES', orden:'Ecografía transvaginal'},
+    {cat:'IMÁGENES', orden:'Ecografía pélvica'},
+    {cat:'IMÁGENES', orden:'Ecografía mamaria'},
+    {cat:'IMÁGENES', orden:'Mamografía bilateral'},
+    {cat:'IMÁGENES', orden:'Densitometría ósea'},
+    {cat:'OBSTETRICIA', orden:'Ecografía obstétrica'},
+    {cat:'OBSTETRICIA', orden:'Ecografía morfológica'},
+    {cat:'OBSTETRICIA', orden:'Doppler obstétrico'},
+    {cat:'OBSTETRICIA', orden:'Monitoreo fetal'},
+    {cat:'MATERNO FETAL', orden:'Valoración materno fetal'},
+    {cat:'CARDIOLOGÍA', orden:'Electrocardiograma'},
+    {cat:'CARDIOLOGÍA', orden:'Ecocardiograma'},
+    {cat:'PROCEDIMIENTOS', orden:'Láser CO2 fraccionado'},
+    {cat:'PROCEDIMIENTOS', orden:'Depilación láser diodo'},
+    {cat:'PROCEDIMIENTOS', orden:'HIFU'},
+    {cat:'PROCEDIMIENTOS', orden:'PRP'},
+    {cat:'OTROS', orden:'Control médico'}
+];
+
+/* Compatibilidad temporal con módulos heredados que aún consulten el nombre anterior. */
+window.ORDENES_MEDICAS_AUROSANAX_BASE = window.ORDENES_MEDICAS_IASYN_BASE;
+
+
+/* ============================================================
+   INICIALIZACIÓN
+============================================================ */
+
+function inicializarPlan(){
+
+    if(!Array.isArray(window.medicamentosPlanSeleccionados)){
+        window.medicamentosPlanSeleccionados = [];
+    }
+
+    if(!Array.isArray(window.ordenesMedicasPlanSeleccionadas)){
+        window.ordenesMedicasPlanSeleccionadas = [];
+    }
+
+    if(!Array.isArray(window.interconsultasPlanSeleccionadas)){
+        window.interconsultasPlanSeleccionadas = [];
+    }
+
+    if(!window.planState){
+        window.planState = {
+            atencionActual:'',
+            cache:{}
+        };
+    }
+
+    instalarResponsivePlanAndroid();
+    instalarEventosMedicamentosPlan();
+    instalarEventosOrdenesMedicasPlan();
+    instalarEventosEvaluacionesPlan();
+    auroPlanInstalarAyudasMedicamentos();
+    auroPlanInstalarVisorSugerenciasDiagnosticas();
+    auroPlanRenderSugerenciasDiagnosticas();
+    auroPlanRefrescarVistas();
+}
+
+
+/* ============================================================
+   CAMBIO DE CONSULTA / ATENCIÓN
+============================================================ */
+
+async function cambiarPlanPorAtencion(idAtencion){
+
+    inicializarPlan();
+    cancelarEdicionMedicamentoPlan({limpiarFormulario:false});
+
+    idAtencion = String(
+        idAtencion ||
+        auroPlanObtenerIdAtencionActivaSeguro() ||
+        ''
+    ).trim();
+
+    if(!idAtencion) return;
+
+    /*
+      FUENTE REAL DEL PLAN VISIBLE:
+      No se usa planState.atencionActual para decidir si cambió la consulta,
+      porque Atenciones puede actualizar ese valor antes de llamar esta función.
+      __auroPlanAtencionRenderizada representa la consulta que realmente está
+      dibujada actualmente en el módulo Plan.
+    */
+    const atencionAnteriorRenderizada = String(
+        window.__auroPlanAtencionRenderizada || ''
+    ).trim();
+
+    /*
+      Solo se conserva el Plan temporal cuando realmente existe otra consulta
+      dibujada. Se guarda usando su id original, nunca bajo la nueva atención.
+    */
+    if(
+        atencionAnteriorRenderizada &&
+        atencionAnteriorRenderizada !== idAtencion
+    ){
+        const idTemporalActual = String(
+            window.planState?.atencionActual || ''
+        ).trim();
+
+        window.planState.atencionActual = atencionAnteriorRenderizada;
+        guardarPlanTemporal();
+        window.planState.atencionActual = idTemporalActual;
+    }
+
+    /*
+      Si la consulta realmente dibujada ya es la misma, no se limpia.
+      Esto protege cambios temporales al navegar entre pestañas de una misma
+      atención, pero no confunde una atención nueva con la anterior.
+    */
+    if(
+        atencionAnteriorRenderizada &&
+        atencionAnteriorRenderizada === idAtencion
+    ){
+        window.planState.atencionActual = idAtencion;
+
+        /*
+          IASYN FIX QUIRÚRGICO:
+          - En una atención abierta se conservan los cambios temporales al navegar
+            entre pestañas de la misma consulta.
+          - En una atención finalizada, al pulsar Ver se fuerza la recarga desde
+            Sheets para mostrar exactamente el Plan guardado, incluidos
+            medicamentos, protocolos aplicados y receta.
+        */
+        let atencionFinalizada = false;
+
+        try{
+            const atencionActiva = typeof window.getAtencionActiva === 'function'
+                ? window.getAtencionActiva()
+                : null;
+
+            const estadoAtencion = normalizarTextoPlan(
+                atencionActiva?.estado_atencion ||
+                atencionActiva?.estado ||
+                ''
+            );
+
+            atencionFinalizada = [
+                'finalizada',
+                'finalizado',
+                'cerrada',
+                'cerrado',
+                'completada',
+                'completado'
+            ].includes(estadoAtencion);
+        }catch(error){
+            atencionFinalizada = false;
+        }
+
+        if(!atencionFinalizada){
+            auroPlanRefrescarVistas();
+            return null;
+        }
+    }
+
+    window.planState.atencionActual = idAtencion;
+    window.__auroPlanAtencionRenderizada = idAtencion;
+
+    /*
+      Primero se limpia completamente la pantalla.
+      Después se restaura solo el cache propio de la atención solicitada,
+      si realmente existe.
+    */
+    limpiarPlanTemporal();
+
+    if(window.planState.cache[idAtencion]){
+        cargarPlanTemporal(idAtencion);
+    }else{
+        auroPlanRefrescarVistas();
+    }
+
+    if(typeof window.cargarPlanClinicoDesdeSheets === 'function'){
+        if(
+            String(window.__auroPlanAtencionRenderizada || '').trim() !== idAtencion ||
+            String(window.planState?.atencionActual || '').trim() !== idAtencion
+        ){
+            return null;
+        }
+
+        try{
+            const planCargado = await window.cargarPlanClinicoDesdeSheets(idAtencion);
+
+            if(
+                String(window.__auroPlanAtencionRenderizada || '').trim() !== idAtencion ||
+                String(window.planState?.atencionActual || '').trim() !== idAtencion
+            ){
+                return null;
+            }
+
+            window.dispatchEvent(new CustomEvent('aurosanax:plan-cargado', {
+                detail:{
+                    id_atencion:idAtencion,
+                    tiene_plan:!!planCargado,
+                    medicamentos:Array.isArray(window.medicamentosPlanSeleccionados)
+                        ? window.medicamentosPlanSeleccionados.length
+                        : 0
+                }
+            }));
+
+            return planCargado;
+        }catch(error){
+            console.warn('IASYN PLAN: no se pudo cargar Plan desde Sheets.', error);
+            return null;
+        }
+    }
+
+    return null;
+}
+
+
+/* ============================================================
+   GUARDAR PLAN TEMPORAL EN MEMORIA
+============================================================ */
+
+function guardarPlanTemporal(){
+
+    if(!window.planState){
+        window.planState = { atencionActual:'', cache:{} };
+    }
+
+    if(!window.planState.atencionActual) return;
+
+    window.planState.cache[window.planState.atencionActual] = {
+
+        medicamentos: JSON.parse(
+            JSON.stringify(window.medicamentosPlanSeleccionados || [])
+        ),
+
+        ordenes: JSON.parse(
+            JSON.stringify(window.ordenesMedicasPlanSeleccionadas || [])
+        ),
+
+        interconsultas: JSON.parse(
+            JSON.stringify(window.interconsultasPlanSeleccionadas || [])
+        ),
+
+        plan:
+            document.getElementById('hcPlanTratamiento')?.value || '',
+
+        indicaciones:
+            document.getElementById('hcIndicacionesPaciente')?.value || '',
+
+        ordenesTexto:
+            document.getElementById('hcExamenesSolicitados')?.value || '',
+
+        interconsultaTexto:
+            document.getElementById('hcInterconsultaResumen')?.value || '',
+        evaluaciones:
+            document.getElementById('hcEvaluacionesResumen')?.value || '',
+
+        evaluacionesChecks:
+            auroPlanCapturarEvaluaciones(),
+
+        receta:
+            document.getElementById('hcRecetaMedicamentos')?.value || ''
+    };
+}
+
+
+/* ============================================================
+   CARGAR PLAN TEMPORAL POR ATENCIÓN
+============================================================ */
+
+function cargarPlanTemporal(idAtencion){
+
+    idAtencion = String(idAtencion || '').trim();
+
+    limpiarPlanTemporal();
+
+    const data = window.planState.cache[idAtencion];
+
+    if(!data){
+        auroPlanRefrescarVistas();
+        return;
+    }
+
+    window.medicamentosPlanSeleccionados =
+        JSON.parse(JSON.stringify(data.medicamentos || []));
+
+    window.ordenesMedicasPlanSeleccionadas =
+        JSON.parse(JSON.stringify(data.ordenes || []));
+
+    window.interconsultasPlanSeleccionadas =
+        JSON.parse(JSON.stringify(data.interconsultas || []));
+
+    auroPlanSetValue('hcPlanTratamiento', data.plan || '');
+    auroPlanSetValue('hcIndicacionesPaciente', auroPlanValorClinicoATexto(data.indicaciones || ''));
+    auroPlanSetValue('hcExamenesSolicitados', data.ordenesTexto || '');
+    auroPlanSetValue('hcInterconsultaResumen', data.interconsultaTexto || '');
+    auroPlanRestaurarFormularioInterconsultaDesdeLista();
+    auroPlanSetValue('hcEvaluacionesResumen', data.evaluaciones || '');
+    auroPlanRestaurarEvaluaciones(data.evaluacionesChecks || {});
+    auroPlanSetValue('hcRecetaMedicamentos', auroPlanValorClinicoATexto(data.receta || ''));
+
+    auroPlanRefrescarVistas();
+}
+
+
+/* ============================================================
+   LIMPIAR PLAN TEMPORAL
+============================================================ */
+
+function limpiarPlanTemporal(){
+
+    window.auroPlanMedicamentoEditandoIndice = null;
+    window.medicamentosPlanSeleccionados = [];
+    window.ordenesMedicasPlanSeleccionadas = [];
+    window.interconsultasPlanSeleccionadas = [];
+
+    const campos = [
+        'hcPlanTratamiento',
+        'hcIndicacionesPaciente',
+        'hcRecetaMedicamentos',
+        'hcExamenesSolicitados',
+        'hcInterconsultaResumen',
+        'hcEvaluacionesResumen',
+        'hcInterconsultaTipo',
+        'hcInterconsultaEspecialidad',
+        'hcInterconsultaProfesional',
+        'hcInterconsultaMotivo',
+        'hcInterconsultaObservaciones'
     ];
 
-    for(let i=0;i<candidatas.length;i+=1){
-      const h=candidatas[i];
-      if(!h || typeof h!=='object')continue;
-      const hp=texto(h.id_paciente || h.idPaciente,'');
-      const hi=texto(h.id_historia || h.idHistoria || h.id,'');
-      if(hp===id && hi)return true;
+    campos.forEach(id => auroPlanSetValue(id, ''));
+
+    auroPlanSetValue('hcInterconsultaPrioridad', 'Normal');
+    auroPlanSetValue('hcInterconsultaEstado', 'Pendiente');
+
+    /*
+      Campos de Receta alimentados por Plan.
+      Deben quedar vacíos al cambiar de atención para evitar arrastre.
+    */
+    auroPlanSetValue('recMedicamento', '');
+    auroPlanSetValue('recIndicaciones', '');
+    auroPlanSetValue('recRecomendaciones', '');
+
+    limpiarEvaluacionesCamposPlan();
+
+    auroPlanRefrescarVistas();
+}
+
+
+/* ============================================================
+   SUGERENCIAS TERAPÉUTICAS AGRUPADAS POR DIAGNÓSTICO CIE-10
+   IASYN PLAN 28 - TARJETAS COMPACTAS + REACTIVACIÓN CONTROLADA
+   ------------------------------------------------------------
+   OBJETIVO
+   - Mantener las tarjetas por cada diagnóstico de la atención.
+   - Mostrar medicamentos, órdenes/estudios, indicaciones, controles y alertas.
+   - Permitir seleccionar SOLO los elementos que el médico decide incorporar.
+   - Transferir únicamente lo seleccionado al Plan real inferior.
+   - NO guardar automáticamente en Google Sheets.
+   - NO modificar Diagnóstico, Recetas, backend ni la atención.
+   - Mantener id_atencion como aislamiento clínico.
+   ============================================================ */
+
+function auroPlanNormalizarCodigoCie(valor){
+    return String(valor || '')
+        .replace(/\./g,'')
+        .trim()
+        .toUpperCase();
+}
+
+/* ============================================================
+   IASYN PLAN 35 - CIE-10 VISUAL ANTIRREGRESIVO
+   - Internamente conserva el código compacto.
+   - Solo la presentación usa punto en subcategorías: N760 -> N76.0.
+   - Categorías válidas de 3 caracteres permanecen iguales.
+   - Compatibilidad histórica: N720 se presenta como N72.
+============================================================ */
+function auroPlanCodigoCieVisual(valor){
+    const compacto = auroPlanNormalizarCodigoCie(valor);
+    if(!compacto) return '';
+
+    if(compacto === 'N720') return 'N72';
+    if(compacto.length <= 3) return compacto;
+
+    return compacto.slice(0, 3) + '.' + compacto.slice(3);
+}
+
+function auroPlanTextoSugerenciaMedicamento(item){
+    if(typeof item === 'string'){
+        return String(item || '').trim();
     }
 
-    const listas=[
-      window.historiasClinicas,
-      window.historias_clinicas
+    if(!item || typeof item !== 'object') return '';
+
+    return String(
+        item.med ||
+        item.medicamento ||
+        item.nombre ||
+        item.nombre_medicamento ||
+        item.principio_activo ||
+        item.farmaco ||
+        ''
+    ).trim();
+}
+
+function auroPlanTextoSugerenciaGenerica(item, campos){
+    if(typeof item === 'string') return String(item || '').trim();
+    if(!item || typeof item !== 'object') return '';
+
+    for(const campo of (campos || [])){
+        const valor = String(item?.[campo] || '').trim();
+        if(valor) return valor;
+    }
+
+    return Object.values(item)
+        .map(v => String(v || '').trim())
+        .filter(Boolean)
+        .join(' - ');
+}
+
+function auroPlanProtocolosDiagnosticosActuales(){
+    try{
+        if(
+            window.auroDiagnosticos &&
+            typeof window.auroDiagnosticos.obtenerProtocolos === 'function'
+        ){
+            const lista = window.auroDiagnosticos.obtenerProtocolos();
+            if(Array.isArray(lista)) return lista;
+        }
+    }catch(error){
+        console.warn('IASYN PLAN: no se pudieron leer protocolos desde Diagnóstico.', error);
+    }
+
+    const lista = window.auroDiagnosticosState?.protocolos;
+    return Array.isArray(lista) ? lista : [];
+}
+
+function auroPlanDiagnosticosActuales(){
+    try{
+        if(
+            window.auroDiagnosticos &&
+            typeof window.auroDiagnosticos.obtenerDiagnosticos === 'function'
+        ){
+            const lista = window.auroDiagnosticos.obtenerDiagnosticos();
+            if(Array.isArray(lista)) return lista;
+        }
+    }catch(error){
+        console.warn('IASYN PLAN: no se pudieron leer diagnósticos.', error);
+    }
+
+    const lista = window.auroDiagnosticosState?.diagnosticos;
+    return Array.isArray(lista) ? lista : [];
+}
+
+function auroPlanMedicamentoYaEnPlan(nombre){
+    const objetivo = normalizarTextoPlan(nombre);
+    if(!objetivo) return false;
+
+    return (window.medicamentosPlanSeleccionados || []).some(function(m){
+        const actual = normalizarTextoPlan(m?.med || m?.medicamento || m?.nombre || '');
+        if(!actual) return false;
+        return actual === objetivo ||
+            (actual.length >= 6 && objetivo.includes(actual)) ||
+            (objetivo.length >= 6 && actual.includes(objetivo));
+    });
+}
+
+function auroPlanOrdenYaEnPlan(textoOrden){
+    const objetivo = normalizarTextoPlan(textoOrden);
+    if(!objetivo) return false;
+
+    return (window.ordenesMedicasPlanSeleccionadas || []).some(function(o){        return normalizarTextoPlan(o?.orden || o?.nombre || '') === objetivo;
+    });
+}
+
+function auroPlanLineaYaEnCampo(idCampo, textoLinea){
+    const objetivo = normalizarTextoPlan(textoLinea);
+    if(!objetivo) return false;
+
+    return auroPlanListaClinicaDesdeValor(auroPlanGetValue(idCampo))
+        .some(linea => normalizarTextoPlan(linea) === objetivo);
+}
+
+function auroPlanEsNotaNoFarmacologica(textoItem){
+    const n = normalizarTextoPlan(textoItem);
+    if(!n) return true;
+
+    return (
+        n.includes('no sugerir tratamiento automatico') ||
+        n.includes('no sugerir medicamentos automaticos') ||
+        n.includes('no aplicar automaticamente') ||
+        n.startsWith('manejo hemostatico') ||
+        n.startsWith('manejo hormonal')
+    );
+}
+
+function auroPlanClaveSugerencia(codigo, tipo, textoItem){
+    return [
+        auroPlanNormalizarCodigoCie(codigo),
+        String(tipo || '').trim().toLowerCase(),
+        normalizarTextoPlan(textoItem)
+    ].join('|');
+}
+
+window.__auroPlanSeleccionSugerenciasDx =
+    window.__auroPlanSeleccionSugerenciasDx instanceof Set
+        ? window.__auroPlanSeleccionSugerenciasDx
+        : new Set();
+
+/*
+   IASYN PLAN 28 - ESTADO VISUAL COMPACTO
+   Solo controla qué tarjeta diagnóstica está desplegada.
+   No se persiste, no modifica Plan, Diagnóstico ni Google Sheets.
+*/
+window.__auroPlanDxExpandidoCodigo = String(window.__auroPlanDxExpandidoCodigo || '').trim();
+
+function auroPlanAgruparSugerenciasPorDiagnostico(){
+    const diagnosticos = auroPlanDiagnosticosActuales();
+    const protocolos = auroPlanProtocolosDiagnosticosActuales();
+
+    const ordenados = [...diagnosticos].sort(function(a,b){
+        const ap = a?.principal === true || String(a?.principal || '').toUpperCase() === 'SI';
+        const bp = b?.principal === true || String(b?.principal || '').toUpperCase() === 'SI';
+        return Number(bp) - Number(ap);
+    });
+
+    return ordenados.map(function(dx){
+        const codigo = auroPlanNormalizarCodigoCie(
+            dx?.codigo_cie10 || dx?.codigo || dx?.cie10
+        );
+
+        const protocolosDx = protocolos.filter(function(p){
+            return auroPlanNormalizarCodigoCie(p?.codigo_cie10) === codigo;
+        });
+
+        const medicamentos = new Map();
+        const ordenes = new Map();
+        const indicaciones = new Map();
+        const controles = new Map();
+        const alertas = new Map();
+        const notas = new Map();
+
+        function guardarUnico(mapa, textoItem, datos){
+            const textoLimpio = String(textoItem || '').trim();
+            const clave = normalizarTextoPlan(textoLimpio);
+            if(!textoLimpio || !clave || mapa.has(clave)) return;
+            mapa.set(clave, Object.assign({texto:textoLimpio}, datos || {}));
+        }
+
+        protocolosDx.forEach(function(p){
+            const idProtocolo = String(p?.id_protocolo || '').trim();
+
+            (Array.isArray(p?.medicamentos) ? p.medicamentos : []).forEach(function(item){
+                const nombre = auroPlanTextoSugerenciaMedicamento(item);
+                if(!nombre) return;
+
+                if(auroPlanEsNotaNoFarmacologica(nombre)){
+                    guardarUnico(notas, nombre, {id_protocolo:idProtocolo});
+                    return;
+                }
+
+                guardarUnico(medicamentos, nombre, {
+                    item:item,
+                    nombre:nombre,
+                    id_protocolo:idProtocolo,
+                    enPlan:auroPlanMedicamentoYaEnPlan(nombre)
+                });
+            });
+
+            const gruposOrden = [
+                {lista:p?.ordenes, categoria:'OTROS'},
+                {lista:p?.imagenes, categoria:'IMÁGENES'},
+                {lista:p?.procedimientos, categoria:'PROCEDIMIENTOS'}
+            ];
+
+            gruposOrden.forEach(function(grupoOrden){
+                (Array.isArray(grupoOrden.lista) ? grupoOrden.lista : []).forEach(function(item){
+                    const nombre = auroPlanTextoSugerenciaGenerica(
+                        item,
+                        ['orden','nombre','descripcion','texto']
+                    );
+                    guardarUnico(ordenes, nombre, {
+                        item:item,
+                        id_protocolo:idProtocolo,
+                        categoria: String(
+                            item?.cat || item?.categoria || grupoOrden.categoria || 'OTROS'
+                        ).trim() || 'OTROS',
+                        enPlan:auroPlanOrdenYaEnPlan(nombre)
+                    });
+                });
+            });
+
+            (Array.isArray(p?.indicaciones) ? p.indicaciones : []).forEach(function(item){
+                const textoItem = auroPlanTextoSugerenciaGenerica(
+                    item,
+                    ['indicacion','recomendacion','descripcion','texto','nombre']
+                );
+                guardarUnico(indicaciones, textoItem, {
+                    item:item,
+                    id_protocolo:idProtocolo,
+                    enPlan:auroPlanLineaYaEnCampo('hcIndicacionesPaciente', textoItem)
+                });
+            });
+
+            (Array.isArray(p?.controles) ? p.controles : []).forEach(function(item){
+                const textoItem = auroPlanTextoSugerenciaGenerica(
+                    item,
+                    ['control','seguimiento','descripcion','texto','nombre']
+                );
+                guardarUnico(controles, textoItem, {id_protocolo:idProtocolo});
+            });
+
+            (Array.isArray(p?.alertas) ? p.alertas : []).forEach(function(item){
+                const textoItem = auroPlanTextoSugerenciaGenerica(
+                    item,
+                    ['alerta','descripcion','texto','nombre']
+                );
+                guardarUnico(alertas, textoItem, {id_protocolo:idProtocolo});
+            });
+
+            const conducta = String(p?.conducta || '').trim();
+            if(conducta) guardarUnico(notas, conducta, {id_protocolo:idProtocolo});
+        });
+
+        return {
+            id_diagnostico:String(dx?.id_diagnostico || '').trim(),
+            codigo:codigo,
+            descripcion:String(dx?.descripcion || dx?.nombre || dx?.diagnostico || '').trim(),
+            principal:dx?.principal === true || String(dx?.principal || '').toUpperCase() === 'SI',
+            tipo:String(dx?.tipo_diagnostico || dx?.tipo || '').trim(),
+            protocolos:protocolosDx,
+            medicamentos:Array.from(medicamentos.values()),
+            ordenes:Array.from(ordenes.values()),
+            indicaciones:Array.from(indicaciones.values()),
+            controles:Array.from(controles.values()),
+            alertas:Array.from(alertas.values()),
+            notas:Array.from(notas.values())
+        };
+    }).filter(function(grupo){
+        return grupo.codigo || grupo.descripcion;
+    });
+}
+
+function auroPlanInstalarEstilosSugerenciasDiagnosticas(){
+    if(document.getElementById('auroPlanSugerenciasDxStyles')) return;
+
+    const style = document.createElement('style');
+    style.id = 'auroPlanSugerenciasDxStyles';
+    style.textContent = `
+      #auroPlanSugerenciasDx{
+        width:100%;margin:0 0 14px;border:1px solid #ead7e2;border-radius:16px;
+        background:#fff;box-shadow:0 7px 20px rgba(139,30,90,.045);overflow:hidden;
+      }
+      #auroPlanSugerenciasDx .auro-plan-dx-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:10px 12px;border-bottom:1px solid #f0e1e9;background:linear-gradient(135deg,#fff,#fffafd)}
+      #auroPlanSugerenciasDx .auro-plan-dx-head-main{min-width:0}
+      #auroPlanSugerenciasDx .auro-plan-dx-kicker{color:#8b1e5a;font-size:9px;font-weight:950;letter-spacing:.06em;text-transform:uppercase}
+      #auroPlanSugerenciasDx .auro-plan-dx-title{margin-top:1px;color:#1f2937;font-size:13px;line-height:1.2;font-weight:950}
+      #auroPlanSugerenciasDx .auro-plan-dx-help{margin-top:3px;color:#64748b;font-size:10.5px;line-height:1.35}
+      #auroPlanSugerenciasDx .auro-plan-dx-head-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+      #auroPlanSugerenciasDx .auro-plan-dx-badge{flex:0 0 auto;padding:4px 7px;border-radius:999px;background:#fdf2f8;color:#8b1e5a;border:1px solid #fbcfe8;font-size:9px;font-weight:900;white-space:nowrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-grid{display:grid;grid-template-columns:1fr;gap:7px;padding:9px}
+      #auroPlanSugerenciasDx .auro-plan-dx-card{min-width:0;border:1px solid #e5e7eb;border-radius:12px;background:#fff;padding:9px 10px;transition:border-color .15s ease,box-shadow .15s ease}
+      #auroPlanSugerenciasDx .auro-plan-dx-card.principal{border-color:#efc7dd;box-shadow:inset 3px 0 0 #8b1e5a}
+      #auroPlanSugerenciasDx .auro-plan-dx-card.expandida{box-shadow:0 8px 20px rgba(15,23,42,.055),inset 3px 0 0 #8b1e5a}
+      #auroPlanSugerenciasDx .auro-plan-dx-card-top{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start}
+      #auroPlanSugerenciasDx .auro-plan-dx-code-line{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-code{color:#8b1e5a;font-size:12px;font-weight:950}
+      #auroPlanSugerenciasDx .auro-plan-dx-name{color:#1f2937;font-size:11px;line-height:1.25;font-weight:850;overflow-wrap:anywhere}
+      #auroPlanSugerenciasDx .auro-plan-dx-kind{flex:0 0 auto;padding:3px 7px;border-radius:999px;background:#f1f5f9;color:#475569;font-size:8.5px;font-weight:900;white-space:nowrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-card.principal .auro-plan-dx-kind{background:#fdf2f8;color:#8b1e5a}
+      #auroPlanSugerenciasDx .auro-plan-dx-med-resumen{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}      #auroPlanSugerenciasDx .auro-plan-dx-med-chip{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:4px 7px;border:1px solid #e2e8f0;border-radius:999px;background:#f8fafc;color:#334155;font-size:9.5px;font-weight:800;line-height:1.15}
+      #auroPlanSugerenciasDx .auro-plan-dx-med-chip.en-plan{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
+      #auroPlanSugerenciasDx .auro-plan-dx-med-chip input{margin:0;accent-color:#8b1e5a}
+      #auroPlanSugerenciasDx .auro-plan-dx-med-chip small{font-size:7.8px;font-weight:950}
+      #auroPlanSugerenciasDx .auro-plan-dx-mini-info{margin-top:6px;color:#64748b;font-size:9px;line-height:1.25}
+      #auroPlanSugerenciasDx .auro-plan-dx-actions-row{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:7px;flex-wrap:wrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-toggle{border:1px solid #e2e8f0;background:#fff;color:#475569;border-radius:9px;padding:5px 8px;font-size:9px;font-weight:900;cursor:pointer}
+      #auroPlanSugerenciasDx .auro-plan-dx-toggle:hover{background:#f8fafc}
+      #auroPlanSugerenciasDx .auro-plan-dx-apply-card{border:1px solid #8b1e5a;background:#8b1e5a;color:#fff;border-radius:9px;padding:5px 8px;font-size:9px;font-weight:900;cursor:pointer}
+      #auroPlanSugerenciasDx .auro-plan-dx-apply-card:disabled{opacity:.42;cursor:not-allowed}
+      #auroPlanSugerenciasDx .auro-plan-dx-details{display:none;margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9}
+      #auroPlanSugerenciasDx .auro-plan-dx-card.expandida .auro-plan-dx-details{display:block}
+      #auroPlanSugerenciasDx .auro-plan-dx-section{margin-top:8px;padding-top:7px;border-top:1px solid #f1f5f9}
+      #auroPlanSugerenciasDx .auro-plan-dx-section:first-child{margin-top:0;padding-top:0;border-top:0}
+      #auroPlanSugerenciasDx .auro-plan-dx-section-title{display:flex;align-items:center;gap:6px;margin-bottom:5px;color:#475569;font-size:8.7px;font-weight:950;letter-spacing:.03em;text-transform:uppercase}
+      #auroPlanSugerenciasDx .auro-plan-dx-options{display:grid;gap:4px}
+      #auroPlanSugerenciasDx .auro-plan-dx-option{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:6px;align-items:flex-start;padding:5px 6px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc;color:#334155;font-size:10px;font-weight:750;line-height:1.25;cursor:pointer}
+      #auroPlanSugerenciasDx .auro-plan-dx-option input{margin-top:2px;accent-color:#8b1e5a}
+      #auroPlanSugerenciasDx .auro-plan-dx-option.en-plan{border-color:#bbf7d0;background:#f0fdf4;color:#166534;cursor:default}
+      #auroPlanSugerenciasDx .auro-plan-dx-option small{font-size:8px;font-weight:950;white-space:nowrap}
+      #auroPlanSugerenciasDx .auro-plan-dx-readonly{display:grid;gap:4px}
+      #auroPlanSugerenciasDx .auro-plan-dx-note{padding:5px 6px;border-radius:8px;background:#f8fafc;color:#475569;font-size:9.5px;line-height:1.3}
+      #auroPlanSugerenciasDx .auro-plan-dx-alert{background:#fff7ed;color:#9a3412}
+      #auroPlanSugerenciasDx .auro-plan-dx-empty{padding:6px 0;color:#64748b;font-size:9.5px;line-height:1.3}
+      #auroPlanSugerenciasDx .auro-plan-dx-status{display:none;margin:7px 9px 0;padding:6px 8px;border-radius:9px;background:#ecfdf5;color:#166534;font-size:9.5px;font-weight:850}
+      #auroPlanSugerenciasDx .auro-plan-dx-status.show{display:block}
+      #auroPlanSugerenciasDx .auro-plan-dx-foot{padding:7px 10px;border-top:1px solid #f0e1e9;background:#fff;color:#64748b;font-size:9px;line-height:1.35}
+      @media(max-width:560px){
+        #auroPlanSugerenciasDx{border-radius:14px}
+        #auroPlanSugerenciasDx .auro-plan-dx-head{display:block;padding:9px 10px}
+        #auroPlanSugerenciasDx .auro-plan-dx-head-actions{justify-content:flex-start;margin-top:6px}
+        #auroPlanSugerenciasDx .auro-plan-dx-grid{padding:7px;gap:6px}
+        #auroPlanSugerenciasDx .auro-plan-dx-card{padding:8px}
+        #auroPlanSugerenciasDx .auro-plan-dx-card-top{grid-template-columns:1fr}
+        #auroPlanSugerenciasDx .auro-plan-dx-kind{justify-self:start}
+        #auroPlanSugerenciasDx .auro-plan-dx-med-chip{border-radius:9px}
+        #auroPlanSugerenciasDx .auro-plan-dx-actions-row{justify-content:stretch}
+        #auroPlanSugerenciasDx .auro-plan-dx-toggle,
+        #auroPlanSugerenciasDx .auro-plan-dx-apply-card{flex:1 1 auto}
+      }
+    `;
+
+    document.head.appendChild(style);
+}
+
+function auroPlanInstalarVisorSugerenciasDiagnosticas(){
+    auroPlanInstalarEstilosSugerenciasDiagnosticas();
+
+    if(document.getElementById('auroPlanSugerenciasDx')) return true;
+
+    const busqueda = document.getElementById('hcMedBusqueda');
+    const cajaMedicamentos = busqueda?.closest('.receta-medicamentos-box');
+
+    if(!cajaMedicamentos) return false;
+
+    const visor = document.createElement('div');
+    visor.id = 'auroPlanSugerenciasDx';
+    visor.setAttribute('aria-live','polite');
+
+    cajaMedicamentos.insertAdjacentElement('beforebegin', visor);
+    return true;
+}
+
+function auroPlanSeccionSeleccionableDx(titulo, icono, tipo, items, grupoIndex, codigoGrupo){
+    const lista = Array.isArray(items) ? items : [];
+    if(!lista.length) return '';
+
+    return `
+      <div class="auro-plan-dx-section">
+        <div class="auro-plan-dx-section-title"><i class="bi ${icono}"></i> ${escapeHtmlPlan(titulo)}</div>
+        <div class="auro-plan-dx-options">
+          ${lista.map(function(item, itemIndex){
+              const textoItem = String(item?.nombre || item?.texto || '').trim();
+              const enPlan = !!item?.enPlan;
+              const clave = auroPlanClaveSugerencia(codigoGrupo, tipo, textoItem);
+              const seleccionada = !enPlan && window.__auroPlanSeleccionSugerenciasDx.has(clave);
+              return `
+                <label class="auro-plan-dx-option ${enPlan ? 'en-plan' : ''}">
+                  <input type="checkbox"
+                         data-auro-dx-select="1"
+                         data-grupo-index="${grupoIndex}"
+                         data-tipo="${escapeHtmlPlan(tipo)}"
+                         data-item-index="${itemIndex}"
+                         ${enPlan ? 'checked disabled' : (seleccionada ? 'checked' : '')}>
+                  <span>${escapeHtmlPlan(textoItem)}</span>
+                  ${enPlan ? '<small>EN PLAN</small>' : '<small>Seleccionar</small>'}
+                </label>`;
+          }).join('')}
+        </div>
+      </div>`;
+}
+
+function auroPlanSeccionLecturaDx(titulo, icono, items, alerta){
+    const lista = Array.isArray(items) ? items : [];
+    if(!lista.length) return '';
+
+    return `
+      <div class="auro-plan-dx-section">
+        <div class="auro-plan-dx-section-title"><i class="bi ${icono}"></i> ${escapeHtmlPlan(titulo)}</div>
+        <div class="auro-plan-dx-readonly">
+          ${lista.map(item => `<div class="auro-plan-dx-note ${alerta ? 'auro-plan-dx-alert' : ''}">${escapeHtmlPlan(item?.texto || '')}</div>`).join('')}
+        </div>
+      </div>`;
+}
+
+function auroPlanMedicamentosResumenCompactoDx(grupo, grupoIndex){
+    const lista = Array.isArray(grupo?.medicamentos) ? grupo.medicamentos : [];
+    if(!lista.length){
+        return '<div class="auro-plan-dx-mini-info">Sin medicamentos automáticos sugeridos.</div>';
+    }
+
+    return `<div class="auro-plan-dx-med-resumen">${lista.map(function(item, itemIndex){
+        const textoItem = String(item?.nombre || item?.texto || '').trim();
+        const enPlan = !!item?.enPlan;
+        const clave = auroPlanClaveSugerencia(grupo?.codigo, 'medicamento', textoItem);
+        const seleccionada = !enPlan && window.__auroPlanSeleccionSugerenciasDx.has(clave);
+        return `<label class="auro-plan-dx-med-chip ${enPlan ? 'en-plan' : ''}">
+          <input type="checkbox"
+                 data-auro-dx-select="1"
+                 data-grupo-index="${grupoIndex}"
+                 data-tipo="medicamento"
+                 data-item-index="${itemIndex}"
+                 ${enPlan ? 'checked disabled' : (seleccionada ? 'checked' : '')}>
+          <span>${escapeHtmlPlan(textoItem)}</span>
+          ${enPlan ? '<small>EN PLAN</small>' : ''}
+        </label>`;
+    }).join('')}</div>`;
+}
+
+function auroPlanRenderSugerenciasDiagnosticas(){
+    if(!auroPlanInstalarVisorSugerenciasDiagnosticas()) return;
+
+    const visor = document.getElementById('auroPlanSugerenciasDx');
+    if(!visor) return;
+
+    const grupos = auroPlanAgruparSugerenciasPorDiagnostico();
+    const conProtocolo = grupos.filter(function(g){ return g.protocolos.length > 0; }).length;
+
+    if(!grupos.length){
+        visor.innerHTML = `
+          <div class="auro-plan-dx-head">
+            <div class="auro-plan-dx-head-main">
+              <div class="auro-plan-dx-kicker">Apoyo clínico CIE-10</div>
+              <div class="auro-plan-dx-title">Sugerencias terapéuticas por diagnóstico</div>
+              <div class="auro-plan-dx-help">Aún no hay diagnósticos sincronizados para esta atención.</div>
+            </div>
+            <span class="auro-plan-dx-badge">Sin diagnósticos</span>
+          </div>`;
+        return;
+    }
+
+    visor.innerHTML = `
+      <div class="auro-plan-dx-head">
+        <div class="auro-plan-dx-head-main">
+          <div class="auro-plan-dx-kicker">Apoyo clínico CIE-10</div><div class="auro-plan-dx-title">Sugerencias terapéuticas por diagnóstico</div>
+          <div class="auro-plan-dx-help">Seleccione medicamentos directamente. Use “Ver más” solo para órdenes, indicaciones, seguimiento y alertas.</div>
+        </div>
+        <div class="auro-plan-dx-head-actions">
+          <span class="auro-plan-dx-badge">${grupos.length} diagnóstico(s) · ${conProtocolo} con protocolo</span>
+        </div>
+      </div>
+
+      <div class="auro-plan-dx-status" id="auroPlanSugerenciasDxStatus"></div>
+
+      <div class="auro-plan-dx-grid">
+        ${grupos.map(function(g, grupoIndex){
+            const codigo = String(g.codigo || '').trim();
+            const expandida = !!codigo && window.__auroPlanDxExpandidoCodigo === codigo;
+            const pendientes =
+              (g.medicamentos || []).filter(x => !x.enPlan).length +
+              (g.ordenes || []).filter(x => !x.enPlan).length +
+              (g.indicaciones || []).filter(x => !x.enPlan).length;
+
+            const detalles = [
+              auroPlanSeccionSeleccionableDx('Órdenes / estudios / procedimientos','bi-file-earmark-medical','orden',g.ordenes,grupoIndex,g.codigo),
+              auroPlanSeccionSeleccionableDx('Indicaciones para el paciente','bi-clipboard-check','indicacion',g.indicaciones,grupoIndex,g.codigo),
+              auroPlanSeccionLecturaDx('Seguimiento sugerido','bi-calendar-check',g.controles,false),
+              auroPlanSeccionLecturaDx('Alertas clínicas','bi-exclamation-triangle',g.alertas,true),
+              auroPlanSeccionLecturaDx('Notas del protocolo','bi-info-circle',g.notas,false)
+            ].filter(Boolean).join('');
+
+            const cantidadAdicional =
+              (g.ordenes || []).length +
+              (g.indicaciones || []).length +
+              (g.controles || []).length +
+              (g.alertas || []).length +
+              (g.notas || []).length;
+
+            return `
+              <div class="auro-plan-dx-card ${g.principal ? 'principal' : ''} ${expandida ? 'expandida' : ''}" data-auro-dx-card-index="${grupoIndex}">
+                <div class="auro-plan-dx-card-top">
+                  <div>
+                    <div class="auro-plan-dx-code-line">
+                      <span class="auro-plan-dx-code">${escapeHtmlPlan(auroPlanCodigoCieVisual(g.codigo) || 'S/C')}</span>
+                      <span class="auro-plan-dx-name">${escapeHtmlPlan(g.descripcion || 'Sin descripción')}</span>
+                    </div>
+                  </div>
+                  <span class="auro-plan-dx-kind">${g.principal ? 'Principal' : 'Asociado'}${g.tipo ? ' · ' + escapeHtmlPlan(g.tipo) : ''}</span>
+                </div>
+                ${!g.protocolos.length
+                    ? '<div class="auro-plan-dx-empty">No hay protocolo clínico configurado para este CIE-10.</div>'
+                    : auroPlanMedicamentosResumenCompactoDx(g, grupoIndex)}
+
+                ${g.protocolos.length ? `
+                  <div class="auro-plan-dx-actions-row">
+                    ${cantidadAdicional ? `<button type="button" class="auro-plan-dx-toggle" data-auro-dx-toggle="${grupoIndex}" aria-expanded="${expandida ? 'true' : 'false'}">
+                      <i class="bi ${expandida ? 'bi-chevron-up' : 'bi-chevron-down'} me-1"></i>${expandida ? 'Ocultar detalles' : 'Ver más'}
+                    </button>` : ''}
+                    <button type="button" class="auro-plan-dx-apply-card" data-auro-dx-aplicar-card="${grupoIndex}" ${pendientes ? '' : 'disabled'}>
+                      <i class="bi bi-arrow-down-circle me-1"></i>${pendientes ? 'Añadir seleccionados' : 'En Plan'}
+                    </button>
+                  </div>
+                  <div class="auro-plan-dx-details">
+                    ${detalles || '<div class="auro-plan-dx-empty">No hay información adicional configurada.</div>'}
+                  </div>` : ''}
+              </div>`;
+        }).join('')}
+      </div>
+
+      <div class="auro-plan-dx-foot">
+        Las tarjetas son sugerencias clínicas. Solo pasa al Plan lo que el médico seleccione expresamente.
+      </div>`;
+}
+
+function auroPlanBuscarMedicamentoBaseSugerido(nombre){
+    const objetivo = normalizarTextoPlan(nombre);
+    if(!objetivo) return null;
+
+    const base = Array.isArray(window.MEDICAMENTOS_IASYN_BASE)
+        ? window.MEDICAMENTOS_IASYN_BASE
+        : [];
+
+    let exacto = base.find(item =>
+        normalizarTextoPlan(item?.med || item?.medicamento || item?.nombre || '') === objetivo
+    );
+    if(exacto) return exacto;
+
+    return base.find(item => {
+        const actual = normalizarTextoPlan(item?.med || item?.medicamento || item?.nombre || '');
+        return actual && actual.length >= 5 &&
+            (objetivo.includes(actual) || actual.includes(objetivo));
+    }) || null;
+}
+
+function auroPlanConstruirMedicamentoDesdeSugerencia(itemSugerido, grupo){
+    const original = itemSugerido?.item;
+    const obj = original && typeof original === 'object' && !Array.isArray(original)
+        ? original
+        : {};
+    const nombre = String(itemSugerido?.nombre || itemSugerido?.texto || '').trim();
+    const base = auroPlanBuscarMedicamentoBaseSugerido(nombre) || {};
+
+    return {
+        med:String(obj.med || obj.medicamento || obj.nombre || base.med || nombre || '').trim(),
+        pres:String(obj.pres || obj.presentacion || base.pres || '').trim(),
+        via:String(obj.via || base.via || '').trim(),
+        cantidad:String(obj.cantidad || obj.cant || base.cantidad || '').trim(),
+        frec:String(obj.frec || obj.frecuencia || base.frec || '').trim(),
+        dur:String(obj.dur || obj.duracion || base.dur || '').trim(),
+        ind:String(obj.ind || obj.indicaciones || base.ind || '').trim(),
+        continuo:String(obj.continuo || 'No').trim() || 'No',
+        codigo_cie10:String(grupo?.codigo || '').trim(),
+        id_diagnostico:String(grupo?.id_diagnostico || '').trim(),
+        id_protocolo:String(itemSugerido?.id_protocolo || '').trim(),
+        origen:'PROTOCOLO'
+    };
+}
+
+function auroPlanAgregarLineaClinicaUnica(idCampo, textoLinea){
+    const linea = String(textoLinea || '').trim();
+    if(!linea) return false;
+
+    const lista = auroPlanListaClinicaDesdeValor(auroPlanGetValue(idCampo));
+    const clave = normalizarTextoPlan(linea);
+    if(lista.some(x => normalizarTextoPlan(x) === clave)) return false;
+
+    auroPlanSetValue(idCampo, [...lista, linea].join('\n'));
+    const campo = document.getElementById(idCampo);
+    if(campo){
+        campo.dispatchEvent(new Event('input',{bubbles:true}));
+        campo.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+    return true;
+}
+
+function auroPlanSugerenciasSeleccionadasDesdeDOM(grupoLimitado){
+    const visor = document.getElementById('auroPlanSugerenciasDx');
+    if(!visor) return [];
+
+    const grupos = auroPlanAgruparSugerenciasPorDiagnostico();
+    const selector = grupoLimitado === null || grupoLimitado === undefined
+        ? 'input[data-auro-dx-select="1"]:checked:not(:disabled)'
+        : `[data-auro-dx-card-index="${grupoLimitado}"] input[data-auro-dx-select="1"]:checked:not(:disabled)`;
+
+    return Array.from(visor.querySelectorAll(selector)).map(input => {
+        const grupoIndex = Number(input.dataset.grupoIndex);
+        const itemIndex = Number(input.dataset.itemIndex);
+        const tipo = String(input.dataset.tipo || '');
+        const grupo = grupos[grupoIndex];
+        if(!grupo) return null;
+
+        const coleccion = tipo === 'medicamento'
+            ? grupo.medicamentos
+            : (tipo === 'orden' ? grupo.ordenes : grupo.indicaciones);
+        const item = Array.isArray(coleccion) ? coleccion[itemIndex] : null;
+        if(!item) return null;
+
+        return {grupoIndex, tipo, grupo, item, input};
+    }).filter(Boolean);
+}
+
+function auroPlanAplicarSeleccionadosSugerenciasDx(grupoLimitado){
+    const idAtencionActiva = String(
+        typeof auroPlanObtenerIdAtencionActivaSeguro === 'function'
+            ? auroPlanObtenerIdAtencionActivaSeguro()
+            : ''
+    ).trim();
+    const idPlan = String(window.planState?.atencionActual || '').trim();
+
+    if(idAtencionActiva && idPlan && idAtencionActiva !== idPlan){
+        alert('El Plan visible pertenece a otra atención. Abra nuevamente la consulta correcta antes de incorporar sugerencias.');
+        return;
+    }
+
+    const seleccionados = auroPlanSugerenciasSeleccionadasDesdeDOM(grupoLimitado);
+    if(!seleccionados.length){
+        alert('Seleccione al menos una sugerencia antes de añadirla al Plan.');
+        return;
+    }
+
+    window.medicamentosPlanSeleccionados = Array.isArray(window.medicamentosPlanSeleccionados)
+        ? window.medicamentosPlanSeleccionados
+        : [];
+    window.ordenesMedicasPlanSeleccionadas = Array.isArray(window.ordenesMedicasPlanSeleccionadas)
+        ? window.ordenesMedicasPlanSeleccionadas
+        : [];
+
+    let medsAgregados = 0;
+    let ordenesAgregadas = 0;
+    let indicacionesAgregadas = 0;
+
+    seleccionados.forEach(sel => {
+        if(sel.tipo === 'medicamento'){
+            const nuevo = auroPlanConstruirMedicamentoDesdeSugerencia(sel.item, sel.grupo);
+            if(!nuevo.med || auroPlanMedicamentoYaEnPlan(nuevo.med)) return;
+            window.medicamentosPlanSeleccionados.push(nuevo);
+            medsAgregados++;
+        }
+
+        if(sel.tipo === 'orden'){
+            const nombreOrden = String(sel.item?.texto || '').trim();
+            if(!nombreOrden || auroPlanOrdenYaEnPlan(nombreOrden)) return;
+
+            window.ordenesMedicasPlanSeleccionadas = auroPlanOrdenesUnicas([
+                ...(window.ordenesMedicasPlanSeleccionadas || []),
+                {
+                    orden:nombreOrden,
+                    cat:String(sel.item?.categoria || 'OTROS').trim() || 'OTROS',
+                    obs:'',
+                    codigo_cie10:String(sel.grupo?.codigo || '').trim(),
+                    id_diagnostico:String(sel.grupo?.id_diagnostico || '').trim(),
+                    id_protocolo:String(sel.item?.id_protocolo || '').trim(),
+                    origen:'PROTOCOLO'
+                }
+            ]);
+            ordenesAgregadas++;
+        }
+
+        if(sel.tipo === 'indicacion'){
+            if(auroPlanAgregarLineaClinicaUnica('hcIndicacionesPaciente', sel.item?.texto || '')){
+                indicacionesAgregadas++;
+            }
+        }
+
+        const textoItem = String(sel.item?.nombre || sel.item?.texto || '').trim();
+        window.__auroPlanSeleccionSugerenciasDx.delete(
+            auroPlanClaveSugerencia(sel.grupo?.codigo, sel.tipo, textoItem)
+        );
+    });
+
+    renderMedicamentosPlanTabla();
+    renderOrdenesMedicasTabla();
+    recopilarOrdenesMedicasPlan();
+    sincronizarPlanConReceta();
+    guardarPlanTemporal();
+    auroPlanRenderSugerenciasDiagnosticas();
+
+    const status = document.getElementById('auroPlanSugerenciasDxStatus');
+    if(status){
+        status.textContent = [
+            medsAgregados ? medsAgregados + ' medicamento(s)' : '',
+            ordenesAgregadas ? ordenesAgregadas + ' orden(es)' : '',
+            indicacionesAgregadas ? indicacionesAgregadas + ' indicación(es)' : ''
+        ].filter(Boolean).join(' · ') || 'Los elementos seleccionados ya estaban incorporados.';
+        status.classList.add('show');
+        setTimeout(() => status.classList.remove('show'), 4500);
+    }
+}
+function auroPlanInstalarEventosSugerenciasDiagnosticas(){
+    if(window.__auroPlanEventosSugerenciasDxInstalados) return;
+    window.__auroPlanEventosSugerenciasDxInstalados = true;
+
+    document.addEventListener('aurosanax:protocolos-diagnostico-listos', function(){
+        auroPlanRenderSugerenciasDiagnosticas();
+    });
+
+    document.addEventListener('aurosanax:diagnosticos-actualizados', function(){
+        setTimeout(auroPlanRenderSugerenciasDiagnosticas, 0);
+    });
+
+    document.addEventListener('aurosanax:diagnostico-aplicado-plan', function(){
+        setTimeout(auroPlanRenderSugerenciasDiagnosticas, 0);
+    });
+
+    document.addEventListener('aurosanax:atencion-cambiada', function(){
+        window.__auroPlanSeleccionSugerenciasDx.clear();
+        window.__auroPlanDxExpandidoCodigo = '';
+        setTimeout(auroPlanRenderSugerenciasDiagnosticas, 40);
+    });
+
+    document.addEventListener('change', function(evento){
+        const input = evento.target?.closest?.('#auroPlanSugerenciasDx input[data-auro-dx-select="1"]');
+        if(!input || input.disabled) return;
+
+        const grupos = auroPlanAgruparSugerenciasPorDiagnostico();
+        const grupo = grupos[Number(input.dataset.grupoIndex)];
+        const tipo = String(input.dataset.tipo || '');
+        if(!grupo) return;
+
+        const coleccion = tipo === 'medicamento'
+            ? grupo.medicamentos
+            : (tipo === 'orden' ? grupo.ordenes : grupo.indicaciones);
+        const item = Array.isArray(coleccion) ? coleccion[Number(input.dataset.itemIndex)] : null;
+        if(!item) return;
+
+        const clave = auroPlanClaveSugerencia(
+            grupo.codigo,
+            tipo,
+            item.nombre || item.texto || ''
+        );
+
+        if(input.checked) window.__auroPlanSeleccionSugerenciasDx.add(clave);
+        else window.__auroPlanSeleccionSugerenciasDx.delete(clave);
+    });
+
+    document.addEventListener('input', function(evento){
+        if(evento.target?.id !== 'hcIndicacionesPaciente') return;
+        clearTimeout(window.__auroPlanDxIndicacionesRenderTimer);
+        window.__auroPlanDxIndicacionesRenderTimer = setTimeout(function(){
+            auroPlanRenderSugerenciasDiagnosticas();
+        }, 120);
+    });
+
+    document.addEventListener('click', function(evento){
+        const toggle = evento.target?.closest?.('#auroPlanSugerenciasDx [data-auro-dx-toggle]');
+        if(toggle){
+            const grupos = auroPlanAgruparSugerenciasPorDiagnostico();
+            const grupo = grupos[Number(toggle.dataset.auroDxToggle)];
+            const codigo = String(grupo?.codigo || '').trim();
+            window.__auroPlanDxExpandidoCodigo = window.__auroPlanDxExpandidoCodigo === codigo ? '' : codigo;
+            auroPlanRenderSugerenciasDiagnosticas();
+            return;
+        }
+
+        const card = evento.target?.closest?.('#auroPlanSugerenciasDx [data-auro-dx-aplicar-card]');
+        if(card){
+            auroPlanAplicarSeleccionadosSugerenciasDx(Number(card.dataset.auroDxAplicarCard));
+        }
+    });
+}
+
+auroPlanInstalarEventosSugerenciasDiagnosticas();
+
+
+/* ============================================================
+   MEDICAMENTOS DEL PLAN
+============================================================ */
+
+function normalizarMedTexto(t){
+    return normalizarTextoPlan(t);
+}
+
+/* ============================================================
+   IASYN PLAN 32 - CATÁLOGO / PRESENTACIONES / VÍAS INTELIGENTES
+   - Usa MEDICAMENTOS_IASYN_BASE como fuente primaria.
+   - Si existe un catálogo IASYN enriquecido, puede aportar variantes.
+   - Puede ampliar el catálogo desde la API de ESTA instalación; conserva respaldo local.
+   - Conserva exactamente la estructura persistida del medicamento.
+============================================================ */
+window.auroPlanCatalogoMedicamentoActivo = null;
+
+function auroPlanCatalogoBaseSeguro(){
+    return Array.isArray(window.MEDICAMENTOS_IASYN_BASE)
+        ? window.MEDICAMENTOS_IASYN_BASE
+        : [];
+}
+
+function auroPlanApiCatalogoSeguro(){
+    if(
+        window.IASYN_CATALOGO_MEDICAMENTOS &&
+        typeof window.IASYN_CATALOGO_MEDICAMENTOS === 'object'
+    ){
+        return window.IASYN_CATALOGO_MEDICAMENTOS;
+    }
+
+    /*
+      Compatibilidad contractual local:
+      solo se usa si el mismo ERP ya cargó el alias heredado.
+      No se importa ningún recurso ni URL externa.
+    */
+    if(
+        window.AUROSANAX_CATALOGO_MEDICAMENTOS &&
+        typeof window.AUROSANAX_CATALOGO_MEDICAMENTOS === 'object'
+    ){
+        return window.AUROSANAX_CATALOGO_MEDICAMENTOS;
+    }
+
+    return null;
+}
+
+/* ============================================================
+   IASYN PLAN 33 - CATÁLOGO DINÁMICO DE MEDICAMENTOS v1.0
+   ------------------------------------------------------------
+   - Fuente dinámica: pestaña medicamentos de ESTA instalación.
+   - GET esperado: listarMedicamentosActivos.
+   - Catálogo local IASYN permanece como respaldo.
+   - Si API/hoja/backend falla, NO destruye el catálogo local.
+   - No prescribe frecuencia, duración, cantidad ni indicaciones.
+   - No guarda datos clínicos ni modifica id_atencion.
+============================================================ */
+window.__iasynPlanCatalogoMedicamentosDinamico = window.__iasynPlanCatalogoMedicamentosDinamico || {estado:'PENDIENTE',promesa:null,cargados:0};
+
+function iasynPlanListaTextoCatalogo(valor){
+    if(Array.isArray(valor)) return valor.map(v=>String(v||'').trim()).filter(Boolean);
+    const texto=String(valor===null||valor===undefined?'':valor).trim();
+    if(!texto) return [];
+    return texto.split(/[;\n|]+/).map(v=>String(v||'').trim()).filter(Boolean);
+}
+
+function iasynPlanDatosJsonMedicamento(registro){
+    const valor=registro?registro.datos_json:null;
+    if(valor && typeof valor==='object' && !Array.isArray(valor)) return valor;
+    const raw=String(valor===null||valor===undefined?'':valor).trim();
+    if(!raw) return {};
+    try{ const parsed=JSON.parse(raw); return parsed&&typeof parsed==='object'&&!Array.isArray(parsed)?parsed:{}; }catch(e){ return {}; }
+}
+
+function iasynPlanMedicamentoBdAFormatoPlan(registro){
+    if(!registro||typeof registro!=='object') return null;
+    const datos=iasynPlanDatosJsonMedicamento(registro);
+    const presentaciones=Array.isArray(datos.presentaciones)?datos.presentaciones:[];
+    const variantes=presentaciones.filter(p=>p&&typeof p==='object').map(p=>{
+        const forma=String(p.forma||p.forma_farmaceutica||'').trim();
+        const concentracion=String(p.concentracion||'').trim();
+        const pres=String(p.presentacion||p.pres||[concentracion,forma].filter(Boolean).join(' ')).trim();
+        const viasRaw=Array.isArray(p.vias)?p.vias:(Array.isArray(p.vias_compatibles)?p.vias_compatibles:(p.via?[p.via]:[]));
+        return {forma_farmaceutica:forma,concentracion:concentracion,pres:pres,vias_compatibles:viasRaw.map(v=>String(v||'').trim()).filter(Boolean)};
+    }).filter(v=>v.forma_farmaceutica||v.concentracion||v.pres||v.vias_compatibles.length);
+    const comerciales=iasynPlanListaTextoCatalogo(registro.nombres_comerciales);
+    const aliases=iasynPlanListaTextoCatalogo(registro.aliases);
+    const palabras=iasynPlanListaTextoCatalogo(registro.palabras_clave);
+    const nombresAlternativos=Array.from(new Set([...comerciales,...aliases,...palabras,String(registro.nombre_generico||'').trim(),String(registro.principio_activo||'').trim()].filter(Boolean)));
+    const item={
+        cat:String(registro.categoria||'OTROS').trim()||'OTROS',
+        med:String(registro.nombre_medicamento||registro.nombre_generico||registro.principio_activo||'').trim(),
+        frec:'',dur:'',ind:'',
+        principio_activo:String(registro.principio_activo||'').trim(),
+        nombre_generico:String(registro.nombre_generico||'').trim(),
+        denominaciones_comerciales:comerciales,nombres_alternativos:nombresAlternativos,aliases:aliases,palabras_clave:palabras,
+        id_medicamento:String(registro.id_medicamento||'').trim(),origen_catalogo:'BD_MEDICAMENTOS',variantes:variantes
+    };
+    if(variantes.length===1){
+        item.forma_farmaceutica=variantes[0].forma_farmaceutica; item.concentracion=variantes[0].concentracion; item.pres=variantes[0].pres;
+        if(variantes[0].vias_compatibles.length===1) item.via=variantes[0].vias_compatibles[0];
+    }
+    return item.med?item:null;
+}
+
+function iasynPlanFusionarCatalogoBd(registros){
+    const respaldo=auroPlanCatalogoBaseSeguro().slice();
+    const bd=(Array.isArray(registros)?registros:[]).filter(r=>{const e=String(r?.estado||'').trim().toUpperCase();return !e||e==='ACTIVO';}).map(iasynPlanMedicamentoBdAFormatoPlan).filter(Boolean);
+    const bdUnicos=[], vistosBd=new Set();
+    bd.forEach(item=>{const clave=normalizarMedTexto(item.med||'');if(!clave||vistosBd.has(clave))return;vistosBd.add(clave);bdUnicos.push(item);});
+    const nombresBd=new Set(bdUnicos.map(x=>normalizarMedTexto(x.med||'')).filter(Boolean));
+    const respaldoSinDuplicar=respaldo.filter(item=>!nombresBd.has(normalizarMedTexto(item?.med||item?.principio_activo||'')));
+    const fusion=[...bdUnicos,...respaldoSinDuplicar];
+    window.MEDICAMENTOS_IASYN_BASE=fusion;
+    window.MEDICAMENTOS_AUROSANAX_BASE=fusion;
+    return {total:fusion.length,dinamicos:bdUnicos.length,respaldo:respaldoSinDuplicar.length};
+}
+
+async function iasynPlanCargarCatalogoMedicamentosBd(){
+    const estado=window.__iasynPlanCatalogoMedicamentosDinamico;
+    if(estado.promesa) return estado.promesa;
+    estado.estado='CARGANDO';
+    estado.promesa=(async function(){
+        try{
+            const respuesta=await auroPlanApiGet('listarMedicamentosActivos',{});
+            if(!Array.isArray(respuesta)) throw new Error('Respuesta de medicamentos no válida.');
+            const resultado=iasynPlanFusionarCatalogoBd(respuesta);
+            estado.estado='CARGADO'; estado.cargados=resultado.dinamicos;
+            const buscador=document.getElementById('hcMedBusqueda');
+            if(buscador&&document.activeElement===buscador&&String(buscador.value||'').trim()) buscador.dispatchEvent(new Event('input',{bubbles:true}));
+            return resultado;
+        }catch(error){
+            estado.estado='RESPALDO'; estado.cargados=0;
+            console.warn('[IASYN Plan] Catálogo dinámico no disponible; se conserva el catálogo local.',error);
+            return {total:auroPlanCatalogoBaseSeguro().length,dinamicos:0,respaldo:auroPlanCatalogoBaseSeguro().length,fallback:true};
+        }
+    })();
+    return estado.promesa;
+}
+window.iasynPlanCargarCatalogoMedicamentosBd=iasynPlanCargarCatalogoMedicamentosBd;
+
+function auroPlanVariantesMedicamento(item){
+    if(!item || typeof item !== 'object') return [];
+
+    let variantes = Array.isArray(item.variantes)
+        ? item.variantes.filter(v => v && typeof v === 'object')
+        : [];
+
+    if(!variantes.length){
+        const apiCatalogo = auroPlanApiCatalogoSeguro();
+        if(apiCatalogo && typeof apiCatalogo.obtenerVariantes === 'function'){
+            try{
+                variantes = apiCatalogo.obtenerVariantes(
+                    item.med || item.principio_activo || ''
+                ) || [];
+            }catch(e){
+                variantes = [];
+            }
+        }
+    }
+
+    if(variantes.length){
+        return variantes.map(v => ({
+            forma_farmaceutica: String(v.forma_farmaceutica || '').trim(),
+            concentracion: String(v.concentracion || '').trim(),
+            pres: String(
+                v.pres ||
+                v.presentacion ||
+                [v.concentracion, v.forma_farmaceutica].filter(Boolean).join(' ') ||
+                ''
+            ).trim(),
+            vias_compatibles: Array.isArray(v.vias_compatibles)
+                ? v.vias_compatibles.map(x => String(x || '').trim()).filter(Boolean)
+                : (v.via ? [String(v.via).trim()] : [])
+        }));
+    }
+
+    /*
+      Catálogo plano histórico de IASYN: agrupa registros del mismo
+      medicamento para aprovechar varias presentaciones si existen.
+    */
+    const nombre = normalizarMedTexto(item.med || item.principio_activo || '');
+    const hermanos = auroPlanCatalogoBaseSeguro().filter(x =>
+        nombre && normalizarMedTexto(x?.med || x?.principio_activo || '') === nombre
+    );
+
+    const desdePlanos = hermanos.map(x => ({
+        forma_farmaceutica: String(x.forma_farmaceutica || '').trim(),
+        concentracion: String(x.concentracion || '').trim(),
+        pres: String(x.pres || x.presentacion || '').trim(),
+        vias_compatibles: x.via ? [String(x.via).trim()] : []
+    })).filter(v => v.pres || v.vias_compatibles.length);
+
+    if(desdePlanos.length) return desdePlanos;
+
+    const pres = String(item.pres || '').trim();
+    const via = String(item.via || '').trim();
+
+    return (pres || via) ? [{
+        forma_farmaceutica: String(item.forma_farmaceutica || '').trim(),
+        concentracion: String(item.concentracion || '').trim(),
+        pres,
+        vias_compatibles: via ? [via] : []
+    }] : [];
+}
+
+function auroPlanBuscarItemCatalogoExacto(med, pres){
+    const nMed = normalizarMedTexto(med);
+    const nPres = normalizarMedTexto(pres);
+
+    const candidatos = auroPlanCatalogoBaseSeguro().filter(item =>
+        normalizarMedTexto(item?.med || item?.principio_activo || '') === nMed
+    );
+
+    if(!candidatos.length) return null;
+
+    if(nPres){
+        const exactoPlano = candidatos.find(item =>
+            normalizarMedTexto(item?.pres || item?.presentacion || '') === nPres
+        );
+        if(exactoPlano) return exactoPlano;
+
+        const exactoVariante = candidatos.find(item =>
+            auroPlanVariantesMedicamento(item).some(v =>
+                normalizarMedTexto(v.pres) === nPres
+            )
+        );
+        if(exactoVariante) return exactoVariante;
+    }
+
+    return candidatos[0] || null;
+}
+
+function auroPlanInstalarPresentacionesDisponibles(item, presentacionPreferida){
+    const campo = document.getElementById('hcMedPresentacion');
+    if(!campo || campo.tagName !== 'INPUT') return;
+
+    const variantes = auroPlanVariantesMedicamento(item);
+    const presentaciones = auroPlanOpcionesRapidasUnicas(
+        variantes.map(v => String(v.pres || '').trim()).filter(Boolean)
+    );
+
+    let lista = document.getElementById('auroPlanPresentacionesMedicamentoLista');
+
+    if(!lista){
+        lista = document.createElement('datalist');
+        lista.id = 'auroPlanPresentacionesMedicamentoLista';
+        document.body.appendChild(lista);
+    }
+
+    lista.innerHTML = presentaciones
+        .map(p => `<option value="${escapeHtmlPlan(p)}"></option>`)
+        .join('');
+
+    if(presentaciones.length){
+        campo.setAttribute('list', lista.id);
+        campo.setAttribute('autocomplete', 'off');
+    }else{
+        campo.removeAttribute('list');
+    }
+
+    const preferida = String(presentacionPreferida || '').trim();
+
+    if(preferida){
+        auroPlanSetValue('hcMedPresentacion', preferida);
+    }else if(presentaciones.length === 1){
+        auroPlanSetValue('hcMedPresentacion', presentaciones[0]);
+    }
+}
+
+function auroPlanRestaurarTodasLasVias(valorPreferido){
+    const campo = document.getElementById('hcMedVia');
+    if(!campo) return;
+
+    const vias = [
+        ['VO', 'Vía oral'],
+        ['IM', 'Vía intramuscular'],
+        ['IV', 'Vía intravenosa'],
+        ['SC', 'Vía subcutánea'],
+        ['Vaginal', 'Vía vaginal'],
+        ['Tópica', 'Vía tópica'],
+        ['Sublingual', 'Vía sublingual'],
+        ['Oftálmica', 'Vía oftálmica'],
+        ['Ótica', 'Vía ótica'],
+        ['Inhalatoria', 'Vía inhalatoria'],
+        ['Rectal', 'Vía rectal'],
+        ['Nasal', 'Vía nasal']
     ];
 
-    for(let i=0;i<listas.length;i+=1){
-      const lista=listas[i];
-      if(!Array.isArray(lista))continue;
-      const encontrada=lista.some(function(h){
-        if(!h || typeof h!=='object')return false;
-        const hp=texto(h.id_paciente || h.idPaciente,'');
-        const hi=texto(h.id_historia || h.idHistoria || h.id,'');
-        return hp===id && !!hi;
-      });
-      if(encontrada)return true;
+    const preferido = String(valorPreferido || '').trim();
+
+    if(campo.tagName === 'INPUT'){
+        auroPlanInstalarDatalist(
+            'hcMedVia',
+            'auroPlanViasLista',
+            vias.map(([, texto]) => texto),
+            'Ej.: Vía oral'
+        );
+        if(preferido) campo.value = auroPlanNombreViaCompleta(preferido);
+        return;
     }
 
-    return false;
-  }
+    if(campo.tagName !== 'SELECT') return;
 
-  function orientarEntradaHistoria(){
-    try{
-      if(preferencias.activa===false)return;
+    campo.innerHTML =
+        '<option value="">Seleccione</option>' +
+        vias.map(([valor, texto]) =>
+            `<option value="${escapeHtmlPlan(valor)}">${escapeHtmlPlan(texto)}</option>`
+        ).join('') +
+        '<option value="__AURO_OTRA_VIA__">Otra vía...</option>';
 
-      const pantalla=document.getElementById('historia');
-      if(!pantalla || !pantalla.classList.contains('active'))return;
-
-      const idPaciente=idPacienteHistoriaActual();
-      if(!idPaciente)return;
-      if(pacienteTieneHistoriaConfirmada(idPaciente))return;
-      // SEGURIDAD: no inferir ausencia de Historia Clínica de memoria local incompleta.
-      // Hasta verificar contrato de carga en index.html, no emitir advertencia automática.
-      return;
-
-      montar('historia',null,{
-        tipo:'warning',
-        titulo:'Primero crea la Historia Clínica',
-        resumen:'Antes de iniciar una atención, completa y guarda Datos generales y Antecedentes para generar el ID de Historia Clínica.',
-        siguiente:'Datos generales → Antecedentes → Guardar historia.',
-        detalle:'Cuando la Historia Clínica quede confirmada, podrás crear la primera atención y continuar con los siguientes módulos. El asistente solo orienta: no guarda, no crea atenciones y no modifica información clínica.',
-        expandible:true,expandida:false,ocultable:true
-      });
-    }catch(error){console.warn('IASYN2 GUÍA: no se pudo mostrar la orientación inicial de Historia Clínica.',error);}
-  }
-
-  function observarEntradaHistoria(){
-    const pantalla=document.getElementById('historia');
-    if(!pantalla)return;
-
-    historiaPantallaActivaAnterior=pantalla.classList.contains('active');
-
-    const observer=new MutationObserver(function(){
-      const activaAhora=pantalla.classList.contains('active');
-      if(activaAhora && !historiaPantallaActivaAnterior){
-        window.setTimeout(orientarEntradaHistoria,180);
-      }
-      historiaPantallaActivaAnterior=activaAhora;
-    });
-
-    observer.observe(pantalla,{attributes:true,attributeFilter:['class']});
-  }
-
-  /* ============================================================
-     IASYN2 GUÍA ADAPTACIÓN V1 — ORIENTACIÓN AL ENTRAR A DIAGNÓSTICO
-     - Solo observa el DOM y el contexto ya disponible en el ERP.
-     - NO consulta backend, NO guarda y NO modifica datos clínicos.
-     - NO agrega CIE-10, NO aplica protocolos y NO dispara botones.
-  ============================================================ */
-  let diagnosticoPantallaActivaAnterior=false;
-
-  function orientarEntradaDiagnostico(){
-    try{
-      if(preferencias.activa===false)return;
-      const pantalla=document.getElementById('hc_diagnostico');
-      if(!pantalla || !pantalla.classList.contains('active'))return;
-
-      const seleccionados=document.getElementById('hcDxSeleccionadosBody');
-      const tieneDiagnostico=!!(seleccionados && seleccionados.querySelector('tr') && !seleccionados.querySelector('.diagnostico-empty'));
-
-      montar('diagnostico',null,{
-        tipo:'info',
-        titulo:tieneDiagnostico?'Diagnóstico visible para revisión':'Asistente de Diagnóstico',
-        resumen:tieneDiagnostico
-          ?'Se observan filas de diagnóstico en pantalla. Su presencia no demuestra que estén guardadas ni que correspondan a la atención actual; compruebe el estado en el módulo.'
-          :'Revise la información clínica registrada y utilice el buscador CIE-10 para agregar el diagnóstico que corresponda.',
-        siguiente:tieneDiagnostico
-          ?'Verifique el estado de guardado en Diagnósticos antes de continuar con Plan.'
-          :'Busque por código o nombre, agregue el CIE-10 correspondiente y confirme el diagnóstico.',
-        detalle:'El asistente solo orienta: no agrega diagnósticos, no guarda cambios, no aplica protocolos y no modifica Plan ni Recetas.',
-        expandible:true,expandida:false,ocultable:true
-      });
-    }catch(error){console.warn('IASYN2 GUÍA: no se pudo mostrar la orientación de Diagnóstico.',error);}
-  }
-
-  function observarEntradaDiagnostico(){
-    const pantalla=document.getElementById('hc_diagnostico');
-    if(!pantalla)return;
-    diagnosticoPantallaActivaAnterior=pantalla.classList.contains('active');
-    const observer=new MutationObserver(function(){
-      const activaAhora=pantalla.classList.contains('active');
-      if(activaAhora && !diagnosticoPantallaActivaAnterior) window.setTimeout(orientarEntradaDiagnostico,180);
-      diagnosticoPantallaActivaAnterior=activaAhora;
-    });
-    observer.observe(pantalla,{attributes:true,attributeFilter:['class']});
-  }
-
-  function refrescarGuiaDiagnosticoSiActiva(){
-    const pantalla=document.getElementById('hc_diagnostico');
-    if(!pantalla || !pantalla.classList.contains('active'))return;
-    window.setTimeout(orientarEntradaDiagnostico,120);
-  }
-
-  /* IASYN2 — puente observador para atención antigua/activa.
-     Solo actualiza la orientación visual; no cambia el contexto clínico.
-     El evento de guardado no se interpreta como persistencia confirmada
-     salvo que el emisor lo declare y coincida la atención seleccionada. */
-  function idAtencionParaGuia(){
-    try{
-      if(typeof window.getIdAtencionActiva==='function'){
-        const id=texto(window.getIdAtencionActiva(),'');
-        if(id)return id;
-      }
-    }catch(_e){}
-    return texto(window.auroAtencionSeleccionadaId ||
-      (window.currentAttention && window.currentAttention.id_atencion) ||
-      (window.atencionActual && window.atencionActual.id_atencion),'');
-  }
-
-  function recibirDiagnosticosActualizados(evento){
-    const d=evento && evento.detail && typeof evento.detail==='object'?evento.detail:{};
-    const idEvento=texto(d.id_atencion,'');
-    const idActual=idAtencionParaGuia();
-    // Evitar notificaciones de otra atención o respuestas diferidas.
-    if(idEvento && (!idActual || idEvento!==idActual))return;
-    refrescarGuiaDiagnosticoSiActiva();
-  }
-
-  function recibirCambioAtencionParaGuia(evento){
-    const d=evento && evento.detail && typeof evento.detail==='object'?evento.detail:{};
-    const idEvento=texto(d.id_atencion || (d.atencion && d.atencion.id_atencion),'');
-    window.setTimeout(function(){
-      const idActual=idAtencionParaGuia();
-      if(idEvento && (!idActual || idActual!==idEvento))return;
-      refrescarGuiaDiagnosticoSiActiva();
-    },180);
-  }
-
-  window.addEventListener('aurosanax:diagnosticos-actualizados',recibirDiagnosticosActualizados);
-  ['aurosanax:atencion-seleccionada','aurosanax:atencion-iniciada','aurosanax:atencion-actualizada'].forEach(function(nombre){
-    window.addEventListener(nombre,recibirCambioAtencionParaGuia);
-  });
-
-  window.addEventListener('resize',function(){if(posicionUsuario)aplicarPosicionUsuario();});
-  window.addEventListener('aurosanax:guia-contexto',recibirContexto);
-  window.addEventListener('aurosanax:paciente-confirmado',recibirPacienteConfirmado);
-  window.addEventListener('aurosanax:historia-creada',recibirHistoriaCreada);
-
-  /* IASYN2 — PUENTE PLAN V1: observación visual exclusivamente.
-     No modifica plan.js, tratamientos, datos clínicos ni persistencia. */
-  let planPantallaActivaAnterior=false;
-
-  function orientarEntradaPlan(){
-    try{
-      if(preferencias.activa===false)return;
-      const pantalla=document.getElementById('hc_plan');
-      if(!pantalla || !pantalla.classList.contains('active'))return;
-      montar('plan',null,{
-        tipo:'info',
-        titulo:'Asistente de Plan',
-        resumen:'Revise el plan de manejo de la atención seleccionada y compruebe los datos antes de guardar.',
-        siguiente:'Verifique indicaciones, medicamentos y estado de guardado en el módulo Plan.',
-        detalle:'Esta guía es únicamente informativa. No prescribe, añade medicamentos, modifica dosis, guarda recetas ni altera la atención.',
-        expandible:true,expandida:false,ocultable:true
-      });
-    }catch(error){console.warn('IASYN2 GUÍA: orientación de Plan no disponible.',error);}
-  }
-
-  function observarEntradaPlan(){
-    const pantalla=document.getElementById('hc_plan');
-    if(!pantalla)return;
-    planPantallaActivaAnterior=pantalla.classList.contains('active');
-    const observer=new MutationObserver(function(){
-      const activaAhora=pantalla.classList.contains('active');
-      if(activaAhora && !planPantallaActivaAnterior){
-        window.setTimeout(orientarEntradaPlan,180);
-      }
-      planPantallaActivaAnterior=activaAhora;
-    });
-    observer.observe(pantalla,{attributes:true,attributeFilter:['class']});
-    if(planPantallaActivaAnterior)window.setTimeout(orientarEntradaPlan,180);
-  }
-
-  function asegurarAsistenteDisponible(){
-    if(mounts.size)return;
-    montar('inicio',null,{
-      tipo:'neutral',titulo:'Asistente IASYN2',
-      resumen:'El asistente está disponible para orientarle durante el uso del ERP.',
-      siguiente:'Seleccione el módulo en el que desea trabajar.',
-      detalle:'La guía es únicamente visual y de orientación. No guarda, crea, firma, finaliza ni modifica información clínica.',
-      expandible:true,expandida:false,ocultable:true
-    });
-    const r=mounts.get('inicio');
-    if(r){
-      posicionPredeterminada(host());
-      r.oculta=true;
-      pintar(r);
+    if(preferido){
+        const existe = Array.from(campo.options).some(op => op.value === preferido);
+        if(!existe){
+            const op = document.createElement('option');
+            op.value = preferido;
+            op.textContent = auroPlanNombreViaCompleta(preferido);
+            campo.appendChild(op);
+        }
+        campo.value = preferido;
     }
-  }
+}
 
-  if(document.readyState==='loading'){
-    document.addEventListener('DOMContentLoaded',function(){
-      asegurarAsistenteDisponible();
-      observarEntradaHistoria();
-      observarEntradaDiagnostico();
-      observarEntradaPlan();
-    },{once:true});
-  }else{
-    setTimeout(function(){
-      asegurarAsistenteDisponible();
-      observarEntradaHistoria();
-      observarEntradaDiagnostico();
-      observarEntradaPlan();
-    },0);
-  }
+function auroPlanAplicarViasCompatibles(item, presentacion){
+    const campo = document.getElementById('hcMedVia');
+    if(!campo) return;
 
-  window.IASYNGuia=Object.freeze({
-    __iasynGuiaMotor:true,version:VERSION,montar,actualizar,mostrar,ocultar,desmontar
-  });
-})(window,document);
+    const variantes = auroPlanVariantesMedicamento(item);
+    const nPres = normalizarMedTexto(presentacion);
+
+    let variante = null;
+
+    if(nPres){
+        variante = variantes.find(v => normalizarMedTexto(v.pres) === nPres) || null;
+    }
+
+    if(!variante && variantes.length === 1){
+        variante = variantes[0];
+    }
+
+    const viasRecomendadas = auroPlanOpcionesRapidasUnicas(
+        (variante?.vias_compatibles || [])
+            .map(v => String(v || '').trim())
+            .filter(Boolean)
+    );
+
+    const viasGenerales = [
+        ['VO', 'Vía oral'],
+        ['IM', 'Vía intramuscular'],
+        ['IV', 'Vía intravenosa'],
+        ['SC', 'Vía subcutánea'],
+        ['Vaginal', 'Vía vaginal'],
+        ['Tópica', 'Vía tópica'],
+        ['Sublingual', 'Vía sublingual'],
+        ['Oftálmica', 'Vía oftálmica'],
+        ['Ótica', 'Vía ótica'],
+        ['Inhalatoria', 'Vía inhalatoria'],
+        ['Rectal', 'Vía rectal'],
+        ['Nasal', 'Vía nasal']
+    ];
+
+    if(campo.tagName === 'INPUT'){
+        const recomendadas = viasRecomendadas.map(auroPlanNombreViaCompleta);
+        const generales = viasGenerales.map(([, texto]) => texto);
+
+        auroPlanInstalarDatalist(
+            'hcMedVia',
+            'auroPlanViasLista',
+            [...recomendadas, ...generales],
+            'Ej.: Vía oral'
+        );
+
+        if(viasRecomendadas.length === 1){
+            campo.value = auroPlanNombreViaCompleta(viasRecomendadas[0]);
+        }
+        return;
+    }
+
+    if(campo.tagName !== 'SELECT') return;
+
+    if(!viasRecomendadas.length){
+        auroPlanRestaurarTodasLasVias(campo.value);
+        return;
+    }
+
+    const recomendadasNormalizadas = new Set(
+        viasRecomendadas.map(v =>
+            normalizarTextoPlan(auroPlanNombreViaCompleta(v))
+        )
+    );
+
+    const opcionesRecomendadas = viasRecomendadas.map(v => ({
+        valor: v,
+        texto: auroPlanNombreViaCompleta(v)
+    }));
+
+    const opcionesGenerales = viasGenerales
+        .filter(([, texto]) =>
+            !recomendadasNormalizadas.has(normalizarTextoPlan(texto))
+        )
+        .map(([valor, texto]) => ({valor, texto}));
+
+    const opcionesFinales = [
+        ...opcionesRecomendadas,
+        ...opcionesGenerales
+    ];
+
+    campo.innerHTML =
+        '<option value="">Seleccione</option>' +
+        opcionesFinales.map(op =>
+            `<option value="${escapeHtmlPlan(op.valor)}">${escapeHtmlPlan(op.texto)}</option>`
+        ).join('') +
+        '<option value="__AURO_OTRA_VIA__">Otra vía...</option>';
+
+    if(viasRecomendadas.length === 1){
+        campo.value = viasRecomendadas[0];
+    }
+}
+
+function auroPlanActivarMedicamentoCatalogo(item, presentacionPreferida){
+    if(!item || typeof item !== 'object'){
+        window.auroPlanCatalogoMedicamentoActivo = null;
+        auroPlanRestaurarTodasLasVias(auroPlanGetValue('hcMedVia'));
+        return;
+    }
+
+    window.auroPlanCatalogoMedicamentoActivo = item;
+
+    auroPlanInstalarPresentacionesDisponibles(item, presentacionPreferida);
+    auroPlanAplicarViasCompatibles(
+        item,
+        presentacionPreferida || auroPlanGetValue('hcMedPresentacion')
+    );
+}
+
+function auroPlanActualizarViasPorPresentacion(){
+    const item = window.auroPlanCatalogoMedicamentoActivo;
+    if(!item) return;
+
+    auroPlanAplicarViasCompatibles(
+        item,
+        auroPlanGetValue('hcMedPresentacion')
+    );
+}
+
+function renderMedicamentoSugerencias(){
+
+    const input = document.getElementById('hcMedBusqueda');
+    const box = document.getElementById('hcMedSugerencias');
+
+    if(!input || !box) return;
+
+    const q = normalizarMedTexto(input.value);
+
+    const base = Array.isArray(window.MEDICAMENTOS_IASYN_BASE)
+        ? window.MEDICAMENTOS_IASYN_BASE
+        : [];
+
+    const res = base
+        .filter(m => {
+            if(!q) return true;
+
+            const textoBusqueda = [
+                m.med,
+                m.pres,
+                m.cat,
+                m.principio_activo,
+                m.forma_farmaceutica,
+                m.concentracion,
+                ...(Array.isArray(m.denominaciones_comerciales)
+                    ? m.denominaciones_comerciales
+                    : (m.denominaciones_comerciales ? [m.denominaciones_comerciales] : [])),
+                ...(Array.isArray(m.nombres_alternativos)
+                    ? m.nombres_alternativos
+                    : (m.nombres_alternativos ? [m.nombres_alternativos] : []))
+            ]
+            .map(v => String(v || '').trim())
+            .filter(Boolean)
+            .join(' ');
+
+            return normalizarMedTexto(textoBusqueda).includes(q);
+        })
+        .slice(0,40);
+
+    if(!res.length){
+        box.innerHTML =
+            '<div class="med-sug-item text-muted">Sin coincidencias. Puede escribirlo manualmente y agregar.</div>';
+        box.classList.remove('d-none');
+        return;
+    }
+
+    box.innerHTML = res.map(m => `
+        <div class="med-sug-item"
+             data-med="${escapeHtmlPlan(m.med)}"
+             data-pres="${escapeHtmlPlan(m.pres)}"
+             data-via="${escapeHtmlPlan(m.via)}"
+             data-frec="${escapeHtmlPlan(m.frec)}"
+             data-dur="${escapeHtmlPlan(m.dur)}"
+             data-ind="${escapeHtmlPlan(m.ind)}">
+          <div>• ${escapeHtmlPlan(m.med)} <span class="text-muted">${escapeHtmlPlan(m.pres)}</span></div>
+          <div class="med-sug-cat">${escapeHtmlPlan(m.cat)}</div>
+        </div>
+    `).join('');
+
+    box.classList.remove('d-none');
+}
+
+function seleccionarMedicamentoSugerido(el){
+
+    if(!el) return;
+
+    const med = el.dataset.med || '';
+    const pres = el.dataset.pres || '';
+    const itemCatalogo = auroPlanBuscarItemCatalogoExacto(med, pres);
+
+    auroPlanSetValue('hcMedBusqueda', med);
+    auroPlanSetValue('hcMedPresentacion', pres);
+    auroPlanSetValue('hcMedVia', el.dataset.via || '');
+    auroPlanSetValue('hcMedFrecuencia', el.dataset.frec || '');
+    auroPlanSetValue('hcMedDuracion', el.dataset.dur || '');
+    auroPlanSetValue('hcMedIndicaciones', el.dataset.ind || '');
+
+    auroPlanActivarMedicamentoCatalogo(itemCatalogo, pres);
+
+    const frecPreferida = String(el.dataset.frec || '').trim();
+    const durPreferida = String(el.dataset.dur || '').trim();
+
+    auroPlanInstalarDatalist(
+        'hcMedFrecuencia',
+        'auroPlanFrecuenciasLista',
+        [frecPreferida, ...AURO_PLAN_FRECUENCIAS_RAPIDAS],
+        'Ej.: Cada 12 horas'
+    );
+
+    auroPlanInstalarDatalist(
+        'hcMedDuracion',
+        'auroPlanDuracionesLista',
+        [durPreferida, ...AURO_PLAN_DURACIONES_RAPIDAS],
+        'Ej.: 7 días'
+    );
+
+    auroPlanAjustarIndicacionesMedicamento(false);
+
+    const box = document.getElementById('hcMedSugerencias');
+    if(box) box.classList.add('d-none');
+}
+
+function limpiarFormularioMedicamento(opciones){
+
+    opciones = opciones || {};
+
+    [
+        'hcMedBusqueda',
+        'hcMedPresentacion',
+        'hcMedCantidad',
+        'hcMedFrecuencia',
+        'hcMedDuracion',
+        'hcMedIndicaciones'
+    ].forEach(id => auroPlanSetValue(id, ''));
+
+    auroPlanSetValue('hcMedVia', '');
+    auroPlanSetValue('hcMedContinuo', 'No');
+
+    window.auroPlanCatalogoMedicamentoActivo = null;
+
+    const campoPresentacion = document.getElementById('hcMedPresentacion');
+    if(campoPresentacion) campoPresentacion.removeAttribute('list');
+
+    auroPlanRestaurarTodasLasVias('');
+    auroPlanOcultarEntradaViaLibre();
+    auroPlanCerrarIndicacionesAmpliadas();
+    auroPlanAjustarIndicacionesMedicamento(false);
+
+    const selectorIndicacion = document.getElementById('auroPlanIndicacionRapida');
+    if(selectorIndicacion) selectorIndicacion.value = '';
+
+    const box = document.getElementById('hcMedSugerencias');
+    if(box) box.classList.add('d-none');
+
+    if(opciones.conservarEdicion !== true){
+        window.auroPlanMedicamentoEditandoIndice = null;
+    }
+
+    auroPlanActualizarEstadoEdicionMedicamento();
+}
+
+function auroPlanMedicamentoDesdeFormulario(){
+    const viaFormulario = auroPlanGetValue('hcMedVia');
+
+    return {
+        med: (auroPlanGetValue('hcMedBusqueda') || '').trim(),
+        pres: auroPlanGetValue('hcMedPresentacion'),
+        via: viaFormulario === '__AURO_OTRA_VIA__' ? '' : viaFormulario,
+        cantidad: auroPlanGetValue('hcMedCantidad'),
+        frec: auroPlanGetValue('hcMedFrecuencia'),
+        dur: auroPlanGetValue('hcMedDuracion'),
+        ind: auroPlanGetValue('hcMedIndicaciones'),
+        continuo: auroPlanGetValue('hcMedContinuo') || 'No'
+    };
+}
+
+function agregarMedicamentoDesdeFormulario(){
+
+    const nuevo = auroPlanMedicamentoDesdeFormulario();
+
+    if(!nuevo.med){
+        alert('Ingrese o seleccione un medicamento.');
+        return;
+    }
+
+    const indice = window.auroPlanMedicamentoEditandoIndice;
+    const editando = Number.isInteger(indice) &&
+        indice >= 0 &&
+        indice < (window.medicamentosPlanSeleccionados || []).length;
+
+    if(editando){
+        const anterior = window.medicamentosPlanSeleccionados[indice] || {};
+        /*
+          Conserva cualquier propiedad adicional proveniente de protocolos
+          inteligentes, pero actualiza únicamente los campos visibles del Plan.
+        */
+        window.medicamentosPlanSeleccionados[indice] = {
+            ...anterior,
+            ...nuevo
+        };
+    }else{
+        window.medicamentosPlanSeleccionados.push(nuevo);
+    }
+
+    limpiarFormularioMedicamento();
+    renderMedicamentosPlanTabla();
+    sincronizarPlanConReceta();
+    guardarPlanTemporal();
+    auroPlanRenderSugerenciasDiagnosticas();
+}
+
+function editarMedicamentoPlan(i){
+
+    i = Number(i);
+
+    if(
+        Number.isNaN(i) ||
+        i < 0 ||
+        i >= (window.medicamentosPlanSeleccionados || []).length
+    ){
+        return;
+    }
+
+    const m = window.medicamentosPlanSeleccionados[i] || {};
+
+    window.auroPlanMedicamentoEditandoIndice = i;
+
+    auroPlanSetValue('hcMedBusqueda', m.med || '');
+
+    const itemCatalogo = auroPlanBuscarItemCatalogoExacto(m.med || '', m.pres || '');
+    auroPlanActivarMedicamentoCatalogo(itemCatalogo, m.pres || '');
+
+    auroPlanSetValue('hcMedPresentacion', m.pres || '');
+
+    const campoVia = document.getElementById('hcMedVia');
+    if(campoVia && campoVia.tagName === 'SELECT'){
+        const via = String(m.via || '').trim();
+        if(via && !Array.from(campoVia.options || []).some(op => op.value === via)){
+            const op = document.createElement('option');
+            op.value = via;
+            op.textContent = auroPlanNombreViaCompleta(via);
+            op.dataset.auroViaLibre = '1';
+            campoVia.appendChild(op);
+        }
+        campoVia.value = via;
+    }else{
+        auroPlanSetValue('hcMedVia', auroPlanNombreViaCompleta(m.via || ''));
+    }
+
+    auroPlanSetValue('hcMedCantidad', m.cantidad || '');
+    auroPlanSetValue('hcMedFrecuencia', m.frec || '');
+    auroPlanSetValue('hcMedDuracion', m.dur || '');
+    auroPlanSetValue('hcMedIndicaciones', m.ind || '');
+    auroPlanSetValue('hcMedContinuo', m.continuo || 'No');
+
+    auroPlanActualizarEstadoEdicionMedicamento();
+
+    const formulario = document.getElementById('hcMedBusqueda');
+    if(formulario){
+        formulario.focus();
+        formulario.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
+    }
+}
+
+function cancelarEdicionMedicamentoPlan(opciones){
+
+    opciones = opciones || {};
+    window.auroPlanMedicamentoEditandoIndice = null;
+
+    if(opciones.limpiarFormulario !== false){
+        limpiarFormularioMedicamento();
+    }else{
+        auroPlanActualizarEstadoEdicionMedicamento();
+    }
+}
+
+function eliminarMedicamentoPlan(i){
+
+    i = Number(i);
+
+    if(Number.isNaN(i)) return;
+
+    const indiceEditando = window.auroPlanMedicamentoEditandoIndice;
+
+    window.medicamentosPlanSeleccionados.splice(i,1);
+
+    if(Number.isInteger(indiceEditando)){
+        if(indiceEditando === i){
+            cancelarEdicionMedicamentoPlan();
+        }else if(indiceEditando > i){
+            window.auroPlanMedicamentoEditandoIndice = indiceEditando - 1;
+        }
+    }
+
+    renderMedicamentosPlanTabla();
+    sincronizarPlanConReceta();
+    guardarPlanTemporal();
+    auroPlanRenderSugerenciasDiagnosticas();
+}
+
+function textoRecetaMedicamentosPlan(){
+
+    return (window.medicamentosPlanSeleccionados || []).map((m,i) => {
+
+        const linea = [
+            `${i + 1}. ${m.med || ''}`,
+            m.pres || '',
+            auroPlanNombreViaCompleta(m.via) || '',
+            m.cantidad ? `Cantidad: ${m.cantidad}` : '',
+            m.frec || '',
+            m.dur ? `por ${m.dur}` : '',
+            m.ind || ''
+        ].filter(Boolean).join(' - ');
+
+        return m.continuo === 'Sí'
+            ? linea + ' - Tratamiento continuo'
+            : linea;
+
+    }).join('\n');
+}
+
+function renderMedicamentosPlanTabla(){
+
+    const tbody = document.getElementById('hcMedicamentosTableBody');
+    const hidden = document.getElementById('hcRecetaMedicamentos');
+
+    if(!tbody) return;
+
+    const meds = window.medicamentosPlanSeleccionados || [];
+
+    if(!meds.length){
+
+        tbody.innerHTML = `
+            <tr id="hcMedicamentosEmpty">
+              <td colspan="9" class="text-center text-muted py-3">
+                <i class="bi bi-capsule me-1"></i> Sin medicamentos agregados
+              </td>
+            </tr>
+        `;
+
+    }else{
+
+        tbody.innerHTML = meds.map((m,i) => `
+            <tr>
+              <td>${escapeHtmlPlan(m.med)}</td>
+              <td>${escapeHtmlPlan(m.pres)}</td>
+              <td>${escapeHtmlPlan(auroPlanNombreViaCompleta(m.via))}</td><td>${
+                  String(m.cantidad || '').trim()
+                      ? escapeHtmlPlan(m.cantidad)
+                      : '<span class="auro-plan-pendiente" title="Complete la cantidad antes de emitir la receta">Pendiente</span>'
+              }</td>
+              <td>${escapeHtmlPlan(m.frec)}</td>
+              <td>${escapeHtmlPlan(m.dur)}</td>
+              <td><div class="auro-plan-indicacion-tabla" title="${escapeHtmlPlan(m.ind)}">${escapeHtmlPlan(m.ind)}</div></td>
+              <td>${escapeHtmlPlan(m.continuo)}</td>
+              <td>
+                <div class="auro-plan-acciones-medicamento">
+                  <button type="button"
+                          class="btn btn-sm btn-outline-primary"
+                          title="Editar medicamento"
+                          aria-label="Editar medicamento ${i + 1}"
+                          onclick="editarMedicamentoPlan(${i})">
+                    <i class="bi bi-pencil-square"></i>
+                  </button>
+                  <button type="button"
+                          class="btn btn-sm btn-outline-danger"
+                          title="Eliminar medicamento"
+                          aria-label="Eliminar medicamento ${i + 1}"
+                          onclick="eliminarMedicamentoPlan(${i})">
+                    <i class="bi bi-trash"></i>
+                  </button>
+                </div>
+              </td>
+            </tr>
+        `).join('');
+    }
+
+    if(hidden){
+        hidden.value = textoRecetaMedicamentosPlan();
+    }
+
+    auroPlanActualizarEncabezadosTablaMedicamentos();
+    auroPlanActualizarEstadoEdicionMedicamento();
+
+    if(typeof updateClinicalSummary === 'function'){
+        updateClinicalSummary();
+    }
+}
+
+function sincronizarPlanConReceta(){
+
+    const txt = auroPlanGetValue('hcRecetaMedicamentos');
+
+    /*
+      Siempre sincronizar, incluso cuando está vacío.
+      Así una consulta nueva no conserva medicamentos de la receta anterior.
+    */
+    auroPlanSetValue('recMedicamento', txt);
+
+    const ind = auroPlanGetValue('hcIndicacionesPaciente');
+    if(ind && !auroPlanGetValue('recIndicaciones')){
+        auroPlanSetValue('recIndicaciones', ind);
+    }
+
+    const plan = auroPlanGetValue('hcPlanTratamiento');
+    if(plan && !auroPlanGetValue('recRecomendaciones')){
+        auroPlanSetValue('recRecomendaciones', plan);
+    }
+
+    const cie = auroPlanGetValue('hcCie10Principal');
+    if(cie && !auroPlanGetValue('recCie10')){
+        auroPlanSetValue('recCie10', cie);
+    }
+
+    const dx = auroPlanGetValue('hcDiagnosticoPrincipal');
+    if(dx && !auroPlanGetValue('recDiagnostico')){
+        auroPlanSetValue('recDiagnostico', dx);
+    }
+
+    const recFecha = document.getElementById('recFecha');
+    if(recFecha && !recFecha.value && typeof fechaHoyISO === 'function'){
+        recFecha.value = fechaHoyISO();
+    }
+}
+
+function limpiarMedicamentosPlan(){
+
+    window.auroPlanMedicamentoEditandoIndice = null;
+    window.medicamentosPlanSeleccionados = [];
+
+    renderMedicamentosPlanTabla();
+    sincronizarPlanConReceta();
+    guardarPlanTemporal();
+}
+
+
+/* ============================================================
+   ÓRDENES MÉDICAS DEL PLAN
+============================================================ */
+
+function normalizarOrdenTexto(t){
+    return normalizarTextoPlan(t);
+}
+
+function renderOrdenesSugerencias(){
+
+    const input = document.getElementById('hcOrdenBusqueda');
+    const box = document.getElementById('hcOrdenSugerencias');
+
+    if(!input || !box) return;
+
+    const q = normalizarOrdenTexto(input.value);
+    const tipoFiltro = normalizarOrdenTexto(auroPlanGetValue('hcOrdenTipo'));
+
+    const base = Array.isArray(window.ORDENES_MEDICAS_IASYN_BASE)
+        ? window.ORDENES_MEDICAS_IASYN_BASE
+        : [];
+
+    const res = base
+        .filter(o => {
+            const texto = normalizarOrdenTexto((o.orden || '') + ' ' + (o.cat || ''));
+            const coincideTexto = !q || texto.includes(q);
+            const coincideTipo = !tipoFiltro || normalizarOrdenTexto(o.cat || '').includes(tipoFiltro);
+            return coincideTexto && coincideTipo;
+        })
+        .slice(0,40);
+
+    if(!res.length){
+        box.innerHTML =
+            '<div class="orden-sug-item text-muted">Sin coincidencias. Puede escribirlo manualmente y agregar.</div>';
+        box.classList.remove('d-none');
+        return;
+    }
+
+    box.innerHTML = res.map(o => `
+        <div class="orden-sug-item"
+             data-orden="${escapeHtmlPlan(o.orden)}"
+             data-cat="${escapeHtmlPlan(o.cat)}">
+          <div>• ${escapeHtmlPlan(o.orden)}</div>
+          <div class="orden-sug-cat">${escapeHtmlPlan(o.cat)}</div>
+        </div>
+    `).join('');
+
+    box.classList.remove('d-none');
+}
+
+function seleccionarOrdenSugerida(el){
+
+    if(!el) return;
+
+    auroPlanSetValue('hcOrdenBusqueda', el.dataset.orden || '');
+    auroPlanSetValue('hcOrdenTipo', el.dataset.cat || '');
+
+    const box = document.getElementById('hcOrdenSugerencias');
+    if(box) box.classList.add('d-none');
+}
+
+function limpiarFormularioOrdenMedica(){
+
+    auroPlanSetValue('hcOrdenTipo', '');
+    auroPlanSetValue('hcOrdenBusqueda', '');
+    auroPlanSetValue('hcOrdenObservacion', '');
+
+    const box = document.getElementById('hcOrdenSugerencias');
+    if(box) box.classList.add('d-none');
+}
+
+function agregarOrdenMedicaDesdeFormulario(){
+
+    const orden = (auroPlanGetValue('hcOrdenBusqueda') || '').trim();
+
+    if(!orden){
+        alert('Ingrese o seleccione una orden médica.');
+        return;
+    }
+
+    window.ordenesMedicasPlanSeleccionadas = auroPlanOrdenesUnicas([
+        ...(window.ordenesMedicasPlanSeleccionadas || []),
+        {
+            orden,
+            cat: auroPlanGetValue('hcOrdenTipo') || 'OTROS',
+            obs: auroPlanGetValue('hcOrdenObservacion')
+        }
+    ]);
+
+    limpiarFormularioOrdenMedica();
+    renderOrdenesMedicasTabla();
+    recopilarOrdenesMedicasPlan();
+    guardarPlanTemporal();
+}
+
+function eliminarOrdenMedica(i){
+
+    i = Number(i);
+
+    if(Number.isNaN(i)) return;
+
+    window.ordenesMedicasPlanSeleccionadas.splice(i,1);
+
+    renderOrdenesMedicasTabla();
+    recopilarOrdenesMedicasPlan();
+    guardarPlanTemporal();
+
+    /* IASYN PLAN 28: al retirar una orden del Plan, vuelve a quedar seleccionable en su tarjeta. */
+    auroPlanRenderSugerenciasDiagnosticas();
+}
+
+function renderOrdenesMedicasTabla(){
+
+    const tbody = document.getElementById('hcOrdenesTableBody');
+
+    if(!tbody) return;
+
+    const ordenes = window.ordenesMedicasPlanSeleccionadas || [];
+
+    if(!ordenes.length){
+
+        tbody.innerHTML = `
+            <tr id="hcOrdenesEmpty">
+              <td colspan="4" class="text-center text-muted py-3">
+                <i class="bi bi-file-earmark-medical me-1"></i> Sin registros
+              </td>
+            </tr>
+        `;
+
+        auroPlanSetValue('hcExamenesSolicitados', '');
+        return;
+    }
+
+    tbody.innerHTML = ordenes.map((o,i) => `
+        <tr>
+          <td>${escapeHtmlPlan(o.orden)}</td>
+          <td>${escapeHtmlPlan(o.cat)}</td>
+          <td>${escapeHtmlPlan(o.obs)}</td>
+          <td>
+            <button type="button"
+                    class="btn btn-sm btn-outline-danger"
+                    onclick="eliminarOrdenMedica(${i})">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>
+        </tr>
+    `).join('');
+
+    recopilarOrdenesMedicasPlan();
+}
+
+function textoOrdenesMedicasPlan(){
+
+    return (window.ordenesMedicasPlanSeleccionadas || []).map((o,i) => {
+        return [
+            `${i + 1}. ${o.orden || ''}`,
+            o.cat ? `Categoría: ${o.cat}` : '',
+            o.obs ? `Observación: ${o.obs}` : ''
+        ].filter(Boolean).join(' - ');
+    }).join('\n');
+}
+
+function recopilarOrdenesMedicasPlan(){
+
+    auroPlanSetValue('hcExamenesSolicitados', textoOrdenesMedicasPlan());
+
+    return auroPlanGetValue('hcExamenesSolicitados');
+}
+
+function limpiarOrdenesMedicasPlan(){
+    window.ordenesMedicasPlanSeleccionadas = [];
+
+    renderOrdenesMedicasTabla();
+    recopilarOrdenesMedicasPlan();
+    guardarPlanTemporal();
+}
+
+
+/* ============================================================
+   IASYN PLAN - FIX QUIRÚRGICO INTERCONSULTA v29
+   PERSISTENCIA + RECARGA VISIBLE
+   - Restaura los campos del formulario desde la interconsulta real
+     de la atención cargada.
+   - No crea registros, no guarda automáticamente y no toca id_atencion.
+   - Si existen varias interconsultas, prioriza la más completa y reciente
+     del arreglo ya cargado, sin eliminar las demás.
+============================================================ */
+
+function auroPlanRestaurarFormularioInterconsultaDesdeLista(){
+    const lista = Array.isArray(window.interconsultasPlanSeleccionadas)
+        ? window.interconsultasPlanSeleccionadas
+        : [];
+
+    if(!lista.length){
+        limpiarFormularioInterconsulta();
+        return null;
+    }
+
+    const puntuar = function(item){
+        let puntos = 0;
+        if(String(item?.tipo || '').trim()) puntos += 1;
+        if(String(item?.especialidad || '').trim()) puntos += 2;
+        if(String(item?.profesional || '').trim()) puntos += 2;
+        if(String(item?.motivo || '').trim()) puntos += 4;
+        if(String(item?.observaciones || item?.observacion || '').trim()) puntos += 4;
+
+        const prioridad = normalizarTextoPlan(item?.prioridad);
+        const estado = normalizarTextoPlan(item?.estado);
+
+        if(prioridad && prioridad !== 'normal') puntos += 1;
+        if(estado && estado !== 'pendiente') puntos += 1;
+
+        return puntos;
+    };
+
+    /*
+      En empate se prefiere el registro situado más adelante.
+      Esto es compatible con datos históricos donde una versión más
+      completa se agregó después de una versión incompleta.
+    */
+    let indiceElegido = 0;
+    let mejorPuntaje = -1;
+
+    lista.forEach(function(item, index){
+        const puntaje = puntuar(item);
+        if(puntaje >= mejorPuntaje){
+            mejorPuntaje = puntaje;
+            indiceElegido = index;
+        }
+    });
+
+    const item = lista[indiceElegido] || {};
+
+    auroPlanSetValue('hcInterconsultaTipo', item.tipo || '');
+    auroPlanSetValue('hcInterconsultaEspecialidad', item.especialidad || '');
+    auroPlanSetValue('hcInterconsultaPrioridad', item.prioridad || 'Normal');
+    auroPlanSetValue('hcInterconsultaProfesional', item.profesional || '');
+    auroPlanSetValue('hcInterconsultaEstado', item.estado || 'Pendiente');
+    auroPlanSetValue('hcInterconsultaMotivo', item.motivo || '');
+    auroPlanSetValue(
+        'hcInterconsultaObservaciones',
+        item.observaciones || item.observacion || ''
+    );
+
+    return item;
+}
+
+/* ============================================================
+   INTERCONSULTAS DEL PLAN
+============================================================ */
+
+function recopilarInterconsultaPlan(){
+
+    const tipo = auroPlanGetValue('hcInterconsultaTipo');
+    const especialidad = auroPlanGetValue('hcInterconsultaEspecialidad');
+    const prioridad = auroPlanGetValue('hcInterconsultaPrioridad') || 'Normal';
+    const profesional = auroPlanGetValue('hcInterconsultaProfesional');
+    const estado = auroPlanGetValue('hcInterconsultaEstado') || 'Pendiente';
+    const motivo = auroPlanGetValue('hcInterconsultaMotivo');
+    const observaciones = auroPlanGetValue('hcInterconsultaObservaciones');
+
+    const partes = [];
+
+    if(tipo) partes.push('Tipo: ' + tipo);
+    if(especialidad) partes.push('Especialidad: ' + especialidad);
+    if(prioridad) partes.push('Prioridad: ' + prioridad);
+    if(profesional) partes.push('Profesional: ' + profesional);
+    if(estado) partes.push('Estado: ' + estado);
+    if(motivo) partes.push('Motivo: ' + motivo);
+    if(observaciones) partes.push('Observaciones: ' + observaciones);
+
+    const formularioTieneContenido = !!(
+        tipo ||
+        especialidad ||
+        profesional ||
+        motivo ||
+        observaciones
+    );
+
+    const textoFormulario = formularioTieneContenido
+        ? partes.join('\n')
+        : '';
+
+    if(textoFormulario){
+        auroPlanSetValue('hcInterconsultaResumen', textoFormulario);
+        return textoFormulario;
+    }
+
+    const textoLista = (window.interconsultasPlanSeleccionadas || [])
+        .map((it,i) => {
+            return [
+                `${i + 1}. ${it.especialidad || ''}`,
+                it.tipo ? `Tipo: ${it.tipo}` : '',
+                it.prioridad ? `Prioridad: ${it.prioridad}` : '',
+                it.profesional ? `Profesional: ${it.profesional}` : '',
+                it.estado ? `Estado: ${it.estado}` : '',
+                it.motivo ? `Motivo: ${it.motivo}` : '',
+                it.observaciones ? `Observaciones: ${it.observaciones}` : ''
+            ].filter(Boolean).join(' - ');
+        }).join('\n');
+
+    auroPlanSetValue('hcInterconsultaResumen', textoLista);
+
+    return textoLista;
+}
+
+function agregarInterconsultaPlan(){
+
+    const especialidad = (auroPlanGetValue('hcInterconsultaEspecialidad') || '').trim();
+
+    if(!especialidad){
+        alert('Seleccione una especialidad.');
+        return;
+    }
+
+    window.interconsultasPlanSeleccionadas = auroPlanInterconsultasUnicas([
+        ...(window.interconsultasPlanSeleccionadas || []),
+        {
+            tipo: auroPlanGetValue('hcInterconsultaTipo'),
+            especialidad,
+            prioridad: auroPlanGetValue('hcInterconsultaPrioridad') || 'Normal',
+            profesional: auroPlanGetValue('hcInterconsultaProfesional'),
+            estado: auroPlanGetValue('hcInterconsultaEstado') || 'Pendiente',
+            motivo: auroPlanGetValue('hcInterconsultaMotivo'),
+            observaciones: auroPlanGetValue('hcInterconsultaObservaciones')
+        }
+    ]);
+
+    renderInterconsultasTabla();
+    recopilarInterconsultaPlan();
+    guardarPlanTemporal();
+}
+
+function eliminarInterconsultaPlan(index){
+
+    index = Number(index);
+
+    if(Number.isNaN(index)) return;
+
+    window.interconsultasPlanSeleccionadas.splice(index,1);
+
+    renderInterconsultasTabla();
+    recopilarInterconsultaPlan();
+    guardarPlanTemporal();
+}
+
+function limpiarFormularioInterconsulta(){
+
+    auroPlanSetValue('hcInterconsultaTipo','');
+    auroPlanSetValue('hcInterconsultaEspecialidad','');
+    auroPlanSetValue('hcInterconsultaProfesional','');
+    auroPlanSetValue('hcInterconsultaMotivo','');
+    auroPlanSetValue('hcInterconsultaObservaciones','');
+    auroPlanSetValue('hcInterconsultaPrioridad','Normal');
+    auroPlanSetValue('hcInterconsultaEstado','Pendiente');
+}
+
+function renderInterconsultasTabla(){
+
+    const tbody = document.getElementById('hcInterconsultasTableBody');
+
+    if(!tbody) return;
+
+    const lista = window.interconsultasPlanSeleccionadas || [];
+
+    if(!lista.length){
+        tbody.innerHTML = `
+            <tr>
+              <td colspan="7" class="text-center text-muted py-3">
+                Sin interconsultas registradas
+              </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = lista.map((it,i) => `
+        <tr>
+          <td>${escapeHtmlPlan(it.tipo)}</td>
+          <td>${escapeHtmlPlan(it.especialidad)}</td>
+          <td>${escapeHtmlPlan(it.prioridad)}</td>
+          <td>${escapeHtmlPlan(it.profesional)}</td>
+          <td>${escapeHtmlPlan(it.estado)}</td>
+          <td>${escapeHtmlPlan(it.motivo)}</td>
+          <td>
+            <button type="button"
+                    class="btn btn-sm btn-outline-danger"
+                    onclick="eliminarInterconsultaPlan(${i})">
+              <i class="bi bi-trash"></i>
+            </button>
+          </td>
+        </tr>
+    `).join('');
+}
+
+function limpiarInterconsultaPlan(){
+
+    window.interconsultasPlanSeleccionadas = [];
+
+    limpiarFormularioInterconsulta();
+    renderInterconsultasTabla();
+    auroPlanSetValue('hcInterconsultaResumen','');
+    guardarPlanTemporal();
+}
+
+
+
+/* ============================================================
+   EVALUACIONES DEL PLAN
+============================================================ */
+
+const AURO_PLAN_EVALUACIONES = [
+    {
+        id: 'hcEvalMalaActitud',
+        texto: 'Denota mala actitud ante el examinador.'
+    },
+    {
+        id: 'hcEvalAnimo',
+        texto: 'Alteraciones del estado de ánimo.'
+    },
+    {
+        id: 'hcEvalAbusoNegligencia',
+        texto: 'Sospecha psicológica: paciente víctima de abuso o negligencia.'
+    },
+    {
+        id: 'hcEvalAnomaliasMotoras',
+        texto: 'Evidencia actividades y anomalías motoras.'
+    },
+    {
+        id: 'hcEvalOdontologica',
+        texto: 'Requiere evaluación odontológica.'
+    }
+];
+
+function auroPlanCapturarEvaluaciones(){
+
+    const data = {};
+
+    AURO_PLAN_EVALUACIONES.forEach(item => {
+        const el = document.getElementById(item.id);
+        data[item.id] = !!(el && el.checked);
+    });
+
+    return data;
+}
+
+function auroPlanRestaurarEvaluaciones(data){
+
+    data = data || {};
+
+    AURO_PLAN_EVALUACIONES.forEach(item => {
+        const el = document.getElementById(item.id);
+        if(el) el.checked = !!data[item.id];
+    });
+
+    recopilarEvaluacionesPlan();
+}
+
+function recopilarEvaluacionesPlan(){
+
+    const seleccionadas = [];
+
+    AURO_PLAN_EVALUACIONES.forEach(item => {
+        const el = document.getElementById(item.id);
+        if(el && el.checked){
+            seleccionadas.push(item.texto);
+        }
+    });
+
+    const texto = seleccionadas.join('\n');
+
+    auroPlanSetValue('hcEvaluacionesResumen', texto);
+
+    return texto;
+}
+
+function limpiarEvaluacionesCamposPlan(){
+
+    AURO_PLAN_EVALUACIONES.forEach(item => {
+        const el = document.getElementById(item.id);
+        if(el) el.checked = false;
+    });
+
+    auroPlanSetValue('hcEvaluacionesResumen', '');
+}
+
+function limpiarEvaluacionesPlan(){
+
+    limpiarEvaluacionesCamposPlan();
+    guardarPlanTemporal();
+}
+
+/* ============================================================
+   EVENTOS EVALUACIONES PLAN
+============================================================ */
+
+function instalarEventosEvaluacionesPlan(){
+
+    if(window.auroPlanEvaluacionesEventosInstalados) return;
+    window.auroPlanEvaluacionesEventosInstalados = true;
+
+    document.addEventListener('change', function(e){
+
+        const id = e.target?.id || '';
+
+        if(AURO_PLAN_EVALUACIONES.some(item => item.id === id)){
+            recopilarEvaluacionesPlan();
+            guardarPlanTemporal();
+        }
+    });
+}
+
+
+/* ============================================================
+   EVENTOS MEDICAMENTOS PLAN
+============================================================ */
+
+function instalarEventosMedicamentosPlan(){
+
+    if(window.auroPlanMedicamentosEventosInstalados) return;
+    window.auroPlanMedicamentosEventosInstalados = true;
+
+    document.addEventListener('input', function(e){
+        if(e.target && e.target.id === 'hcMedBusqueda'){
+            renderMedicamentoSugerencias();
+        }
+    });
+
+    document.addEventListener('focusin', function(e){
+        if(e.target && e.target.id === 'hcMedBusqueda'){
+            renderMedicamentoSugerencias();
+        }
+    });
+
+    document.addEventListener('click', function(e){
+
+        const item = e.target.closest('.med-sug-item[data-med]');
+
+        if(item){
+            seleccionarMedicamentoSugerido(item);
+            return;
+        }
+
+        const box = document.getElementById('hcMedSugerencias');
+
+        if(
+            box &&
+            !e.target.closest('#hcMedSugerencias') &&
+            e.target.id !== 'hcMedBusqueda'
+        ){
+            box.classList.add('d-none');
+        }
+    });
+
+    document.addEventListener('change', function(e){
+
+        if(e.target?.id === 'hcMedPresentacion'){
+            auroPlanActualizarViasPorPresentacion();
+        }
+
+        if(e.target?.id === 'hcMedVia'){
+            if(e.target.value === '__AURO_OTRA_VIA__'){
+                auroPlanMostrarEntradaViaLibre();
+                return;
+            }
+            auroPlanOcultarEntradaViaLibre();
+        }
+
+        const ids = [
+            'hcMedPresentacion',
+            'hcMedVia',
+            'hcMedCantidad',
+            'hcMedFrecuencia',
+            'hcMedDuracion',
+            'hcMedIndicaciones',
+            'hcMedContinuo'
+        ];
+
+        if(ids.includes(e.target?.id || '')){
+            renderMedicamentosPlanTabla();
+            guardarPlanTemporal();
+        }
+    });
+}
+
+
+/* ============================================================
+   EVENTOS ÓRDENES MÉDICAS PLAN
+============================================================ */
+
+function instalarEventosOrdenesMedicasPlan(){
+
+    if(window.auroPlanOrdenesEventosInstalados) return;
+    window.auroPlanOrdenesEventosInstalados = true;
+
+    document.addEventListener('input', function(e){
+        if(e.target && e.target.id === 'hcOrdenBusqueda'){
+            renderOrdenesSugerencias();
+        }
+    });
+
+    document.addEventListener('focusin', function(e){
+        if(e.target && e.target.id === 'hcOrdenBusqueda'){
+            renderOrdenesSugerencias();
+        }
+    });
+
+    document.addEventListener('change', function(e){
+        if(e.target && e.target.id === 'hcOrdenTipo'){
+            renderOrdenesSugerencias();
+        }
+    });
+
+    document.addEventListener('click', function(e){
+
+        const item = e.target.closest('.orden-sug-item[data-orden]');
+
+        if(item){
+            seleccionarOrdenSugerida(item);
+            return;
+        }
+
+        const box = document.getElementById('hcOrdenSugerencias');
+
+        if(
+            box &&
+            !e.target.closest('#hcOrdenSugerencias') &&
+            e.target.id !== 'hcOrdenBusqueda'
+        ){
+            box.classList.add('d-none');
+        }
+    });
+}
+
+
+/* ============================================================
+   SINCRONIZACIÓN AUXILIAR ANTES DE GUARDAR
+============================================================ */
+
+function auroSincronizarPlanAntesGuardar(){
+
+    window.ordenesMedicasPlanSeleccionadas =
+        auroPlanOrdenesUnicas(window.ordenesMedicasPlanSeleccionadas || []);
+
+    const interconsultaFormulario = {
+        tipo: auroPlanGetValue('hcInterconsultaTipo'),
+        especialidad: auroPlanGetValue('hcInterconsultaEspecialidad'),
+        prioridad: auroPlanGetValue('hcInterconsultaPrioridad') || 'Normal',
+        profesional: auroPlanGetValue('hcInterconsultaProfesional'),
+        estado: auroPlanGetValue('hcInterconsultaEstado') || 'Pendiente',
+        motivo: auroPlanGetValue('hcInterconsultaMotivo'),
+        observaciones: auroPlanGetValue('hcInterconsultaObservaciones')
+    };
+
+    const formularioInterconsultaTieneContenido = !!(
+        String(interconsultaFormulario.tipo || '').trim() ||
+        String(interconsultaFormulario.especialidad || '').trim() ||
+        String(interconsultaFormulario.profesional || '').trim() ||
+        String(interconsultaFormulario.motivo || '').trim() ||
+        String(interconsultaFormulario.observaciones || '').trim()
+    );
+
+    window.interconsultasPlanSeleccionadas =
+        auroPlanInterconsultasUnicas([
+            ...(window.interconsultasPlanSeleccionadas || []),
+            ...(formularioInterconsultaTieneContenido
+                ? [interconsultaFormulario]
+                : [])
+        ]);
+
+    if(typeof recopilarEvaluacionesPlan === 'function'){
+        recopilarEvaluacionesPlan();
+    }
+
+    recopilarInterconsultaPlan();
+    recopilarOrdenesMedicasPlan();
+
+    renderMedicamentosPlanTabla();
+    renderOrdenesMedicasTabla();
+    renderInterconsultasTabla();
+
+    sincronizarPlanConReceta();
+    guardarPlanTemporal();
+}
+
+
+/* ============================================================
+   REFRESCAR VISTAS DEL PLAN
+============================================================ */
+
+function auroPlanRefrescarVistas(){
+
+    renderMedicamentosPlanTabla();
+    sincronizarPlanConReceta();
+
+    renderOrdenesMedicasTabla();
+    recopilarOrdenesMedicasPlan();
+
+    renderInterconsultasTabla();
+    recopilarInterconsultaPlan();
+
+    if(typeof recopilarEvaluacionesPlan === 'function'){
+        recopilarEvaluacionesPlan();
+    }
+
+    auroPlanRenderSugerenciasDiagnosticas();
+}
+
+
+/* ============================================================
+   RESPONSIVE PLAN ANDROID / TELÉFONO
+============================================================ */
+
+function instalarResponsivePlanAndroid(){
+
+    if(document.getElementById('auroPlanResponsiveAndroidStyle')) return;
+
+    const style = document.createElement('style');
+    style.id = 'auroPlanResponsiveAndroidStyle';
+
+    style.textContent = `
+      #hc_plan .auro-plan-ayuda-select{
+        margin-top:7px;
+        max-width:420px;
+        border-radius:12px;
+        color:#475569;
+      }
+
+      #hc_plan .auro-plan-limpiar-rapido,
+      #hc_plan .auro-plan-via-libre-rapida,
+      #hc_plan .auro-plan-ampliar-indicaciones{
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        gap:4px;
+        min-height:30px;
+        margin-top:5px;
+        margin-right:6px;
+        padding:4px 9px;
+        border:1px solid #d1d5db;
+        border-radius:9px;
+        background:#fff;
+        color:#475569;
+        font-size:11px;
+        font-weight:750;
+        line-height:1.1;
+        cursor:pointer;
+      }
+
+      #hc_plan .auro-plan-limpiar-rapido:hover,
+      #hc_plan .auro-plan-via-libre-rapida:hover,
+      #hc_plan .auro-plan-ampliar-indicaciones:hover,
+      #hc_plan .auro-plan-via-libre-rapida.activo,
+      #hc_plan .auro-plan-ampliar-indicaciones.activo{
+        background:#f8fafc;
+        border-color:#cbd5e1;
+        color:#1f2937;
+      }
+
+      #hc_plan .auro-plan-indicaciones-controladas{
+        resize:vertical;
+        transition:height .15s ease;
+      }
+
+      #hc_plan .auro-plan-indicacion-tabla{
+        max-width:280px;
+        max-height:68px;
+        overflow:auto;
+        white-space:pre-wrap;
+        overflow-wrap:anywhere;
+        line-height:1.35;
+      }
+
+      .auro-plan-indicaciones-capa{
+        position:fixed;
+        inset:0;
+        z-index:100001;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:18px;
+        background:rgba(15,23,42,.58);
+      }
+
+      .auro-plan-indicaciones-capa.d-none{display:none!important}
+
+      .auro-plan-indicaciones-dialogo{
+        width:min(760px,100%);
+        background:#fff;
+        border:1px solid #e5e7eb;
+        border-radius:18px;
+        padding:16px;
+        box-shadow:0 28px 80px rgba(15,23,42,.28);
+      }
+
+      .auro-plan-indicaciones-dialogo-cabecera{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        margin-bottom:10px;
+      }
+
+      .auro-plan-indicaciones-dialogo-titulo{
+        font-size:16px;
+        font-weight:850;
+        color:#1f2937;
+      }
+
+      .auro-plan-indicaciones-dialogo-cerrar{
+        width:34px;
+        height:34px;
+        border:0;
+        border-radius:9px;
+        background:#f1f5f9;
+        color:#475569;
+        font-size:22px;
+        line-height:1;
+      }
+
+      .auro-plan-indicaciones-editor{
+        min-height:220px;
+        resize:vertical;
+      }
+
+      .auro-plan-indicaciones-dialogo-pie{
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        margin-top:10px;
+        color:#64748b;
+        font-size:12px;
+      }
+
+      #hc_plan .auro-plan-aviso-edicion{
+        margin:8px 0 10px;
+        padding:9px 12px;
+        border:1px solid #bfdbfe;
+        border-radius:12px;
+        background:#eff6ff;
+        color:#1e40af;
+        font-size:13px;
+        font-weight:700;
+      }
+
+      #hc_plan .auro-plan-pendiente{
+        display:inline-block;
+        padding:4px 8px;
+        border-radius:999px;
+        background:#fef3c7;
+        color:#92400e;
+        font-size:11px;
+        font-weight:800;
+        white-space:nowrap;
+      }
+      #hc_plan .auro-plan-acciones-medicamento{
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        gap:6px;
+        white-space:nowrap;
+      }
+
+      #hc_plan .auro-plan-tabla-medicamentos th:nth-child(3),
+      #hc_plan .auro-plan-tabla-medicamentos td:nth-child(3){
+        min-width:135px;
+      }
+
+      #hc_plan .auro-plan-tabla-medicamentos th:nth-child(7),
+      #hc_plan .auro-plan-tabla-medicamentos td:nth-child(7){
+        min-width:190px;
+      }
+
+      @media(min-width:981px){
+        /*
+          IASYN PLAN - ENSANCHAMIENTO PROFESIONAL SOLO ESCRITORIO
+          - Extiende únicamente la caja de medicamentos hacia la derecha.
+          - Mantiene alineado el borde izquierdo original.
+          - No usa transformaciones, centrados forzados ni porcentajes rígidos.
+          - La tabla conserva distribución automática y texto ajustable.
+          - No afecta otras tablas ni el responsive móvil.
+        */
+        #hc_plan .receta-medicamentos-box.hc-plan-narrow,
+        #hc_plan .receta-medicamentos-box{
+          width:min(1180px, calc(100vw - 365px))!important;
+          max-width:none!important;
+          margin-left:0!important;
+          margin-right:0!important;
+        }
+
+        #hc_plan .receta-medicamentos-box .table-responsive{
+          display:block!important;
+          width:100%!important;
+          max-width:100%!important;
+          overflow-x:hidden!important;
+        }
+
+        #hc_plan .auro-plan-tabla-medicamentos{
+          width:100%!important;
+          min-width:0!important;
+          max-width:100%!important;
+          table-layout:auto!important;
+        }
+
+        #hc_plan .auro-plan-tabla-medicamentos th,
+        #hc_plan .auro-plan-tabla-medicamentos td{
+          padding:9px 8px!important;
+          vertical-align:middle!important;
+          white-space:normal!important;word-break:normal!important;
+          overflow-wrap:anywhere!important;
+          line-height:1.35!important;
+        }
+
+        #hc_plan .auro-plan-tabla-medicamentos th{
+          font-size:12px!important;
+          letter-spacing:.01em!important;
+        }
+
+        #hc_plan .auro-plan-tabla-medicamentos td{
+          font-size:12.5px!important;
+        }
+
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(4),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(4),
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(8),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(8),
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(9),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(9){
+          white-space:nowrap!important;
+        }
+
+        #hc_plan .auro-plan-acciones-medicamento{
+          display:flex!important;
+          align-items:center!important;
+          justify-content:center!important;
+          gap:6px!important;
+        }
+
+        #hc_plan .auro-plan-acciones-medicamento .btn{
+          width:34px!important;
+          height:34px!important;
+          min-height:34px!important;
+          padding:5px!important;
+          border-radius:9px!important;
+        }
+
+        #hc_plan .auro-plan-ayuda-select{
+          border:1px solid #d8b4fe!important;
+          background:linear-gradient(180deg,#ffffff 0%,#faf5ff 100%)!important;
+          box-shadow:0 4px 14px rgba(126,34,206,.08)!important;
+          font-weight:600!important;
+        }
+      }
+
+      @media(max-width:980px){
+        #hc_plan .receta-medicamentos-box .table-responsive{
+          display:block!important;
+          overflow-x:auto!important;
+          -webkit-overflow-scrolling:touch!important;
+        }
+      }
+
+      @media(max-width:760px){
+
+        #hc_plan .hc-plan-narrow,
+        #hc_plan .hc-plan-row-small{
+          width:100%!important;
+          max-width:none!important;
+        }
+
+        #hc_plan .receta-medicamentos-box,
+        #hc_plan .ordenes-medicas-box,
+        #hc_plan .interconsulta-box,
+        #hc_plan .evaluaciones-box{
+          padding:12px!important;
+          border-radius:14px!important;
+        }
+
+        #hc_plan .table-responsive{
+          display:block!important;
+          overflow-x:auto!important;
+          -webkit-overflow-scrolling:touch!important;
+        }
+
+        #hc_plan table{
+          min-width:920px!important;
+        }
+
+        #hc_plan button{
+          min-height:42px!important;
+          white-space:normal!important;
+        }
+
+        #hc_plan .auro-plan-acciones-medicamento button{
+          min-width:42px!important;
+          padding:8px!important;
+        }
+
+        #hc_plan .auro-plan-ayuda-select{
+          width:100%;
+          max-width:none;
+          font-size:14px!important;
+        }
+
+        #hc_plan .auro-plan-limpiar-rapido,
+        #hc_plan .auro-plan-via-libre-rapida,
+        #hc_plan .auro-plan-ampliar-indicaciones{
+          min-height:38px!important;
+          font-size:12px!important;
+        }
+
+        .auro-plan-indicaciones-capa{
+          padding:10px;
+        }
+
+        .auro-plan-indicaciones-dialogo{
+          border-radius:14px;
+          padding:13px;
+        }
+
+        .auro-plan-indicaciones-editor{
+          min-height:48vh;
+        }
+
+        .auro-plan-indicaciones-dialogo-pie{
+          align-items:stretch;
+          flex-direction:column;
+        }
+
+        .auro-plan-indicaciones-dialogo-pie .btn{
+          width:100%;
+        }
+
+        #hc_plan .row.g-3{
+          row-gap:12px!important;
+        }
+
+        #hc_plan textarea,
+        #hc_plan input,
+        #hc_plan select{
+          font-size:14px!important;
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+}
+
+
+
+
+/* ============================================================
+   PERSISTENCIA DEFINITIVA PLAN → GOOGLE SHEETS
+   Pestaña: planes_clinicos
+   Requiere Apps Script con acciones:
+   - guardarPlanClinico
+   - editarPlanClinico
+   - buscarPlanPorAtencion
+============================================================ */
+
+function auroPlanApiUrl(){
+    try{
+        if(typeof API_URL !== 'undefined' && API_URL) return API_URL;
+    }catch(e){}
+
+    if(window.API_URL) return window.API_URL;
+
+    const input = document.getElementById('appsScriptUrl');
+    if(input && input.value) return input.value.trim();
+
+    return '';
+}
+
+async function auroPlanApiGet(accion, params){
+
+    const urlBase = auroPlanApiUrl();
+
+    if(!urlBase){
+        throw new Error('No se encontró API_URL para conectar con Apps Script.');
+    }
+
+    const query = new URLSearchParams({
+        accion: accion,
+        _: String(Date.now())
+    });
+
+    Object.keys(params || {}).forEach(k => {
+        if(params[k] !== undefined && params[k] !== null){
+            query.append(k, params[k]);
+        }
+    });
+
+    const res = await fetch(urlBase + '?' + query.toString(), {
+        method: 'GET',
+        cache: 'no-store'
+    });
+
+    return await res.json();
+}
+
+async function auroPlanApiPost(accion, data){
+
+    const urlBase = auroPlanApiUrl();
+
+    if(!urlBase){
+        throw new Error('No se encontró API_URL para conectar con Apps Script.');
+    }
+
+    const res = await fetch(urlBase, {
+        method: 'POST',
+        body: JSON.stringify({
+            accion: accion,
+            data: data || {}
+        })
+    });
+
+    return await res.json();
+}
+
+
+/* ============================================================
+   IASYN PLAN 26 - CONTROL DE CORRECCIÓN CLÍNICA
+   - Atención abierta: guardado normal sin preguntas.
+   - Atención finalizada: el backend solicita justificativo.
+   - Fuera de plazo: enmienda excepcional si Configuración la permite.
+   - La decisión temporal pertenece al servidor.
+============================================================ */
+function auroPlanTokenControlClinico(){
+    /*
+      IASYN: se intenta primero el contrato propio.
+      Los nombres AUROSANAX se conservan solo como compatibilidad temporal
+      mientras Seguridad e index terminan su migración coordinada.
+    */
+    try{
+        if(window.IASYN_SEGURIDAD && typeof window.IASYN_SEGURIDAD.obtenerToken === 'function'){
+            return String(window.IASYN_SEGURIDAD.obtenerToken() || '').trim();
+        }
+    }catch(e){}
+    try{
+        if(window.AUROSANAX_SEGURIDAD && typeof window.AUROSANAX_SEGURIDAD.obtenerToken === 'function'){
+            return String(window.AUROSANAX_SEGURIDAD.obtenerToken() || '').trim();
+        }
+    }catch(e){}
+    try{
+        const tokenIASYN = String(sessionStorage.getItem('iasyn_seguridad_token') || '').trim();
+        if(tokenIASYN) return tokenIASYN;
+    }catch(e){}
+    try{ return String(sessionStorage.getItem('aurosanax_seguridad_token') || '').trim(); }catch(e){}
+    return '';
+}
+
+if(typeof window.auroSolicitarMotivoCorreccionClinica !== 'function'){
+    window.auroSolicitarMotivoCorreccionClinica = function(opciones){
+        opciones = opciones || {};
+        const excepcional = !!opciones.excepcional;
+        const titulo = excepcional
+            ? 'ENMIENDA EXCEPCIONAL - JUSTIFICATIVO OBLIGATORIO'
+            : 'CORRECCIÓN CLÍNICA - MOTIVO OBLIGATORIO';
+        const entrada = window.prompt(
+            titulo + '\n\n' +
+            '1. Error de digitación\n' +
+            '2. Omisión\n' +
+            '3. Fallo del sistema\n' +
+            '4. Emergencia\n' +
+            '5. Corrección clínica\n' +
+            '6. Otro\n\n' +
+            'Escriba el número del motivo:'
+        );
+        if(entrada === null) return null;
+
+        const mapa = {
+            '1':'Error de digitación',
+            '2':'Omisión',
+            '3':'Fallo del sistema',
+            '4':'Emergencia',
+            '5':'Corrección clínica',
+            '6':'Otro'
+        };
+        const tipo = mapa[String(entrada || '').trim()];
+        if(!tipo){
+            window.alert('Seleccione un motivo válido del 1 al 6.');
+            return null;
+        }
+
+        let detalle = '';
+        if(tipo === 'Otro'){
+            const otro = window.prompt('Escriba un justificativo breve:');
+            if(otro === null) return null;
+            detalle = String(otro || '').trim();
+            if(detalle.length < 3){
+                window.alert('El justificativo es obligatorio.');
+                return null;
+            }
+        }
+
+        return {
+            motivo_correccion_tipo: tipo,            motivo_correccion_detalle: detalle,
+            motivo_correccion: detalle ? (tipo + ': ' + detalle) : tipo,
+            correccion_excepcional: excepcional ? 'SI' : 'NO'
+        };
+    };
+}
+
+async function auroPlanApiPostConControlClinico(accion, data){
+    const payload = Object.assign({}, data || {}, {
+        token: auroPlanTokenControlClinico()
+    });
+
+    let resultado = await auroPlanApiPost(accion, payload);
+
+    if(
+        resultado && resultado.success === false &&
+        ['AURO_MOTIVO_REQUERIDO','AURO_EXCEPCION_REQUERIDA'].includes(String(resultado.code || ''))
+    ){
+        const motivo = await window.auroSolicitarMotivoCorreccionClinica({
+            excepcional: resultado.code === 'AURO_EXCEPCION_REQUERIDA' || resultado.requiere_excepcion === true
+        });
+        if(!motivo) return resultado;
+
+        Object.assign(payload, motivo);
+        resultado = await auroPlanApiPost(accion, payload);
+    }
+
+    return resultado;
+}
+
+function auroPlanObtenerContextoAtencionSeguro(){
+    /*
+      IASYN - integración quirúrgica con atenciones.js
+      Fuente preferente: obtenerContextoAtencionActual().
+      Mantiene compatibilidad total con la lógica anterior.
+    */
+    try{
+        if(typeof window.obtenerContextoAtencionActual === 'function'){
+            const contexto = window.obtenerContextoAtencionActual();
+            if(contexto && contexto.id_atencion){
+                return contexto;
+            }
+        }
+    }catch(error){
+        console.warn('IASYN PLAN: no se pudo leer el contexto unificado de la atención.', error);
+    }
+
+    try{
+        if(typeof window.getContextoAtencionActual === 'function'){
+            const contexto = window.getContextoAtencionActual();
+            if(contexto && contexto.id_atencion){
+                return contexto;
+            }
+        }
+    }catch(error){}
+
+    try{
+        if(typeof window.getAtencionActiva === 'function'){
+            const atencion = window.getAtencionActiva();
+            if(atencion && atencion.id_atencion){
+                return {
+                    id_atencion: String(atencion.id_atencion || '').trim(),
+                    id_paciente: String(atencion.id_paciente || '').trim(),
+                    id_historia: String(atencion.id_historia || '').trim(),
+                    id_cita: String(atencion.id_cita || '').trim(),
+                    id_medico: String(atencion.id_medico || '').trim(),
+                    numero_consulta: String(atencion.numero_consulta || '').trim(),
+                    origen_atencion: String(atencion.id_cita || '').trim() ? 'agenda' : 'manual'
+                };
+            }
+        }
+    }catch(error){}
+
+    return null;
+}
+
+function auroPlanObtenerIdAtencionActivaSeguro(){
+    let idReal = '';
+
+    const contexto = auroPlanObtenerContextoAtencionSeguro();
+    if(contexto && contexto.id_atencion){
+        idReal = String(contexto.id_atencion || '').trim();
+    }
+
+    try{
+        if(typeof window.getAtencionActiva === 'function'){
+            const atencion = window.getAtencionActiva();
+            idReal = String(atencion?.id_atencion || '').trim();
+        }
+    }catch(e){}
+
+    if(!idReal){
+        try{
+            if(typeof getAtencionActiva === 'function'){
+                const atencion = getAtencionActiva();
+                idReal = String(atencion?.id_atencion || '').trim();
+            }
+        }catch(e){}
+    }
+
+    if(!idReal){
+        idReal = String(
+            document.getElementById('hcIdAtencion')?.value ||
+            document.getElementById('idAtencionActiva')?.value ||
+            ''
+        ).trim();
+    }
+
+    if(!idReal){
+        idReal = String(window.planState?.atencionActual || '').trim();
+    }
+
+    return idReal;
+}
+
+function auroPlanSincronizarAtencionActiva(){
+    const idReal = auroPlanObtenerIdAtencionActivaSeguro();
+
+    if(!idReal) return '';
+
+    window.planState = window.planState || {
+        atencionActual: '',
+        cache: {}
+    };
+
+    window.planState.atencionActual = idReal;
+    return idReal;
+}
+
+function auroPlanObtenerPacienteActivoSeguro(){
+
+    try{
+        if(typeof getPacienteActivo === 'function'){
+            const p = getPacienteActivo();
+            if(p) return p;
+        }
+    }catch(e){}
+
+    const idSelect = document.getElementById('hcPacienteSelect')?.value || '';
+
+    try{
+        if(Array.isArray(patients)){
+            return patients.find(p =>
+                String(p.id_paciente || '') === String(idSelect || '')
+            ) || null;
+        }
+    }catch(e){}
+
+    return null;
+}
+
+function auroPlanObtenerHistoriaIdSeguro(){
+
+    const contexto = auroPlanObtenerContextoAtencionSeguro();
+    if(contexto && contexto.id_historia){
+        return String(contexto.id_historia || '').trim();
+    }
+
+    try{
+        if(typeof editingHistoryId !== 'undefined' && editingHistoryId){
+            return editingHistoryId;
+        }
+    }catch(e){}
+
+    const h = document.getElementById('hcIdHistoria')?.value || '';
+    return h || '';
+}
+
+function auroPlanObtenerMedicoIdSeguro(){
+
+    const contexto = auroPlanObtenerContextoAtencionSeguro();
+    if(contexto && contexto.id_medico){
+        return String(contexto.id_medico || '').trim();
+    }
+
+    try{
+        if(typeof obtenerIdMedicoReal === 'function'){
+            const id = obtenerIdMedicoReal();
+            if(id) return id;
+        }
+    }catch(e){}
+
+    const el = document.getElementById('hcIdMedico');
+    if(el && el.value) return el.value;
+
+    return 'MED-IASYN';
+}
+
+function auroPlanPrepararDatosSheets(){
+
+    const idAtencionReal = auroPlanSincronizarAtencionActiva();
+
+    auroSincronizarPlanAntesGuardar();
+
+    /*
+      IASYN v29 - refuerzo defensivo de persistencia.
+      Si existe información escrita en Interconsulta, se vuelve a fusionar
+      justo antes de construir el payload. No guarda por sí solo: únicamente
+      protege el contenido del botón Guardar plan clínico.
+    */
+    const interconsultaVisibleAntesDeGuardar = {
+        tipo: auroPlanGetValue('hcInterconsultaTipo'),
+        especialidad: auroPlanGetValue('hcInterconsultaEspecialidad'),
+        prioridad: auroPlanGetValue('hcInterconsultaPrioridad') || 'Normal',
+        profesional: auroPlanGetValue('hcInterconsultaProfesional'),
+        estado: auroPlanGetValue('hcInterconsultaEstado') || 'Pendiente',
+        motivo: auroPlanGetValue('hcInterconsultaMotivo'),
+        observaciones: auroPlanGetValue('hcInterconsultaObservaciones')
+    };
+
+    const hayInterconsultaVisible = !!(
+        String(interconsultaVisibleAntesDeGuardar.tipo || '').trim() ||
+        String(interconsultaVisibleAntesDeGuardar.especialidad || '').trim() ||
+        String(interconsultaVisibleAntesDeGuardar.profesional || '').trim() ||
+        String(interconsultaVisibleAntesDeGuardar.motivo || '').trim() ||
+        String(interconsultaVisibleAntesDeGuardar.observaciones || '').trim()
+    );
+
+    if(hayInterconsultaVisible){
+        window.interconsultasPlanSeleccionadas = auroPlanInterconsultasUnicas([
+            ...(window.interconsultasPlanSeleccionadas || []),
+            interconsultaVisibleAntesDeGuardar
+        ]);
+    }
+
+    const contexto = auroPlanObtenerContextoAtencionSeguro();
+    const paciente = auroPlanObtenerPacienteActivoSeguro();
+
+    return {
+        id_atencion:
+            idAtencionReal,
+
+        id_paciente:
+            String(contexto?.id_paciente || '').trim() ||
+            paciente?.id_paciente ||
+            document.getElementById('hcPacienteSelect')?.value ||
+            '',
+
+        id_historia:
+            String(contexto?.id_historia || '').trim() ||
+            auroPlanObtenerHistoriaIdSeguro(),
+
+        id_medico:
+            String(contexto?.id_medico || '').trim() ||
+            auroPlanObtenerMedicoIdSeguro(),
+
+        id_cita:
+            String(contexto?.id_cita || '').trim(),
+
+        fecha_plan:
+            auroPlanFechaClinicaLocal(),
+
+        plan_terapeutico:
+            auroPlanTextoClinicoAJSON(
+                auroPlanGetValue('hcPlanTratamiento')
+            ),
+
+        medicamentos_plan:
+            JSON.stringify(window.medicamentosPlanSeleccionados || []),
+
+        receta_medica:
+            auroPlanTextoClinicoAJSON(
+                auroPlanGetValue('hcRecetaMedicamentos')
+            ),
+
+        ordenes_medicas:
+            JSON.stringify(
+                auroPlanOrdenesUnicas(
+                    window.ordenesMedicasPlanSeleccionadas || []
+                )
+            ),
+
+        interconsulta:
+            JSON.stringify(
+                auroPlanInterconsultasUnicas(
+                    window.interconsultasPlanSeleccionadas || []
+                )
+            ),
+
+        evaluaciones_plan:
+            JSON.stringify(
+                auroPlanEvaluacionesSeleccionadasJSON()
+            ),
+
+        indicaciones_paciente:
+            auroPlanTextoClinicoAJSON(
+                auroPlanGetValue('hcIndicacionesPaciente')
+            ),
+
+        proximo_control:
+            auroPlanGetValue('hcControl'),
+
+        estado_plan:
+            auroPlanGetValue('hcEstadoHistoria') || 'Activo'
+    };
+}
+
+async function buscarPlanClinicoPorAtencionDesdeSheets(idAtencion){
+
+    idAtencion = String(idAtencion || window.planState?.atencionActual || '').trim();
+
+    if(!idAtencion) return null;
+
+    const data = await auroPlanApiGet(
+        'buscarPlanPorAtencion',
+        { id_atencion: idAtencion }
+    );
+
+    return data || null;
+}
+
+async function guardarPlanClinicoDesdeSheets(){
+
+    const idAtencionVisible = auroPlanObtenerIdAtencionActivaSeguro();
+    const idAtencionInterna = String(window.planState?.atencionActual || '').trim();
+
+    if(
+        idAtencionVisible &&
+        idAtencionInterna &&
+        idAtencionVisible !== idAtencionInterna
+    ){
+        window.planState.atencionActual = idAtencionVisible;
+    }
+
+    const data = auroPlanPrepararDatosSheets();
+
+    if(!data.id_atencion){
+        console.warn('Plan no guardado: no existe id_atencion actual.');
+        return {
+            success: false,
+            message: 'No existe id_atencion actual para guardar el Plan.'
+        };
+    }
+    // IASYN2: blindaje de identidad antes de crear o editar un plan.
+    // La atención visible es la autoridad; un estado anterior nunca debe
+    // provocar escritura sobre otra atención mientras cambia la pantalla.
+    if(!idAtencionVisible || String(data.id_atencion).trim() !== idAtencionVisible){
+        return {success:false,message:'Atención activa no verificada. No se guardó el Plan.'};
+    }
+
+    const existente = await buscarPlanClinicoPorAtencionDesdeSheets(
+        data.id_atencion
+    );
+
+    if(auroPlanObtenerIdAtencionActivaSeguro() !== data.id_atencion){
+        return {success:false,message:'La atención cambió durante la consulta. No se guardó el Plan.'};
+    }
+
+    if(existente && existente.success === false){
+        return {success:false,message:existente.message || 'No fue posible verificar el Plan existente.'};
+    }
+
+    const idAtencionExistente = String(existente?.id_atencion || '').trim();
+    const idPacienteExistente = String(existente?.id_paciente || '').trim();
+    if(idAtencionExistente && idAtencionExistente !== String(data.id_atencion).trim()){
+        return {success:false,message:'El Plan recuperado pertenece a otra atención. Guardado bloqueado.'};
+    }
+    if(idPacienteExistente && data.id_paciente && idPacienteExistente !== String(data.id_paciente).trim()){
+        return {success:false,message:'El Plan recuperado pertenece a otro paciente. Guardado bloqueado.'};
+    }
+
+    let resultado;
+
+    if(existente && existente.id_plan){
+        data.id_plan = existente.id_plan;
+        resultado = await auroPlanApiPostConControlClinico('editarPlanClinico', data);
+    }else{
+        resultado = await auroPlanApiPostConControlClinico('guardarPlanClinico', data);
+    }
+
+    if(resultado && resultado.success !== false){
+        guardarPlanTemporal();
+    }
+
+    return resultado;
+}
+
+
+function auroPlanTextoAOrdenes(texto){
+    texto = String(texto || '').trim();
+    if(!texto) return [];
+
+    return texto.split(/\n+/).map(linea => {
+        let limpia = String(linea || '').replace(/^\s*\d+\.\s*/, '').trim();
+        const partes = limpia.split(' - ').map(x => x.trim()).filter(Boolean);
+
+        const orden = partes[0] || limpia;
+        let cat = '';
+        let obs = '';
+
+        partes.slice(1).forEach(p => {
+            if(/^Categoría:/i.test(p)) cat = p.replace(/^Categoría:\s*/i, '').trim();
+            else if(/^Observación:/i.test(p)) obs = p.replace(/^Observación:\s*/i, '').trim();
+        });
+
+        return {
+            orden: orden,
+            cat: cat || 'OTROS',
+            obs: obs
+        };
+    }).filter(o => o.orden);
+}
+
+function auroPlanTextoAInterconsultas(texto){
+    texto = String(texto || '').trim();
+    if(!texto) return [];
+
+    const bloques = texto
+        .split(/\n(?=\s*\d+\.\s*)/)
+        .map(x => x.trim())
+        .filter(Boolean);
+
+    const origen = bloques.length > 1 ? bloques : [texto];
+
+    return origen.map(bloque => {
+        const limpio = bloque.replace(/^\s*\d+\.\s*/, '').trim();
+        const partes = limpio
+            .split(/\s+-\s+|\n+/)
+            .map(x => x.trim())
+            .filter(Boolean);
+
+        const item = {
+            tipo: '',
+            especialidad: '',
+            prioridad: 'Normal',
+            profesional: '',
+            estado: 'Pendiente',
+            motivo: '',
+            observaciones: ''
+        };
+
+        partes.forEach((parte, index) => {
+            if(/^Tipo:/i.test(parte)){
+                item.tipo = parte.replace(/^Tipo:\s*/i, '').trim();
+            }else if(/^Especialidad:/i.test(parte)){
+                item.especialidad = parte.replace(/^Especialidad:\s*/i, '').trim();
+            }else if(/^Prioridad:/i.test(parte)){
+                item.prioridad = parte.replace(/^Prioridad:\s*/i, '').trim() || 'Normal';
+            }else if(/^Profesional:/i.test(parte)){
+                item.profesional = parte.replace(/^Profesional:\s*/i, '').trim();
+            }else if(/^Estado:/i.test(parte)){
+                item.estado = parte.replace(/^Estado:\s*/i, '').trim() || 'Pendiente';
+            }else if(/^Motivo:/i.test(parte)){
+                item.motivo = parte.replace(/^Motivo:\s*/i, '').trim();
+            }else if(/^Observaciones:/i.test(parte)){
+                item.observaciones = parte.replace(/^Observaciones:\s*/i, '').trim();
+            }else if(index === 0 && parte){
+                item.especialidad = parte;
+            }
+        });
+
+        return item;
+    }).filter(item =>
+        item.tipo ||
+        item.especialidad ||
+        item.profesional ||
+        item.motivo ||
+        item.observaciones
+    );
+}
+
+function auroPlanCargarEvaluacionesDesdeTexto(texto){
+    texto = String(texto || '').trim();
+
+    limpiarEvaluacionesCamposPlan();
+
+    if(!texto) return;
+
+    AURO_PLAN_EVALUACIONES.forEach(item => {
+        const el = document.getElementById(item.id);
+        if(el && texto.includes(item.texto)){
+            el.checked = true;
+        }
+    });
+
+    auroPlanSetValue('hcEvaluacionesResumen', texto);
+}
+
+function auroPlanCargarEvaluacionesDesdeValor(valor){
+    limpiarEvaluacionesCamposPlan();
+
+    const data = auroPlanParseJSONSeguro(valor, null);
+
+    if(Array.isArray(data)){
+        const ids = new Set();
+        const textos = new Set();
+
+        data.forEach(item => {
+            if(typeof item === 'string'){
+                textos.add(item);
+                return;
+            }
+
+            if(item && item.seleccionado !== false){
+                if(item.id) ids.add(String(item.id));
+                if(item.texto) textos.add(String(item.texto));
+            }
+        });
+
+        AURO_PLAN_EVALUACIONES.forEach(item => {
+            const el = document.getElementById(item.id);
+            if(el){
+                el.checked = ids.has(item.id) || textos.has(item.texto);
+            }
+        });
+
+        recopilarEvaluacionesPlan();
+        return;
+    }
+
+    if(data && typeof data === 'object'){
+        AURO_PLAN_EVALUACIONES.forEach(item => {
+            const el = document.getElementById(item.id);
+            if(el) el.checked = !!data[item.id];
+        });
+
+        recopilarEvaluacionesPlan();
+        return;
+    }
+
+    auroPlanCargarEvaluacionesDesdeTexto(valor);
+}
+
+function auroPlanEstadoSeguro(valor){
+    valor = String(valor || '').trim();
+    return valor || 'Control';
+}
+
+async function cargarPlanClinicoDesdeSheets(idAtencion){
+
+    idAtencion = String(
+        idAtencion ||
+        auroPlanObtenerIdAtencionActivaSeguro() ||
+        window.planState?.atencionActual ||
+        ''
+    ).trim();
+
+    if(!idAtencion) return null;
+
+    window.__auroPlanCargasActivas = window.__auroPlanCargasActivas || {};
+
+    if(window.__auroPlanCargasActivas[idAtencion]){
+        return window.__auroPlanCargasActivas[idAtencion];
+    }
+
+    const promesaCarga = (async function(){
+
+    const plan = await buscarPlanClinicoPorAtencionDesdeSheets(idAtencion);
+
+    const idAtencionActual = auroPlanObtenerIdAtencionActivaSeguro();
+    const idAtencionRenderizada = String(
+        window.__auroPlanAtencionRenderizada ||
+        window.planState?.atencionActual ||
+        ''
+    ).trim();
+
+    if(
+        (idAtencionRenderizada && idAtencionRenderizada !== idAtencion) ||
+        (idAtencionActual && idAtencionActual !== idAtencion)
+    ){
+        console.warn(
+            'IASYN PLAN: se descartó una respuesta tardía de otra atención.',
+            {
+                solicitada: idAtencion,
+                actual: idAtencionActual,
+                renderizada: idAtencionRenderizada
+            }
+        );
+        return null;
+    }
+
+    /*
+      IASYN FIX:
+      Si la consulta no tiene Plan guardado en planes_clinicos,
+      se deja el Plan limpio. No se arrastra información de otra consulta.
+    */
+    if(!plan || !plan.id_plan){
+        limpiarPlanTemporal();
+        window.planState.atencionActual = idAtencion;
+        window.planState.cache[idAtencion] = {
+            medicamentos: [],
+            ordenes: [],
+            interconsultas: [],
+            plan: '',
+            indicaciones: '',
+            ordenesTexto: '',
+            interconsultaTexto: '',
+            evaluaciones: '',
+            evaluacionesChecks: {},
+            receta: ''
+        };
+        auroPlanRefrescarVistas();
+        console.log('IASYN PLAN: atención sin plan guardado, pantalla limpia:', idAtencion);
+        return null;
+    }
+
+    window.planState = window.planState || {
+        atencionActual: idAtencion,
+        cache: {}
+    };
+
+    window.planState.atencionActual = idAtencion;
+
+    function valorPlan(){
+        for(const k of arguments){
+            if(plan[k] !== undefined && plan[k] !== null && String(plan[k]).trim() !== ''){
+                return plan[k];
+            }
+        }
+        return '';
+    }
+
+    try{
+        window.medicamentosPlanSeleccionados =
+            JSON.parse(valorPlan('medicamentos_plan','medicamentos','medicamentosPlan') || '[]');
+    }catch(e){
+        window.medicamentosPlanSeleccionados = [];
+    }
+
+    const ordenesValor = valorPlan('ordenes_medicas','ordenes','examenes_solicitados');
+    const ordenesJSON = auroPlanParseJSONSeguro(ordenesValor, null);
+
+    window.ordenesMedicasPlanSeleccionadas = auroPlanOrdenesUnicas(
+        Array.isArray(ordenesJSON)
+            ? ordenesJSON
+            : auroPlanTextoAOrdenes(ordenesValor)
+    );
+
+    const interconsultaValor = valorPlan(
+        'interconsulta',
+        'interconsultas',
+        'interconsulta_plan'
+    );
+
+    const interconsultaJSON = auroPlanParseJSONSeguro(
+        interconsultaValor,
+        null
+    );
+
+    window.interconsultasPlanSeleccionadas = auroPlanInterconsultasUnicas(
+        Array.isArray(interconsultaJSON)
+            ? interconsultaJSON
+            : auroPlanTextoAInterconsultas(interconsultaValor)
+    );
+
+    auroPlanRestaurarFormularioInterconsultaDesdeLista();
+
+    auroPlanSetValue('hcPlanTratamiento',
+        auroPlanValorClinicoATexto(
+            valorPlan('plan_terapeutico','planTratamiento','plan_tratamiento')
+        )
+    );
+
+    auroPlanSetValue('hcRecetaMedicamentos',
+        auroPlanValorClinicoATexto(
+            valorPlan('receta_medica','receta','recetaMedicamentos')
+        )
+    );
+
+    auroPlanSetValue('hcExamenesSolicitados', '');
+    auroPlanSetValue('hcInterconsultaResumen', '');
+
+    const evaluacionesValor = valorPlan(
+        'evaluaciones_plan',
+        'evaluaciones',
+        'evaluacion_plan'
+    );
+
+    auroPlanCargarEvaluacionesDesdeValor(evaluacionesValor);
+
+    auroPlanSetValue('hcIndicacionesPaciente',
+        auroPlanValorClinicoATexto(
+            valorPlan('indicaciones_paciente','indicaciones','indicacionesPaciente')
+        )
+    );
+
+    auroPlanSetValue('hcControl',
+        valorPlan('proximo_control','control','proximoControl')
+    );
+
+    auroPlanSetValue('hcEstadoHistoria',
+        auroPlanEstadoSeguro(valorPlan('estado_plan','estado','estadoHistoria'))
+    );
+
+    renderMedicamentosPlanTabla();
+    renderOrdenesMedicasTabla();
+    renderInterconsultasTabla();
+
+    auroPlanRestaurarFormularioInterconsultaDesdeLista();
+    recopilarOrdenesMedicasPlan();
+    recopilarInterconsultaPlan();
+    recopilarEvaluacionesPlan();
+
+    sincronizarPlanConReceta();
+    guardarPlanTemporal();
+
+    console.log('IASYN PLAN: plan cargado desde Sheets para atención:', idAtencion, plan);
+
+    return plan;
+
+    })();
+
+    window.__auroPlanCargasActivas[idAtencion] = promesaCarga;
+
+    try{
+        return await promesaCarga;
+    }finally{
+        delete window.__auroPlanCargasActivas[idAtencion];
+    }
+}
+
+window.editarMedicamentoPlan = editarMedicamentoPlan;
+window.cancelarEdicionMedicamentoPlan = cancelarEdicionMedicamentoPlan;
+window.auroPlanNombreViaCompleta = auroPlanNombreViaCompleta;
+
+window.guardarPlanClinicoDesdeSheets = guardarPlanClinicoDesdeSheets;
+window.buscarPlanClinicoPorAtencionDesdeSheets = buscarPlanClinicoPorAtencionDesdeSheets;
+window.cargarPlanClinicoDesdeSheets = cargarPlanClinicoDesdeSheets;
+
+
+/* ============================================================
+   INICIO SEGURO
+============================================================ */
+
+document.addEventListener('DOMContentLoaded', function(){
+    inicializarPlan();
+    auroPlanInstalarAyudasMedicamentos();
+
+    /* Carga no bloqueante: si backend/hoja aún no existen, conserva catálogo local. */
+    iasynPlanCargarCatalogoMedicamentosBd();
+});
+
+/* ============================================================
+   AUTO-CARGA AL CAMBIAR CONSULTA / ATENCIÓN
+   IASYN FIX QUIRÚRGICO v22:
+   - Plan escucha directamente los eventos maestros de Atenciones.
+   - La nueva atención se considera fuente autoritativa inmediata.
+   - Limpia el Plan anterior antes de cualquier carga asíncrona.
+   - Evita depender de que el usuario pulse el botón Ver.============================================================ */
+(function instalarSincronizacionInmediataPlanPorAtencion(){
+    if(window.__auroPlanEventosAtencionV22Instalados) return;
+    window.__auroPlanEventosAtencionV22Instalados = true;
+
+    async function aplicarContextoPlanDesdeEvento(evento){
+        const detalle = evento && evento.detail && typeof evento.detail === 'object'
+            ? evento.detail
+            : {};
+
+        const idAtencion = String(
+            detalle.id_atencion ||
+            detalle.idAtencion ||
+            ''
+        ).trim();
+
+        if(!idAtencion) return;
+
+        window.planState = window.planState || { atencionActual:'', cache:{} };
+
+        /* La atención emitida por Atenciones manda sobre cualquier estado previo. */
+        window.planState.atencionActual = idAtencion;
+
+        /* Fuerza a cambiarPlanPorAtencion a reconocer el cambio real de pantalla. */
+        if(String(window.__auroPlanAtencionRenderizada || '').trim() !== idAtencion){
+            limpiarPlanTemporal();
+        }
+
+        await cambiarPlanPorAtencion(idAtencion);
+
+        if(typeof window.auroHistoriaRefrescarEstadoConsultaActiva === 'function'){
+            setTimeout(function(){
+                try{ window.auroHistoriaRefrescarEstadoConsultaActiva('hc_plan'); }catch(e){}
+            }, 0);
+        }
+    }
+
+    window.addEventListener('aurosanax:atencion-iniciada', aplicarContextoPlanDesdeEvento);
+    window.addEventListener('aurosanax:atencion-seleccionada', aplicarContextoPlanDesdeEvento);
+    window.addEventListener('aurosanax:atencion-cambiada', aplicarContextoPlanDesdeEvento);
+})();
+
+/* ============================================================
+   ESTADO VISUAL BOTÓN GUARDAR PLAN
+   IASYN FIX:
+   Esta función queda como dueña del botón Actualizar Plan Clínico.
+   Evita doble clic y actualiza el panel premium al finalizar.
+============================================================ */
+window.auroPlanGuardando = false;
+
+function auroPlanUXFechaHoraAhora(){
+    try{
+        return new Date().toLocaleString('es-EC', {
+            year:'numeric',
+            month:'2-digit',
+            day:'2-digit',
+            hour:'2-digit',
+            minute:'2-digit',
+            hour12:false
+        });
+    }catch(e){
+        return new Date().toLocaleString('es-EC', {
+            hour12:false
+        });
+    }
+}
+
+function auroPlanUXEscape(txt){
+    return String(txt || '').replace(/[&<>'"]/g, c => ({
+        '&':'&amp;',
+        '<':'&lt;',
+        '>':'&gt;',
+        "'":'&#39;',
+        '"':'&quot;'
+    }[c]));
+}
+
+function auroPlanUXAtencionResumen(){
+    try{
+        if(typeof window.getAtencionActiva === 'function'){
+            const a = window.getAtencionActiva();
+            if(a){
+                return {
+                    id: String(a.id_atencion || ''),
+                    consulta: a.numero_consulta ? ('#' + a.numero_consulta) : 'activa'
+                };
+            }
+        }
+    }catch(e){}
+
+    const id = auroPlanObtenerIdAtencionActivaSeguro();
+    return {
+        id: id,
+        consulta: id ? 'activa' : 'sin atención activa'
+    };
+}
+
+function auroPlanUXGuardarFechaLocal(idAtencion, fechaHora){
+    try{
+        if(!idAtencion) return;
+        const key = 'iasyn_plan_ultimas_actualizaciones_v1';
+        const raw = localStorage.getItem(key);
+        const mapa = raw ? JSON.parse(raw) : {};
+        mapa[idAtencion] = fechaHora;
+        localStorage.setItem(key, JSON.stringify(mapa));
+    }catch(e){
+        console.warn('IASYN PLAN UX: no se pudo guardar fecha local del Plan.', e);
+    }
+}
+
+function auroPlanUXRecetaTexto(idAtencion){
+    try{
+        const raw = localStorage.getItem('aurosanax_recetas_emitidas_v1');
+        const arr = raw ? JSON.parse(raw) : [];
+        if(!Array.isArray(arr)) return 'Receta pendiente';
+
+        const recetas = arr
+            .filter(r => String(r.id_atencion || '').trim() === String(idAtencion || '').trim())
+            .sort((a,b) => String(b.actualizado_en || b.creado_en || b.fecha_receta || '').localeCompare(String(a.actualizado_en || a.creado_en || a.fecha_receta || '')));
+
+        const r = recetas[0];
+        if(!r) return 'Receta pendiente';
+
+        const f = r.actualizado_en || r.creado_en || r.fecha_receta || '';
+        return 'Receta guardada: ' + String(f);
+    }catch(e){
+        return 'Receta pendiente';
+    }
+}
+
+function auroPlanUXPintarPanelPlanGuardado(fechaHora){
+    const box = document.getElementById('auroPlanMiniStatus');
+    if(!box) return;
+
+    const atn = auroPlanUXAtencionResumen();
+    const recetaTexto = auroPlanUXRecetaTexto(atn.id);
+
+    box.innerHTML =
+        '<span><i class="bi bi-journal-medical"></i> Consulta ' + auroPlanUXEscape(atn.consulta) + '</span>' +
+        '<span class="ok"><i class="bi bi-list-check"></i> Plan actualizado: ' + auroPlanUXEscape(fechaHora) + '</span>' +
+        '<span class="' + (recetaTexto.includes('guardada') ? 'ok' : 'muted') + '"><i class="bi bi-capsule"></i> ' + auroPlanUXEscape(recetaTexto) + '</span>';
+}
+
+async function guardarPlanClinicoConUX(btn){
+
+    if(window.auroPlanGuardando){
+        return {success:false,message:'Guardado en progreso'};
+    }
+
+    window.auroPlanGuardando = true;
+
+    const textoOriginal = btn ? btn.innerHTML : '';
+
+    try{
+        if(btn){
+            btn.disabled = true;
+            btn.style.opacity = '0.65';
+            btn.style.cursor = 'not-allowed';
+            btn.innerHTML = '<i class="bi bi-hourglass-split me-1"></i> Guardando plan...';
+        }
+
+        const r = await guardarPlanClinicoDesdeSheets();
+
+        if(r && r.success === false){
+            throw new Error(r.message || 'No se pudo guardar el Plan clínico.');
+        }
+
+        const atn = auroPlanUXAtencionResumen();
+        const fechaHora = auroPlanUXFechaHoraAhora();
+
+        auroPlanUXGuardarFechaLocal(atn.id, fechaHora);
+        auroPlanUXPintarPanelPlanGuardado(fechaHora);
+
+        if(typeof window.auroPlanActualizarMiniStatus === 'function'){
+            setTimeout(function(){
+                auroPlanUXPintarPanelPlanGuardado(fechaHora);
+            }, 300);
+        }
+
+        if(typeof window.auroPlanMostrarEstadoGuardado === 'function'){
+            window.auroPlanMostrarEstadoGuardado(
+                'Plan clínico guardado correctamente. Última actualización del Plan: ' + fechaHora + '.'
+            );
+        }
+
+        if(btn){
+            btn.innerHTML = '<i class="bi bi-check-circle me-1"></i> Plan actualizado ✓';
+            setTimeout(function(){
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+                btn.innerHTML = textoOriginal || '<i class="bi bi-list-check me-1"></i> Actualizar Plan Clínico';
+            },2500);
+        }
+
+        return r || {success:true};
+
+    }catch(e){
+
+        console.error('IASYN PLAN: error guardando plan clínico.', e);
+        alert('No se pudo guardar el Plan clínico.\n\n' + (e && e.message ? e.message : 'Revise el control de correcciones.'));
+
+        if(btn){
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.style.cursor = 'pointer';
+            btn.innerHTML = textoOriginal || '<i class="bi bi-list-check me-1"></i> Actualizar Plan Clínico';
+        }
+
+        return {success:false,message:e.message || String(e)};
+
+    }finally{
+        setTimeout(()=>window.auroPlanGuardando=false,500);
+    }
+}
+
+window.guardarPlanClinicoConUX = guardarPlanClinicoConUX;
+window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
+
+/* ============================================================
+   IASYN PLAN - CORRECCIÓN NAVEGACIÓN MISMA ATENCIÓN
+   - No limpia el Plan al volver a la misma consulta
+   - No recarga Sheets sobre cambios temporales de la misma atención
+   - Verifica la atención activa antes de una carga diferida============================================================ */
+
+/* ============================================================
+   IASYN PLAN - FIX SINCRONIZACIÓN ID_ATENCION
+   - Fuente oficial: getAtencionActiva()
+   - planState se usa como cache, no como autoridad clínica
+   - Bloquea mezcla entre consultas
+   - Descarta respuestas tardías
+   - No modifica JSON, Apps Script ni estructura de datos
+============================================================ */
+
+/* ============================================================
+   IASYN PLAN - CORRECCIÓN DEFINITIVA CAMBIO DE CONSULTA
+   - Diferencia atención interna de atención realmente renderizada
+   - Evita guardar datos viejos bajo una atención nueva
+   - Limpia medicamentos y campos de receta al cambiar consulta
+   - Conserva cache temporal únicamente por id_atencion correcto
+============================================================ */
+
+/* ============================================================
+   IASYN PLAN - RESTABLECIMIENTO AISLADO Y SEGURO v25
+   BASE: PLAN 22 ESTABLE
+   REGLAS:
+   - No reemplaza, envuelve ni modifica Aplicar plan.
+   - No reemplaza, envuelve ni modifica Actualizar plan clínico.
+   - No realiza llamadas automáticas a Sheets ni Apps Script.
+   - Limpia solo el estado visual/temporal de la atención activa.
+   - El guardado se confirma exclusivamente con el botón original.
+   - Bloquea el restablecimiento en atenciones finalizadas.
+============================================================ */
+
+(function auroPlanModuloRestablecimientoAislado(){
+    'use strict';
+
+    if(window.__AURO_PLAN_RESET_AISLADO_V25__) return;
+    window.__AURO_PLAN_RESET_AISLADO_V25__ = true;
+
+    function clonarSeguro(valor){
+        try{
+            return JSON.parse(JSON.stringify(valor));
+        }catch(e){
+            return valor;
+        }
+    }
+
+    function obtenerAtencionActivaCompleta(){
+        try{
+            if(typeof window.getAtencionActiva === 'function'){
+                return window.getAtencionActiva() || null;
+            }
+        }catch(e){}
+        return null;
+    }
+
+    function obtenerIdAtencionActiva(){
+        const atencion = obtenerAtencionActivaCompleta();
+        return String(
+            atencion?.id_atencion ||
+            (typeof window.auroPlanObtenerIdAtencionActivaSeguro === 'function'
+                ? window.auroPlanObtenerIdAtencionActivaSeguro()
+                : '') ||
+            window.planState?.atencionActual ||
+            ''
+        ).trim();
+    }
+
+    function atencionEstaFinalizada(){
+        const atencion = obtenerAtencionActivaCompleta();
+        const estado = normalizarTextoPlan(
+            atencion?.estado_atencion ||
+            atencion?.estado ||
+            ''
+        );
+
+        return [
+            'finalizada',
+            'finalizado',
+            'cerrada',
+            'cerrado',
+            'completada',
+            'completado'
+        ].includes(estado);
+    }
+
+    function validarContexto(){
+        const idActivo = obtenerIdAtencionActiva();
+        const idInterno = String(window.planState?.atencionActual || '').trim();
+        const idVisible = String(window.__auroPlanAtencionRenderizada || '').trim();
+
+        if(!idActivo){
+            return {ok:false, mensaje:'No existe una atención activa.'};
+        }
+
+        if(idInterno && idInterno !== idActivo){
+            return {ok:false, mensaje:'El Plan interno pertenece a otra atención.'};
+        }
+
+        if(idVisible && idVisible !== idActivo){
+            return {ok:false, mensaje:'El Plan visible pertenece a otra atención.'};
+        }
+
+        if(atencionEstaFinalizada()){
+            return {
+                ok:false,
+                finalizada:true,
+                mensaje:'Esta atención está finalizada. El Plan no puede restablecerse.'
+            };
+        }
+
+        return {ok:true, idAtencion:idActivo};
+    }
+
+    function capturarEstado(){
+        return {
+            medicamentos:clonarSeguro(window.medicamentosPlanSeleccionados || []),
+            ordenes:clonarSeguro(window.ordenesMedicasPlanSeleccionadas || []),
+            interconsultas:clonarSeguro(window.interconsultasPlanSeleccionadas || []),
+            plan:auroPlanGetValue('hcPlanTratamiento'),
+            indicaciones:auroPlanGetValue('hcIndicacionesPaciente'),
+            receta:auroPlanGetValue('hcRecetaMedicamentos'),
+            ordenesTexto:auroPlanGetValue('hcExamenesSolicitados'),
+            interconsultaTexto:auroPlanGetValue('hcInterconsultaResumen'),
+            evaluaciones:auroPlanGetValue('hcEvaluacionesResumen'),
+            evaluacionesChecks:typeof auroPlanCapturarEvaluaciones === 'function'
+                ? auroPlanCapturarEvaluaciones()
+                : {},
+            control:auroPlanGetValue('hcControl'),
+            estadoHistoria:auroPlanGetValue('hcEstadoHistoria')
+        };
+    }
+
+    function estadoTieneContenido(data){
+        return !!(
+            (data.medicamentos || []).length ||
+            (data.ordenes || []).length ||
+            (data.interconsultas || []).length ||
+            String(data.plan || '').trim() ||
+            String(data.indicaciones || '').trim() ||
+            String(data.receta || '').trim() ||
+            String(data.ordenesTexto || '').trim() ||
+            String(data.interconsultaTexto || '').trim() ||
+            String(data.evaluaciones || '').trim() ||
+            String(data.control || '').trim() ||
+            Object.values(data.evaluacionesChecks || {}).some(Boolean)
+        );
+    }
+
+    function limpiarSoloPantallaYCache(idAtencion){
+        window.auroPlanMedicamentoEditandoIndice = null;
+        window.medicamentosPlanSeleccionados = [];
+        window.ordenesMedicasPlanSeleccionadas = [];
+        window.interconsultasPlanSeleccionadas = [];
+
+        [
+            'hcPlanTratamiento',
+            'hcIndicacionesPaciente',
+            'hcRecetaMedicamentos',
+            'hcExamenesSolicitados',
+            'hcInterconsultaResumen',
+            'hcEvaluacionesResumen',
+            'hcControl'
+        ].forEach(function(id){ auroPlanSetValue(id, ''); });
+
+        if(typeof limpiarFormularioMedicamento === 'function') limpiarFormularioMedicamento();
+        if(typeof limpiarFormularioOrdenMedica === 'function') limpiarFormularioOrdenMedica();
+        if(typeof limpiarFormularioInterconsulta === 'function') limpiarFormularioInterconsulta();
+        if(typeof limpiarEvaluacionesCamposPlan === 'function') limpiarEvaluacionesCamposPlan();
+
+        /* Solo limpia la preparación proveniente del Plan; no elimina una receta emitida. */
+        auroPlanSetValue('recMedicamento', '');
+        auroPlanSetValue('recIndicaciones', '');
+        auroPlanSetValue('recRecomendaciones', '');
+
+        window.planState = window.planState || {atencionActual:idAtencion, cache:{}};
+        window.planState.atencionActual = idAtencion;
+        window.planState.cache = window.planState.cache || {};
+        window.planState.cache[idAtencion] = {
+            medicamentos:[],
+            ordenes:[],
+            interconsultas:[],
+            plan:'',
+            indicaciones:'',
+            ordenesTexto:'',
+            interconsultaTexto:'',
+            evaluaciones:'',
+            evaluacionesChecks:{},
+            receta:''
+        };
+
+        if(typeof auroPlanRefrescarVistas === 'function') auroPlanRefrescarVistas();
+        if(typeof guardarPlanTemporal === 'function') guardarPlanTemporal();
+    }
+
+    function restaurarEstado(idAtencion, data){
+        window.auroPlanMedicamentoEditandoIndice = null;
+        window.medicamentosPlanSeleccionados = clonarSeguro(data.medicamentos || []);
+        window.ordenesMedicasPlanSeleccionadas = clonarSeguro(data.ordenes || []);
+        window.interconsultasPlanSeleccionadas = clonarSeguro(data.interconsultas || []);
+
+        auroPlanSetValue('hcPlanTratamiento', data.plan || '');
+        auroPlanSetValue('hcIndicacionesPaciente', auroPlanValorClinicoATexto(data.indicaciones || ''));
+        auroPlanSetValue('hcRecetaMedicamentos', auroPlanValorClinicoATexto(data.receta || ''));
+        auroPlanSetValue('hcExamenesSolicitados', data.ordenesTexto || '');
+        auroPlanSetValue('hcInterconsultaResumen', data.interconsultaTexto || '');
+        auroPlanSetValue('hcEvaluacionesResumen', data.evaluaciones || '');
+        auroPlanSetValue('hcControl', data.control || '');
+        auroPlanSetValue('hcEstadoHistoria', data.estadoHistoria || 'Activo');
+
+        if(typeof auroPlanRestaurarEvaluaciones === 'function'){
+            auroPlanRestaurarEvaluaciones(data.evaluacionesChecks || {});
+        }
+
+        window.planState = window.planState || {atencionActual:idAtencion, cache:{}};
+        window.planState.atencionActual = idAtencion;
+        window.planState.cache = window.planState.cache || {};
+        window.planState.cache[idAtencion] = {
+            medicamentos:clonarSeguro(data.medicamentos || []),
+            ordenes:clonarSeguro(data.ordenes || []),
+            interconsultas:clonarSeguro(data.interconsultas || []),
+            plan:data.plan || '',
+            indicaciones:data.indicaciones || '',
+            ordenesTexto:data.ordenesTexto || '',
+            interconsultaTexto:data.interconsultaTexto || '',
+            evaluaciones:data.evaluaciones || '',
+            evaluacionesChecks:clonarSeguro(data.evaluacionesChecks || {}),
+            receta:data.receta || ''
+        };
+
+        if(typeof auroPlanRefrescarVistas === 'function') auroPlanRefrescarVistas();
+        if(typeof sincronizarPlanConReceta === 'function') sincronizarPlanConReceta();
+        if(typeof guardarPlanTemporal === 'function') guardarPlanTemporal();
+    }
+
+    function cerrarModal(valor){
+        document.getElementById('auroPlanResetModalV25')?.remove();
+        const resolver = window.__auroPlanResetResolverV25;
+        window.__auroPlanResetResolverV25 = null;
+        if(typeof resolver === 'function') resolver(valor);
+    }
+
+    function confirmarLimpieza(idAtencion){
+        return new Promise(function(resolve){
+            document.getElementById('auroPlanResetModalV25')?.remove();
+            window.__auroPlanResetResolverV25 = resolve;
+
+            const modal = document.createElement('div');
+            modal.id = 'auroPlanResetModalV25';
+            modal.className = 'auro-plan-reset-modal-v25';
+            modal.innerHTML = `
+              <div class="auro-plan-reset-panel-v25" role="dialog" aria-modal="true">
+                <h5>Limpiar plan clínico</h5>
+                <p>Se limpiará solo el Plan de esta atención.</p>
+                <div class="auro-plan-reset-warning-v25">
+                  La receta guardada no se eliminará; deberá actualizarla manualmente.
+                </div>
+                <small>Atención protegida: ${escapeHtmlPlan(idAtencion)}</small>
+                <div class="auro-plan-reset-buttons-v25">
+                  <button type="button" class="btn btn-outline-secondary" data-action="cancelar">Cancelar</button>
+                  <button type="button" class="btn btn-danger" data-action="limpiar">
+                    <i class="bi bi-trash3 me-1"></i> Limpiar plan
+                  </button>
+                </div>
+              </div>`;
+
+            document.body.appendChild(modal);
+            modal.querySelector('[data-action="cancelar"]')?.addEventListener('click', function(){ cerrarModal('cancelar'); });
+            modal.querySelector('[data-action="limpiar"]')?.addEventListener('click', function(){ cerrarModal('limpiar'); });
+            modal.addEventListener('click', function(e){ if(e.target === modal) cerrarModal('cancelar'); });
+        });
+    }
+
+    async function restablecerPlan(){
+        const validacion = validarContexto();
+        if(!validacion.ok){
+            alert(validacion.mensaje);
+            actualizarEstadoBoton();
+            return;
+        }
+
+        const anterior = capturarEstado();
+        if(!estadoTieneContenido(anterior)){
+            alert('El Plan de esta atención ya está vacío.');
+            return;
+        }
+
+        const decision = await confirmarLimpieza(validacion.idAtencion);
+        if(decision !== 'limpiar') return;
+
+        const revalidacion = validarContexto();
+        if(!revalidacion.ok || revalidacion.idAtencion !== validacion.idAtencion){
+            alert('La atención activa cambió. No se realizó la limpieza.');
+            return;
+        }
+
+        window.__auroPlanUltimaLimpiezaV25 = {
+            idAtencion:validacion.idAtencion,
+            data:clonarSeguro(anterior)
+        };
+
+        limpiarSoloPantallaYCache(validacion.idAtencion);        actualizarEstadoBoton();
+    }
+
+    function deshacerLimpieza(){
+        const respaldo = window.__auroPlanUltimaLimpiezaV25;
+        const validacion = validarContexto();
+
+        if(!respaldo || !validacion.ok || respaldo.idAtencion !== validacion.idAtencion){
+            alert('No existe una limpieza disponible para deshacer en esta atención.');
+            actualizarEstadoBoton();
+            return;
+        }
+
+        restaurarEstado(validacion.idAtencion, clonarSeguro(respaldo.data));
+        window.__auroPlanUltimaLimpiezaV25 = null;
+        actualizarEstadoBoton();
+    }
+
+    function buscarBotonActualizarOriginal(){
+        return Array.from(document.querySelectorAll('#hc_plan button, button')).find(function(btn){
+            const onclick = String(btn.getAttribute('onclick') || '');
+            const texto = normalizarTextoPlan(btn.textContent || '');
+            return onclick.includes('guardarPlanClinicoConUX') ||
+                   onclick.includes('guardarPlanClinicoDesdeSheets') ||
+                   texto.includes('actualizar plan clinico');
+        }) || null;
+    }
+
+    function actualizarEstadoBoton(){
+        const reset = document.getElementById('auroPlanBtnRestablecerV25');
+        const undo = document.getElementById('auroPlanBtnDeshacerV25');
+        if(!reset || !undo) return;
+
+        const finalizada = atencionEstaFinalizada();
+        reset.disabled = finalizada || !obtenerIdAtencionActiva();
+        reset.title = finalizada
+            ? 'No disponible en atenciones finalizadas'
+            : 'Limpiar únicamente el Plan de la atención activa';
+
+        const respaldo = window.__auroPlanUltimaLimpiezaV25;
+        undo.classList.toggle(
+            'd-none',
+            !respaldo || respaldo.idAtencion !== obtenerIdAtencionActiva() || finalizada
+        );
+    }
+
+    function instalarEstilos(){
+        if(document.getElementById('auroPlanResetStylesV25')) return;
+        const style = document.createElement('style');
+        style.id = 'auroPlanResetStylesV25';
+        style.textContent = `
+          .auro-plan-reset-inline-v25{display:inline-flex;align-items:center;gap:8px;margin-left:8px;vertical-align:middle}
+          .auro-plan-reset-inline-v25 .btn{min-height:42px;white-space:nowrap}
+          .auro-plan-reset-modal-v25{position:fixed;inset:0;z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.58)}
+          .auro-plan-reset-panel-v25{width:min(500px,100%);background:#fff;border:1px solid #e5e7eb;border-radius:20px;padding:22px;box-shadow:0 28px 80px rgba(15,23,42,.30)}
+          .auro-plan-reset-panel-v25 h5{margin:0 0 8px;font-weight:850;color:#111827}
+          .auro-plan-reset-panel-v25 p{margin:0 0 10px;color:#475569}
+          .auro-plan-reset-warning-v25{padding:10px 12px;margin-bottom:10px;border-radius:12px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;font-size:13px}
+          .auro-plan-reset-panel-v25 small{display:block;color:#64748b;word-break:break-all}
+          .auro-plan-reset-buttons-v25{display:flex;justify-content:flex-end;gap:9px;margin-top:18px}
+          @media(max-width:768px){
+            .auro-plan-reset-inline-v25{display:flex;width:100%;margin:8px 0 0;flex-wrap:wrap}
+            .auro-plan-reset-inline-v25 .btn{flex:1 1 165px}
+            .auro-plan-reset-buttons-v25{display:grid;grid-template-columns:1fr}
+            .auro-plan-reset-buttons-v25 .btn{width:100%}
+          }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function instalarBotones(){
+        instalarEstilos();
+
+        if(document.getElementById('auroPlanResetGrupoV25')){
+            actualizarEstadoBoton();
+            return true;
+        }
+
+        const original = buscarBotonActualizarOriginal();
+        if(!original) return false;
+
+        const grupo = document.createElement('span');
+        grupo.id = 'auroPlanResetGrupoV25';
+        grupo.className = 'auro-plan-reset-inline-v25';
+
+        const reset = document.createElement('button');
+        reset.type = 'button';
+        reset.id = 'auroPlanBtnRestablecerV25';
+        reset.className = 'btn btn-outline-secondary';
+        reset.innerHTML = '<i class="bi bi-arrow-counterclockwise me-1"></i> Limpiar plan';
+        reset.addEventListener('click', restablecerPlan);
+
+        const undo = document.createElement('button');
+        undo.type = 'button';
+        undo.id = 'auroPlanBtnDeshacerV25';
+        undo.className = 'btn btn-outline-secondary d-none';
+        undo.innerHTML = '<i class="bi bi-arrow-90deg-left me-1"></i> Deshacer limpieza';
+        undo.addEventListener('click', deshacerLimpieza);
+
+        grupo.appendChild(reset);
+        grupo.appendChild(undo);
+
+        /* Inserción aditiva: el botón original no se mueve, clona, reemplaza ni envuelve. */
+        original.insertAdjacentElement('afterend', grupo);
+        actualizarEstadoBoton();
+        return true;
+    }
+
+    let intentos = 0;
+    const instalador = setInterval(function(){
+        intentos += 1;
+        if(instalarBotones() || intentos >= 40){
+            clearInterval(instalador);
+        }
+    }, 250);
+
+    /* Solo actualiza habilitación visual; no carga, guarda ni sincroniza datos. */
+    window.__auroPlanResetEstadoTimerV25 = setInterval(actualizarEstadoBoton, 1200);
+})();
+
+/* ============================================================
+   IASYN PLAN - CORRECCIÓN QUIRÚRGICA DE CARGA ESTABLE v26
+   - cambiarPlanPorAtencion espera la carga real desde Sheets.
+   - Se elimina únicamente el retraso artificial de 80 ms.
+   - Las consultas GET del Plan usan cache:no-store y parámetro temporal.
+   - Se emite aurosanax:plan-cargado al terminar la atención correcta.
+   - No modifica JSON, Apps Script, Google Sheets, medicamentos,
+     protocolos, botones, responsive, guardado ni estructura de datos.
+============================================================ */
+
+/* ============================================================
+   IASYN PLAN - RECARGA SEGURA DE ATENCIÓN FINALIZADA v27
+   - Al pulsar Ver sobre una atención finalizada, recarga el Plan desde Sheets
+     aunque el id_atencion coincida con la atención ya renderizada.
+   - Conserva el comportamiento anterior para atenciones abiertas:
+     no pierde cambios temporales al navegar entre pestañas.
+   - No modifica JSON, Apps Script, Google Sheets, protocolos,
+     medicamentos, botones, responsive ni guardado.
+============================================================ */
+/* ============================================================
+   IASYN PLAN 30 — FIRMA DE RECETA COMO EFECTO ESPEJO V1
+   2026-09-20 · ADITIVO / ANTIRREGRESIVO
+   ------------------------------------------------------------
+   OBJETIVO EXCLUSIVO:
+   - PLAN NO firma ni reconstruye la receta por sí mismo.
+   - PLAN consulta y refleja el estado que RECETAS calcula.
+   - El clic explícito delega a window.auroRecetas.
+   - CONSULTAR ESTADO nunca crea solicitud de firma.
+   - No modifica guardado del Plan, medicamentos, órdenes,
+     interconsultas, evaluaciones, navegación, backend ni motor V2.2.
+   - Protege cambio rápido de atención mediante secuencia + id_atencion.
+   ============================================================ */
+(function(){
+    'use strict';
+
+    if(window.__iasynPlanFirmaRecetaEspejoV1Instalado) return;
+    window.__iasynPlanFirmaRecetaEspejoV1Instalado = true;
+
+    const VERSION = 'IASYN-PLAN-FIRMA-RECETA-ESPEJO-V1';
+    let secuencia = 0;
+    let estadoActual = {
+        id_atencion:'',
+        id_receta:'',
+        estado:'SIN_RECETA',
+        mensaje:'Consultando estado de la receta…',
+        documento:null,
+        error:''
+    };
+    let accionActiva = false;
+    let refrescoTimer = null;
+
+    function texto(v){ return String(v === null || v === undefined ? '' : v).trim(); }
+    function escapar(v){
+        return texto(v).replace(/[&<>'"]/g,function(c){
+            return {'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c];
+        });
+    }
+
+    function idAtencionActiva(){
+        try{
+            if(typeof window.auroPlanObtenerIdAtencionActivaSeguro === 'function'){
+                const id = texto(window.auroPlanObtenerIdAtencionActivaSeguro());
+                if(id) return id;
+            }
+        }catch(_e){}
+        try{
+            if(typeof window.getIdAtencionActiva === 'function'){
+                const id = texto(window.getIdAtencionActiva());
+                if(id) return id;
+            }
+        }catch(_e){}
+        try{
+            if(typeof window.getAtencionActiva === 'function'){
+                const a = window.getAtencionActiva();
+                const id = texto(a?.id_atencion || a?.id);
+                if(id) return id;
+            }
+        }catch(_e){}
+        return texto(window.planState?.atencionActual || window.__auroPlanAtencionRenderizada || '');
+    }
+
+    function panelVisible(){
+        const panel = document.getElementById('hc_plan');
+        if(!panel) return false;
+        return panel.offsetParent !== null || panel.classList.contains('active');
+    }
+
+    function apiRecetas(){
+        const api = window.auroRecetas;
+        if(!api || typeof api !== 'object') return null;
+        return api;
+    }
+
+    function instalarEstilos(){
+        if(document.getElementById('iasynPlanFirmaRecetaEspejoV1Styles')) return;
+        const style = document.createElement('style');
+        style.id = 'iasynPlanFirmaRecetaEspejoV1Styles';
+        style.textContent = `
+          .iasyn-plan-firma-receta-v1{margin:10px 0 14px;padding:11px 12px;border:1px solid #e5e7eb;border-radius:14px;background:#fff;box-shadow:0 3px 12px rgba(15,23,42,.05)}
+          .iasyn-plan-firma-receta-v1 .ipr-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+          .iasyn-plan-firma-receta-v1 .ipr-title{display:flex;align-items:center;gap:8px;font-weight:900;color:#111827;font-size:13px}
+          .iasyn-plan-firma-receta-v1 .ipr-sub{margin-top:3px;color:#64748b;font-size:11.5px;line-height:1.35}
+          .iasyn-plan-firma-receta-v1 .ipr-status{display:inline-flex;align-items:center;gap:6px;margin-top:7px;padding:5px 9px;border-radius:999px;font-size:11px;font-weight:900;background:#f8fafc;color:#475569;border:1px solid #e2e8f0}
+          .iasyn-plan-firma-receta-v1 .ipr-status.ok{background:#f0fdf4;color:#166534;border-color:#bbf7d0}
+          .iasyn-plan-firma-receta-v1 .ipr-status.warn{background:#fff7ed;color:#9a3412;border-color:#fed7aa}
+          .iasyn-plan-firma-receta-v1 .ipr-status.err{background:#fef2f2;color:#b91c1c;border-color:#fecaca}
+          .iasyn-plan-firma-receta-v1 .ipr-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+          .iasyn-plan-firma-receta-v1 button{min-height:36px;border-radius:10px;padding:7px 11px;font-weight:850;font-size:12px;cursor:pointer;border:1px solid #d1d5db;background:#fff;color:#334155}
+          .iasyn-plan-firma-receta-v1 button.primary{background:#8b1e5a;border-color:#8b1e5a;color:#fff}
+          .iasyn-plan-firma-receta-v1 button.success{background:#166534;border-color:#166534;color:#fff}
+          .iasyn-plan-firma-receta-v1 button:disabled{opacity:.58;cursor:not-allowed}
+          .iasyn-plan-firma-receta-v1 .ipr-refresh{width:36px;padding:7px;display:inline-grid;place-items:center}
+          @media(max-width:768px){
+            .iasyn-plan-firma-receta-v1 .ipr-head{display:block}
+            .iasyn-plan-firma-receta-v1 .ipr-actions{margin-top:9px;justify-content:stretch}
+            .iasyn-plan-firma-receta-v1 .ipr-actions button:not(.ipr-refresh){flex:1 1 190px}
+          }
+        `;
+        document.head.appendChild(style);
+    }
+
+    function asegurarCaja(){
+        instalarEstilos();
+        let box = document.getElementById('iasynPlanFirmaRecetaEspejoV1');
+        if(box) return box;
+
+        const panel = document.getElementById('hc_plan');
+        if(!panel) return null;
+
+        box = document.createElement('div');
+        box.id = 'iasynPlanFirmaRecetaEspejoV1';
+        box.className = 'iasyn-plan-firma-receta-v1';
+        box.setAttribute('data-version',VERSION);
+
+        const mini = document.getElementById('auroPlanMiniStatus');
+        if(mini && mini.parentNode){
+            mini.insertAdjacentElement('afterend',box);
+        }else{
+            const cabecera = panel.querySelector('.section-head, .card-header, h3, h4, h5');
+            if(cabecera) cabecera.insertAdjacentElement('afterend',box);
+            else panel.prepend(box);
+        }
+        return box;
+    }
+
+    function modeloVisual(){
+        const e = texto(estadoActual.estado).toUpperCase();
+        const idReceta = texto(estadoActual.id_receta);
+        let etiqueta = 'RECETA NO GUARDADA';
+        let clase = '';
+        let boton = {texto:'Guarde la receta para firmar',clase:'',accion:'',disabled:true};
+
+        if(accionActiva){
+            etiqueta = 'FIRMA EN PROCESO…';
+            clase = 'warn';
+            boton = {texto:'Firma en proceso…',clase:'',accion:'',disabled:true};
+        }else if(e === 'FIRMADA'){
+            etiqueta = 'FIRMADA ✓';
+            clase = 'ok';
+            boton = {texto:'Ver receta firmada ✓',clase:'success',accion:'VER',disabled:false};
+        }else if(e === 'NUEVA_VERSION'){
+            etiqueta = 'NUEVA VERSIÓN SIN FIRMAR';
+            clase = 'warn';
+            boton = {texto:'Firmar nueva versión',clase:'primary',accion:'FIRMAR',disabled:false};
+        }else if(e === 'SIN_FIRMA' || e === 'LISTA'){
+            etiqueta = 'SIN FIRMA';
+            boton = {texto:'Firmar receta',clase:'primary',accion:'FIRMAR',disabled:!idReceta};
+        }else if(e === 'EDICION_PENDIENTE'){
+            etiqueta = 'CAMBIOS SIN GUARDAR';
+            clase = 'warn';
+            boton = {texto:'Guarde la receta antes de firmar',clase:'',accion:'',disabled:true};
+        }else if(e === 'ERROR'){
+            etiqueta = 'NO SE PUDO CONSULTAR';
+            clase = 'err';
+            boton = {texto:'Estado no disponible',clase:'',accion:'',disabled:true};
+        }
+
+        return {etiqueta,clase,boton};
+    }
+
+    function pintar(){
+        const box = asegurarCaja();
+        if(!box) return;
+        const visual = modeloVisual();
+        const mensaje = texto(estadoActual.mensaje) || 'Estado administrado por el módulo Recetas.';
+
+        box.innerHTML = `
+          <div class="ipr-head">
+            <div>
+              <div class="ipr-title"><i class="bi bi-pen"></i> Firma de receta</div>
+              <div class="ipr-sub">Plan solo refleja el estado oficial de Recetas. No crea una segunda receta ni una segunda firma.</div>
+              <div class="ipr-status ${escapar(visual.clase)}"><i class="bi bi-shield-check"></i>${escapar(visual.etiqueta)}</div>
+              <div class="ipr-sub">${escapar(mensaje)}</div>
+            </div>
+            <div class="ipr-actions">
+              <button type="button" class="ipr-refresh" data-ipr-accion="REFRESCAR" title="Actualizar estado de firma" aria-label="Actualizar estado de firma"><i class="bi bi-arrow-clockwise"></i></button>
+              <button type="button" class="${escapar(visual.boton.clase)}" data-ipr-accion="${escapar(visual.boton.accion)}" ${visual.boton.disabled?'disabled':''}>${escapar(visual.boton.texto)}</button>
+              ${accionActiva && estadoActual.id_receta ? '<button type="button" data-ipr-accion="CANCELAR"><i class="bi bi-x-circle me-1"></i>Cancelar firma</button>' : ''}
+            </div>
+          </div>`;
+
+        box.querySelectorAll('[data-ipr-accion]').forEach(function(btn){
+            btn.addEventListener('click',function(){
+                const accion = texto(btn.getAttribute('data-ipr-accion')).toUpperCase();
+                if(accion === 'REFRESCAR') sincronizar(true);
+                else if(accion === 'FIRMAR') firmarDesdePlan();
+                else if(accion === 'VER') verFirmadaDesdePlan();
+                else if(accion === 'CANCELAR') cancelarDesdePlan();
+            });
+        });
+    }
+
+    function normalizarRespuestaEstado(r,idEsperado){
+        if(!r || r.success === false){
+            const e = texto(r?.estado || 'RECETA_NO_GUARDADA').toUpperCase();
+            return {
+                id_atencion:idEsperado,
+                id_receta:texto(r?.id_receta),
+                estado:e || 'RECETA_NO_GUARDADA',
+                mensaje:texto(r?.message) || (e === 'EDICION_PENDIENTE' ? 'Guarde los cambios de la receta antes de firmar.' : 'No existe una receta guardada y firmable para esta atención.'),
+                documento:null,
+                error:''
+            };
+        }
+
+        const ef = r.estado_firma && typeof r.estado_firma === 'object' ? r.estado_firma : {};
+        let estado = texto(ef.estado || r.estado_firma || 'SIN_FIRMA').toUpperCase();
+        if(!estado || estado === 'LISTA') estado = 'SIN_FIRMA';
+        let mensaje = 'Receta guardada y lista para firma.';
+        if(estado === 'FIRMADA') mensaje = 'La versión oficial guardada de esta atención ya está firmada.';
+        else if(estado === 'NUEVA_VERSION') mensaje = 'La receta fue actualizada después de una firma previa y requiere una nueva firma.';
+
+        return {
+            id_atencion:texto(r.id_atencion || idEsperado),
+            id_receta:texto(r.id_receta || r.id_documento_origen),
+            estado,
+            mensaje,
+            documento:r,
+            error:''
+        };
+    }
+
+    async function sincronizar(forzarVisual){
+        const token = ++secuencia;
+        const idEsperado = idAtencionActiva();
+
+        if(!idEsperado){
+            estadoActual = {id_atencion:'',id_receta:'',estado:'RECETA_NO_GUARDADA',mensaje:'Seleccione una atención para consultar la receta.',documento:null,error:''};
+            pintar();
+            return estadoActual;
+        }
+
+        if(forzarVisual){
+            estadoActual = Object.assign({},estadoActual,{id_atencion:idEsperado,mensaje:'Actualizando estado oficial de la receta…'});
+            pintar();
+        }
+
+        const api = apiRecetas();
+        if(!api || typeof api.obtenerEstadoFirmaActual !== 'function'){
+            if(token !== secuencia || idAtencionActiva() !== idEsperado) return null;
+            estadoActual = {id_atencion:idEsperado,id_receta:'',estado:'ERROR',mensaje:'El módulo Recetas con firma electrónica aún no está disponible.',documento:null,error:'API_RECETAS_NO_DISPONIBLE'};
+            pintar();
+            return estadoActual;
+        }
+
+        try{
+            const r = await api.obtenerEstadoFirmaActual();
+            if(token !== secuencia) return null;
+            if(idAtencionActiva() !== idEsperado) return null;
+            const normalizado = normalizarRespuestaEstado(r,idEsperado);
+            if(normalizado.id_atencion && normalizado.id_atencion !== idEsperado) return null;
+            estadoActual = normalizado;
+            pintar();
+            return estadoActual;
+        }catch(error){
+            if(token !== secuencia || idAtencionActiva() !== idEsperado) return null;
+            estadoActual = {id_atencion:idEsperado,id_receta:'',estado:'ERROR',mensaje:'No se pudo consultar el estado de firma. La información clínica del Plan no fue modificada.',documento:null,error:texto(error?.message||error)};
+            pintar();
+            return estadoActual;
+        }
+    }
+
+    function programarSincronizacion(ms){
+        clearTimeout(refrescoTimer);
+        refrescoTimer = setTimeout(function(){ sincronizar(false); }, Number(ms || 0));
+    }
+
+    async function firmarDesdePlan(){
+        if(accionActiva) return;
+        const idEsperado = idAtencionActiva();
+        if(!idEsperado) return;
+
+        /*
+          IASYN PLAN - FIRMA DIRECTA ANTIRREGRESIVA
+          La tarjeta ya refleja el estado oficial calculado por Recetas.
+          No se hace un GET preventivo al pulsar Firmar: Recetas vuelve a validar
+          identidad, versión y contenido antes de crear la solicitud.
+        */
+        if(idAtencionActiva() !== idEsperado) return;
+        if(!['SIN_FIRMA','NUEVA_VERSION','LISTA'].includes(texto(estadoActual.estado).toUpperCase())) return;
+
+        const api = apiRecetas();
+        if(!api || typeof api.firmarElectronicaActual !== 'function') return;
+
+        accionActiva = true;
+        pintar();
+        try{
+            await api.firmarElectronicaActual();
+        }catch(error){
+            console.warn('IASYN PLAN FIRMA RECETA: la operación delegada informó error.',error);
+        }finally{
+            accionActiva = false;
+            if(idAtencionActiva() === idEsperado) await sincronizar(false);
+            else pintar();
+        }
+    }
+
+    async function verFirmadaDesdePlan(){
+        const idEsperado = idAtencionActiva();
+        const estado = await sincronizar(true);
+        if(!estado || idAtencionActiva() !== idEsperado) return;
+        if(texto(estado.estado).toUpperCase() !== 'FIRMADA' || !estado.id_receta) return;
+
+        const api = apiRecetas();
+        if(!api || typeof api.abrirDocumentoFirmado !== 'function') return;
+        try{
+            await api.abrirDocumentoFirmado(estado.id_receta);
+        }catch(error){
+            console.warn('IASYN PLAN FIRMA RECETA: no se pudo abrir el documento firmado.',error);
+        }
+    }
+
+    async function cancelarDesdePlan(){
+        if(!accionActiva || !estadoActual.id_receta) return;
+        const api = apiRecetas();
+        if(!api || typeof api.cancelarFirma !== 'function') return;
+        try{
+            await api.cancelarFirma(estadoActual.id_receta);
+        }catch(error){
+            console.warn('IASYN PLAN FIRMA RECETA: no se pudo cancelar la firma delegada.',error);
+        }finally{
+            accionActiva = false;
+            await sincronizar(false);
+        }
+    }
+
+    function eventoAtencion(){
+        secuencia++;
+        accionActiva = false;
+        estadoActual = {id_atencion:idAtencionActiva(),id_receta:'',estado:'RECETA_NO_GUARDADA',mensaje:'Sincronizando la receta de la atención seleccionada…',documento:null,error:''};
+        pintar();
+        programarSincronizacion(80);
+    }
+
+    ['aurosanax:atencion-iniciada','aurosanax:atencion-seleccionada','aurosanax:atencion-cambiada','aurosanax:atencion-actualizada','aurosanax:plan-cargado'].forEach(function(nombre){
+        window.addEventListener(nombre,eventoAtencion);
+        document.addEventListener(nombre,eventoAtencion);
+    });
+
+    window.addEventListener('aurosanax:receta-firma-estado',function(ev){
+        const d = ev?.detail || {};
+        if(texto(d.tipo_documento).toUpperCase() !== 'RECETA') return;
+        if(texto(d.id_atencion) && texto(d.id_atencion) !== idAtencionActiva()) return;
+        programarSincronizacion(30);
+    });
+
+    window.addEventListener('aurosanax:firma-electronica-completada',function(ev){
+        const d = ev?.detail || {};
+        if(texto(d.tipo_documento).toUpperCase() !== 'RECETA') return;
+        if(texto(d.id_atencion) && texto(d.id_atencion) !== idAtencionActiva()) return;
+        accionActiva = false;
+        programarSincronizacion(30);
+    });
+
+    window.addEventListener('aurosanax:firma-electronica-cancelada',function(ev){
+        const d = ev?.detail || {};
+        if(texto(d.tipo_documento).toUpperCase() !== 'RECETA') return;
+        if(texto(d.id_atencion) && texto(d.id_atencion) !== idAtencionActiva()) return;
+        accionActiva = false;
+        programarSincronizacion(30);
+    });
+
+    window.addEventListener('focus',function(){
+        if(panelVisible()) programarSincronizacion(80);
+    });
+    document.addEventListener('visibilitychange',function(){
+        if(!document.hidden && panelVisible()) programarSincronizacion(80);
+    });
+
+    /* API pública de solo presentación/integración para otras capas. */
+    window.auroPlanFirmaReceta = Object.assign({},window.auroPlanFirmaReceta||{}, {
+        version:VERSION,
+        sincronizar:function(){ return sincronizar(true); },
+        obtenerEstado:function(){ return Object.assign({},estadoActual); },
+        firmar:function(){ return firmarDesdePlan(); },
+        verFirmada:function(){ return verFirmadaDesdePlan(); }
+    });
+
+    let intentos = 0;
+    const instalador = setInterval(function(){
+        intentos++;
+        if(asegurarCaja() || intentos >= 40){
+            clearInterval(instalador);
+            pintar();
+            programarSincronizacion(60);
+        }
+    },250);
+})();
