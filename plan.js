@@ -231,10 +231,6 @@ const AURO_PLAN_VIAS_COMPLETAS = {
     'VIA NASAL': 'Vía nasal'
 };
 
-const AURO_PLAN_CANTIDADES_RAPIDAS = [
-    '1','2','3','5','7','10','14','20','21','28','30','60','90'
-];
-
 const AURO_PLAN_FRECUENCIAS_RAPIDAS = [
     'Dosis única',
     'Cada 4 horas',
@@ -790,44 +786,8 @@ function auroPlanInstalarEditorIndicacionesAmpliado(){
     return boton;
 }
 
-function auroPlanInstalarLimpiarMedicamentoPrincipal(){
-    const campo = document.getElementById('hcMedBusqueda');
-    if(!campo) return null;
-
-    let boton = document.getElementById('auroPlanLimpiarMedicamentoPrincipal');
-    if(boton) return boton;
-
-    boton = document.createElement('button');
-    boton.type = 'button';
-    boton.id = 'auroPlanLimpiarMedicamentoPrincipal';
-    boton.className = 'auro-plan-limpiar-rapido auro-plan-limpiar-medicamento-principal';
-    boton.setAttribute('aria-label', 'Limpiar medicamento');
-    boton.title = 'Limpiar únicamente el medicamento en preparación';
-    boton.innerHTML = '<i class="bi bi-x-circle me-1"></i> Limpiar';
-    boton.addEventListener('click', function(){
-        limpiarFormularioMedicamento();
-        campo.focus();
-    });
-
-    campo.insertAdjacentElement('afterend', boton);
-    return boton;
-}
-
-function auroPlanInstalarCantidadRapida(){
-    auroPlanInstalarDatalist(
-        'hcMedCantidad',
-        'auroPlanCantidadesLista',
-        AURO_PLAN_CANTIDADES_RAPIDAS,
-        ''
-    );
-
-    return auroPlanInstalarLimpiezaRapidaCampo('hcMedCantidad', 'cantidad');
-}
-
 function auroPlanInstalarAyudasMedicamentos(){
     auroPlanActualizarOpcionesVia();
-    auroPlanInstalarLimpiarMedicamentoPrincipal();
-    auroPlanInstalarCantidadRapida();
     auroPlanInstalarEntradaViaLibre();
     auroPlanInstalarAccesoViaLibreRapido();
 
@@ -2363,69 +2323,6 @@ function normalizarMedTexto(t){
     return normalizarTextoPlan(t);
 }
 
-/* IASYN - búsqueda tolerante de medicamentos.
-   Solo decide coincidencias/sugerencias; no prescribe, guarda ni modifica recetas. */
-function auroPlanDistanciaLevenshtein(a, b){
-    a = normalizarMedTexto(a);
-    b = normalizarMedTexto(b);
-    if(a === b) return 0;
-    if(!a) return b.length;
-    if(!b) return a.length;
-
-    let anterior = Array.from({length:b.length + 1}, (_, i) => i);
-    for(let i = 1; i <= a.length; i++){
-        const actual = [i];
-        for(let j = 1; j <= b.length; j++){
-            const costo = a[i - 1] === b[j - 1] ? 0 : 1;
-            actual[j] = Math.min(
-                actual[j - 1] + 1,
-                anterior[j] + 1,
-                anterior[j - 1] + costo
-            );
-        }
-        anterior = actual;
-    }
-    return anterior[b.length];
-}
-
-function auroPlanTerminosBusquedaMedicamento(m){
-    const valores = [
-        m?.med, m?.pres, m?.cat, m?.principio_activo,
-        m?.forma_farmaceutica, m?.concentracion,
-        ...(Array.isArray(m?.denominaciones_comerciales) ? m.denominaciones_comerciales : (m?.denominaciones_comerciales ? [m.denominaciones_comerciales] : [])),
-        ...(Array.isArray(m?.nombres_alternativos) ? m.nombres_alternativos : (m?.nombres_alternativos ? [m.nombres_alternativos] : [])),
-        ...(Array.isArray(m?.aliases) ? m.aliases : (m?.aliases ? [m.aliases] : [])),
-        ...(Array.isArray(m?.palabras_clave) ? m.palabras_clave : (m?.palabras_clave ? [m.palabras_clave] : []))
-    ];
-
-    const completos = valores
-        .map(v => normalizarMedTexto(v))
-        .filter(Boolean);
-    const palabras = completos.flatMap(v => v.split(/\s+/).filter(Boolean));
-    return Array.from(new Set([...completos, ...palabras]));
-}
-
-function auroPlanCoincideBusquedaMedicamento(m, consulta){
-    const q = normalizarMedTexto(consulta);
-    if(!q) return {coincide:true, puntaje:0};
-
-    const terminos = auroPlanTerminosBusquedaMedicamento(m);
-    if(terminos.some(t => t.includes(q))) return {coincide:true, puntaje:0};
-    if(q.length < 3) return {coincide:false, puntaje:999};
-
-    let mejor = 999;
-    terminos.forEach(function(t){
-        if(!t) return;
-        if(q.includes(t) && t.length >= 3) mejor = Math.min(mejor, 1);
-        const limiteLongitud = Math.max(2, Math.ceil(Math.max(q.length, t.length) * 0.35));
-        if(Math.abs(q.length - t.length) > limiteLongitud) return;
-        mejor = Math.min(mejor, auroPlanDistanciaLevenshtein(q, t));
-    });
-
-    const umbral = q.length <= 4 ? 1 : (q.length <= 8 ? 2 : 3);
-    return {coincide:mejor <= umbral, puntaje:mejor};
-}
-
 /* ============================================================
    IASYN PLAN 32 - CATÁLOGO / PRESENTACIONES / VÍAS INTELIGENTES
    - Usa MEDICAMENTOS_IASYN_BASE como fuente primaria.
@@ -2876,14 +2773,30 @@ function renderMedicamentoSugerencias(){
         : [];
 
     const res = base
-        .map(function(m, indice){
-            const resultado = auroPlanCoincideBusquedaMedicamento(m, q);
-            return {m, indice, resultado};
+        .filter(m => {
+            if(!q) return true;
+
+            const textoBusqueda = [
+                m.med,
+                m.pres,
+                m.cat,
+                m.principio_activo,
+                m.forma_farmaceutica,
+                m.concentracion,
+                ...(Array.isArray(m.denominaciones_comerciales)
+                    ? m.denominaciones_comerciales
+                    : (m.denominaciones_comerciales ? [m.denominaciones_comerciales] : [])),
+                ...(Array.isArray(m.nombres_alternativos)
+                    ? m.nombres_alternativos
+                    : (m.nombres_alternativos ? [m.nombres_alternativos] : []))
+            ]
+            .map(v => String(v || '').trim())
+            .filter(Boolean)
+            .join(' ');
+
+            return normalizarMedTexto(textoBusqueda).includes(q);
         })
-        .filter(x => x.resultado.coincide)
-        .sort((a,b) => (a.resultado.puntaje - b.resultado.puntaje) || (a.indice - b.indice))
-        .slice(0,40)
-        .map(x => x.m);
+        .slice(0,40);
 
     if(!res.length){
         box.innerHTML =
@@ -4024,10 +3937,6 @@ function instalarResponsivePlanAndroid(){
         color:#1f2937;
       }
 
-      #hc_plan .auro-plan-limpiar-medicamento-principal{
-        margin-bottom:2px;
-      }
-
       #hc_plan .auro-plan-indicaciones-controladas{
         resize:vertical;
         transition:height .15s ease;
@@ -4799,9 +4708,33 @@ async function guardarPlanClinicoDesdeSheets(){
             message: 'No existe id_atencion actual para guardar el Plan.'
         };
     }
+    // IASYN2: blindaje de identidad antes de crear o editar un plan.
+    // La atención visible es la autoridad; un estado anterior nunca debe
+    // provocar escritura sobre otra atención mientras cambia la pantalla.
+    if(!idAtencionVisible || String(data.id_atencion).trim() !== idAtencionVisible){
+        return {success:false,message:'Atención activa no verificada. No se guardó el Plan.'};
+    }
+
     const existente = await buscarPlanClinicoPorAtencionDesdeSheets(
         data.id_atencion
     );
+
+    if(auroPlanObtenerIdAtencionActivaSeguro() !== data.id_atencion){
+        return {success:false,message:'La atención cambió durante la consulta. No se guardó el Plan.'};
+    }
+
+    if(existente && existente.success === false){
+        return {success:false,message:existente.message || 'No fue posible verificar el Plan existente.'};
+    }
+
+    const idAtencionExistente = String(existente?.id_atencion || '').trim();
+    const idPacienteExistente = String(existente?.id_paciente || '').trim();
+    if(idAtencionExistente && idAtencionExistente !== String(data.id_atencion).trim()){
+        return {success:false,message:'El Plan recuperado pertenece a otra atención. Guardado bloqueado.'};
+    }
+    if(idPacienteExistente && data.id_paciente && idPacienteExistente !== String(data.id_paciente).trim()){
+        return {success:false,message:'El Plan recuperado pertenece a otro paciente. Guardado bloqueado.'};
+    }
 
     let resultado;
 
