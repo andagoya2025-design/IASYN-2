@@ -14,7 +14,7 @@ Función:
 (function () {
   'use strict';
 
-  const VERSION = '3.6.18-R2';
+  const VERSION = '3.6.18-R2-TIPO-IASYN1';
   const state = {
     inicializado: false,
     cargando: false,
@@ -2838,6 +2838,83 @@ Función:
     return proceso;
   }
 
+  /* IASYN: sincronización manual y aislada del tipo de atención.
+     Nunca se envía por autosave ni por eventos programáticos. */
+  const iasynTipoPendiente = Object.create(null);
+  const iasynTipoEnCurso = Object.create(null);
+
+  function iasynRegistrarCambioTipoManual(evento) {
+    const control = evento?.target;
+    if (!control || control !== auroBuscarControlCabeceraAnamnesis('tipo')) return;
+    if (control.dataset.auroAsignandoContexto === 'true' ||
+        state.restaurandoAtencion || state.contextoInvalidado || !evento.isTrusted) return;
+    const id = texto(state.idAtencionActual);
+    const tipo = texto(control.value);
+    if (!id || !AURO_TIPOS_ATENCION.includes(tipo)) return;
+    iasynTipoPendiente[id] = tipo;
+  }
+
+  async function iasynConfirmarTipoAtencion(id, tipo, token) {
+    if (!auroTokenContextoValido(token, true) || texto(token.id_atencion) !== id) return false;
+    const api = obtenerApiUrl();
+    if (!api || !AURO_TIPOS_ATENCION.includes(tipo)) return false;
+    if (iasynTipoEnCurso[id]) return false;
+    iasynTipoEnCurso[id] = true;
+    try {
+      if (!auroTokenContextoValido(token, true)) return false;
+      await fetch(api, {
+        method: 'POST', mode: 'no-cors',
+        headers: {'Content-Type': 'text/plain;charset=utf-8'},
+        body: JSON.stringify({
+          accion: 'actualizarTipoDesdeAnamnesis',
+          data: {id_atencion: id, tipo_atencion: tipo}
+        })
+      });
+      // no-cors no confirma escritura: verificar en lectura fresca por ID exacto.
+      for (const espera of [200, 500, 1000, 1600]) {
+        await auroDormirContextoAnamnesis(espera);
+        if (!auroTokenContextoValido(token, true)) return false;
+        const respuesta = await consultarAccion('listarAtenciones', {_: Date.now()});
+        const filas = normalizarRespuesta(respuesta);
+        const coincidencias = filas.filter(f => texto(f?.id_atencion) === id);
+        if (coincidencias.length === 1 && texto(coincidencias[0].tipo_atencion) === tipo) {
+          if (!auroTokenContextoValido(token, true)) return false;
+          state.contextoAtencion = {...state.contextoAtencion, tipo, tipo_atencion: tipo};
+          window.dispatchEvent(new CustomEvent('aurosanax:tipo-atencion-confirmado', {
+            detail: {id_atencion: id, tipo_atencion: tipo}
+          }));
+          return true;
+        }
+      }
+    } catch (error) {
+      console.warn('IASYN Anamnesis: no se confirmó la sincronización del tipo.', error);
+    } finally {
+      delete iasynTipoEnCurso[id];
+    }
+    if (auroTokenContextoValido(token, false)) {
+      estado('No se confirmó el cambio de tipo en Atenciones. Revise la conexión.', 'warn');
+    }
+    return false;
+  }
+
+  function iasynProcesarTipoPendiente(id, token) {
+    const tipo = iasynTipoPendiente[id];
+    if (!tipo || !auroTokenContextoValido(token, true)) return;
+    delete iasynTipoPendiente[id];
+    iasynConfirmarTipoAtencion(id, tipo, token).then(confirmado => {
+      if (!confirmado && auroTokenContextoValido(token, true)) {
+        iasynTipoPendiente[id] = tipo;
+      }
+    }).catch(error => console.warn('IASYN: tipo pendiente.', error));
+  }
+
+  window.addEventListener('aurosanax:anamnesis-confirmada', evento => {
+    const id = texto(evento?.detail?.id_atencion);
+    if (id && id === texto(state.idAtencionActual)) {
+      iasynProcesarTipoPendiente(id, auroCrearTokenContextoAnamnesis());
+    }
+  });
+
   async function guardarAnamnesisPorAtencion() {
     clearTimeout(state.guardadoPendiente);
     state.guardadoPendiente = null;
@@ -2860,6 +2937,12 @@ Función:
     data.id_paciente = texto(token.id_paciente);
     data.id_historia = texto(token.id_historia);
 
+    // Tipo independiente: una anamnesis sin contenido clínico también puede confirmar su tipo.
+    if (!auroTieneContenidoAnamnesis(data)) {
+      iasynProcesarTipoPendiente(idAtencion, token);
+      return {success: true, sin_cambios_clinicos: true, id_atencion: idAtencion};
+    }
+
     const firmaActual = auroFirmaAnamnesis(data);
     const firmaPersistida = texto(state.firmaPersistidaPorAtencion[idAtencion]);
     const firmaEnCurso = texto(state.firmaRemotaEnCursoPorAtencion[idAtencion]);
@@ -2871,6 +2954,7 @@ Función:
     if (firmaPersistida && firmaActual === firmaPersistida) {
       state.cambiosUsuarioPorAtencion[idAtencion] = false;
       estado('No hay cambios nuevos en Anamnesis.', 'ok');
+      iasynProcesarTipoPendiente(idAtencion, token);
       return {
         success: true, confirmado: true, sin_cambios: true, omitido: true, id_atencion: idAtencion
       };
@@ -3082,6 +3166,7 @@ Función:
     state.solicitudCarga += 1;
 
     if (anterior) {
+      delete iasynTipoPendiente[anterior];
       delete state.guardadosRemotosPendientes[anterior];
       delete state.firmaRemotaEnCursoPorAtencion[anterior];
       state.cambiosUsuarioPorAtencion[anterior] = false;
@@ -3257,6 +3342,7 @@ Función:
 
       const anterior = texto(state.idAtencionActual);
       if (anterior) {
+        delete iasynTipoPendiente[anterior];
         delete state.guardadosRemotosPendientes[anterior];
         delete state.firmaRemotaEnCursoPorAtencion[anterior];
         state.cambiosUsuarioPorAtencion[anterior] = false;
@@ -3282,6 +3368,7 @@ Función:
     window.addEventListener('aurosanax:atencion-actualizada', sincronizarContexto);
     window.addEventListener('aurosanax:datos-generales-actualizados', sincronizarContexto);
 
+    $('hc_anamnesis')?.addEventListener('change', iasynRegistrarCambioTipoManual);
     $('hc_anamnesis')?.addEventListener('input', auroProgramarGuardadoAnamnesis);
     $('hc_anamnesis')?.addEventListener('change', auroProgramarGuardadoAnamnesis);
 
