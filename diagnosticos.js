@@ -2097,6 +2097,30 @@
         ));
       }catch(_e){}
 
+      /*
+        IASYN2 — PUENTE QUIRÚRGICO PARA GUÍA CONTEXTUAL V1
+        Solo se emite después de la confirmación autoritativa de persistencia
+        y de validar que continúa seleccionada la misma atención.
+        Se usa window para la guía flotante; NO se redispara en document
+        porque Diagnósticos ya escucha ese evento para recargar datos.
+        La notificación es informativa: no guarda, no aplica protocolos,
+        no cambia de atención y no altera el flujo clínico.
+      */
+      try{
+        if(guardadoSigueVigente()){
+          window.dispatchEvent(new CustomEvent(
+            'aurosanax:diagnosticos-actualizados',
+            {detail:{
+              id_atencion:ctx.id,
+              origen:'diagnosticos_guardado_verificado',
+              persistencia_verificada:true
+            }}
+          ));
+        }
+      }catch(errorGuia){
+        console.warn(MODULO + ': notificación opcional de guía no disponible.',errorGuia);
+      }
+
       return resultado;
 
     }catch(error){
