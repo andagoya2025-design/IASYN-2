@@ -417,10 +417,13 @@
   }
 
   function recetaMedicamentosListaEdicion(valor){
-    const medsPlan = recetaMedicamentosPlanActualesSeguros();
-
-    if(medsPlan.length){
-      return medsPlan;
+    /* IASYN2 V3: una receta existente conserva sus medicamentos propios.
+       El Plan solo aporta medicamentos cuando el campo de receta está vacío
+       y no se está editando una receta histórica. */
+    const tieneValorReceta = recetaTieneMedicamentosReales(valor);
+    if(!tieneValorReceta && !recetaEditandoId){
+      const medsPlan = recetaMedicamentosPlanActualesSeguros();
+      if(medsPlan.length) return medsPlan;
     }
 
     return recetaMedicamentosALista(valor).map(item => {
@@ -1656,10 +1659,11 @@
       return actual;
     }
 
-    const medsPlan = recetaMedicamentosPlanActualesSeguros();
-
-    if(medsPlan.length){
-      return JSON.stringify(medsPlan);
+    /* IASYN2 V3: no sustituir lo escrito en Recetas por datos del Plan.
+       Solo se permite heredar del Plan en una receta nueva sin contenido. */
+    if(!actual && !recetaEditandoId){
+      const medsPlan = recetaMedicamentosPlanActualesSeguros();
+      if(medsPlan.length) return JSON.stringify(medsPlan);
     }
 
     if(!actual) return '';
