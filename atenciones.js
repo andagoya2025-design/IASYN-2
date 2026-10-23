@@ -32,6 +32,20 @@
   const CONSULTAS_POR_PAGINA = 10;
   const RECETAS_STORAGE_KEY = 'aurosanax_recetas_emitidas_v1';
 
+  /* IASYN2 · ÚLTIMO BOCETO APROBADO · INDICADOR EXCLUSIVAMENTE VISUAL.
+     El verde refleja el visor integral abierto; nunca cambia la atención,
+     el guardado, el estado clínico ni la información de Google Sheets. */
+  let vistaIntegralVisualId = '';
+  function actualizarIndicadorVistaIntegral(){
+    const visible = !!document.getElementById('auroVistaIntegralOverlay');
+    const activo = visible ? String(vistaIntegralVisualId || '') : '';
+    document.querySelectorAll('#auroAtencionesBox [data-atencion-integral-id]').forEach(function(btn){
+      const coincide = !!activo && String(btn.getAttribute('data-atencion-integral-id') || '') === activo;
+      btn.classList.toggle('iasyn-vista-integral-activa', coincide);
+      btn.setAttribute('aria-pressed', coincide ? 'true' : 'false');
+    });
+  }
+
   /*
     IASYN - BLINDAJE ANTIDUPLICIDAD
     Estos locks son de ejecución, no de persistencia:
@@ -523,6 +537,223 @@
         #auroAtencionesBox .auro-atenciones-mobile{
           display:none!important;
         }
+      }
+
+      /* ============================================================
+         IASYN2 · ÚLTIMO BOCETO APROBADO · SOLO PRESENTACIÓN
+         - Recetas: fila horizontal, ID completo, seis columnas visibles.
+         - Indicaciones conservadas en la receta; ocultas SOLO en resumen.
+         - Atenciones: # e ID separados, médico/especialidad en misma celda.
+         - Estado y Acción centrados; verde solo con visor integral abierto.
+         - Desplazamiento horizontal si la pantalla no permite leer todo.
+         ============================================================ */
+      #auroAtencionesBox .auro-recetas-atencion-box{
+        border:1px solid #f4d7e7;
+        border-radius:18px;
+        padding:0;
+        overflow:hidden;
+        box-shadow:0 8px 24px rgba(80,30,85,.075);
+      }
+      #auroAtencionesBox .auro-recetas-atencion-title{
+        background:linear-gradient(105deg,#fff2f8 0%,#fff 72%);
+        border-bottom:1px solid #f4d7e7;
+        margin:0;
+        padding:16px 18px;
+        min-height:68px;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-title > b{
+        font-size:16px;
+        font-weight:900;
+        color:#8b1e5a;
+        line-height:1.35;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-title > b::after{
+        content:'Recetas emitidas en esta consulta';
+        display:block;
+        color:#64748b;
+        font-size:12px;
+        font-weight:500;
+        margin-top:2px;
+        padding-left:20px;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-title .badge-auro{
+        border:1px solid #fbcfe8;
+        background:#fce7f3;
+        color:#9d174d;
+        padding:7px 12px;
+        border-radius:999px;
+        font-weight:800;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop{padding:10px 12px 14px;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop .table-responsive{
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop table{
+        width:100%;
+        min-width:1160px;
+        table-layout:fixed;
+        border-collapse:separate;
+        border-spacing:0;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop th,
+      #auroAtencionesBox .auro-recetas-atencion-desktop td{
+        padding:13px 12px;
+        vertical-align:middle;
+        border-color:#edf1f7;
+        line-height:1.35;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop thead th{
+        background:#fff5fa;
+        color:#47618e;
+        font-size:11px;
+        letter-spacing:.025em;
+        font-weight:800;
+        text-transform:uppercase;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(1){width:13%;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(2){width:25%;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(3){width:11%;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(4){width:25%;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(6){width:11%;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(7){width:15%;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(5),
+      #auroAtencionesBox .auro-recetas-atencion-desktop td:nth-child(5){display:none!important;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop td:nth-child(2){
+        white-space:nowrap!important;
+        overflow:visible!important;
+        word-break:normal!important;
+        overflow-wrap:normal!important;
+        font-size:12px;
+        font-weight:800;
+        font-variant-numeric:tabular-nums;
+        letter-spacing:-.15px;
+        color:#172554;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop .auro-receta-resumen-box{
+        min-width:0;
+        gap:5px;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop .auro-receta-med-principal{
+        font-size:13px;
+        font-weight:850;
+        line-height:1.35;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop .auro-receta-med-esquema{
+        display:none!important;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop td:nth-child(6),
+      #auroAtencionesBox .auro-recetas-atencion-desktop td:nth-child(7),
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(6),
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(7){
+        text-align:center;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop td:nth-child(7) .btn-action{
+        white-space:nowrap;
+        width:100%;
+        font-weight:800;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-mobile .auro-receta-indicaciones-detalle{
+        display:none!important;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-mobile{padding:8px 12px 12px;}
+
+      #auroAtencionesBox .auro-atenciones-desktop{
+        border:1px solid #cde2ff;
+        background:#fff;
+        border-radius:16px;
+        padding:9px 12px 12px;
+        box-shadow:0 7px 20px rgba(40,87,157,.06);
+      }
+      #auroAtencionesBox .auro-atenciones-desktop .table-responsive{
+        overflow-x:auto;
+        -webkit-overflow-scrolling:touch;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop table{
+        width:100%;
+        min-width:1180px;
+        table-layout:fixed;
+        border-collapse:separate;
+        border-spacing:0;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop thead th{
+        background:#eff7ff;
+        color:#355b90;
+        text-transform:uppercase;
+        font-size:10.5px;
+        font-weight:850;
+        letter-spacing:.025em;
+        padding:12px 9px;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop tbody td{
+        padding:12px 9px;
+        border-color:#e8f0fa;
+        vertical-align:middle;
+        font-size:12.5px;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(1){width:5%;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(2){width:19%;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(3){width:13%;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(4){width:7%;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(5){width:13%;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(6){width:21%;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(7){width:9%;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(8){width:13%;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(1),
+      #auroAtencionesBox .auro-atenciones-desktop td:nth-child(1),
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(7),
+      #auroAtencionesBox .auro-atenciones-desktop td:nth-child(7),
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(8),
+      #auroAtencionesBox .auro-atenciones-desktop td:nth-child(8){
+        text-align:center!important;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop .iasyn-consulta-numero b{
+        font-size:17px;
+        color:#172554;
+        font-weight:900;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop .iasyn-consulta-id small{
+        font-size:11px;
+        white-space:nowrap;
+        overflow-wrap:normal;
+        word-break:normal;
+        color:#5a6f98!important;
+        font-variant-numeric:tabular-nums;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop td:nth-child(7) .badge-auro{
+        display:inline-flex;
+        justify-content:center;
+        align-items:center;
+        min-width:90px;
+        max-width:100%;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop td:nth-child(8) > div{
+        justify-items:center;
+        align-items:center;
+        margin-inline:auto;
+        max-width:100%;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop td:nth-child(8) .btn-action{
+        text-align:center;
+        white-space:nowrap;
+        min-height:32px;
+        font-size:11.5px;
+      }
+      #auroAtencionesBox [data-atencion-integral-id]:not(.iasyn-vista-integral-activa){
+        background:#fff!important;
+        border:1px solid #aab8d4!important;
+        color:#536b98!important;
+        box-shadow:none!important;
+      }
+      #auroAtencionesBox [data-atencion-integral-id].iasyn-vista-integral-activa{
+        background:linear-gradient(120deg,#16ba57,#068738)!important;
+        border:1px solid #089443!important;
+        color:#fff!important;
+        box-shadow:0 4px 12px rgba(21,149,76,.16)!important;
+      }
+      #auroAtencionesBox [data-atencion-integral-id]:focus-visible{
+        outline:3px solid #93c5fd;
+        outline-offset:2px;
       }
     `;
     document.head.appendChild(st);
@@ -2571,7 +2802,7 @@
           '<div class="small"><b>Fecha:</b> ' + safe(fechaVisual(r.fecha_receta || r.fecha || '')) + '</div>' +
           '<div class="small"><b>CIE-10:</b> ' + safe(r.diagnostico_cie10 || r.cie10 || '—') + '</div>' +
           '<div class="small mt-2"><b>Medicamento:</b><br>' + auroAtencionMedicamentoResumenHTML(r.medicamento || r.medicamentos || '') + '</div>' +
-          '<div class="small mt-2"><b>Indicaciones:</b><br>' + safe(resumenTexto(r.indicaciones || '', 160)) + '</div>' +
+          '<div class="small mt-2 auro-receta-indicaciones-detalle"><b>Indicaciones:</b><br>' + safe(resumenTexto(r.indicaciones || '', 160)) + '</div>' +
           '<button type="button" class="btn-action primary mt-2" data-receta-ver-id="' + safe(r.id_receta || '') + '"><i class="bi bi-eye me-1"></i> Ver receta</button>' +
         '</div>';
       }).join('');
@@ -2841,7 +3072,8 @@
     const filasTabla = arrPagina.map(a => {
       const badge = String(a.estado_atencion).toLowerCase() === 'abierta' ? 'badge-blue' : 'badge-ok';
       return '<tr>' +
-        '<td><b>#' + safe(a.numero_consulta) + '</b><br><small class="text-muted">' + safe(a.id_atencion || '—') + '</small></td>' +
+        '<td class="iasyn-consulta-numero"><b>' + safe(a.numero_consulta) + '</b></td>' +
+        '<td class="iasyn-consulta-id"><small class="text-muted">' + safe(a.id_atencion || '—') + '</small></td>' +
         '<td>' + safe(fechaVisual(a.fecha_atencion)) + '</td>' +
         '<td title="' + safe(auroAtencionEtiquetaHora(a)) + '">' + safe(horaVisualAtencion(a.hora_atencion || '—')) + '</td>' +
         '<td>' + safe(a.tipo_atencion || '—') + '</td>' +
@@ -2889,13 +3121,15 @@
       '<div class="auro-atenciones-desktop">' +
         '<div class="table-responsive">' +
           '<table class="table table-modern align-middle mb-0">' +
-            '<thead><tr><th>Consulta</th><th>Fecha de atención</th><th>Hora</th><th>Tipo</th><th>Especialidad / médico</th><th>Estado</th><th>Acción</th></tr></thead>' +
+            '<thead><tr><th>#</th><th>ID de atención</th><th>Fecha de atención</th><th>Hora</th><th>Tipo</th><th>Especialidad / médico</th><th>Estado</th><th>Acción</th></tr></thead>' +
             '<tbody>' + filasTabla + '</tbody>' +
           '</table>' +
         '</div>' +
       '</div>' +
       '<div class="auro-atenciones-mobile">' + tarjetasMovil + '</div>' +
       paginacionHTML;
+
+    actualizarIndicadorVistaIntegral();
 
     const btnAnt = $('btnAtencionesAnterior');
     const btnSig = $('btnAtencionesSiguiente');
@@ -2971,6 +3205,16 @@
     nueva.__auroAtencionesWrapped = true;
     window[nombre] = nueva;
   }
+
+  /* ÚLTIMO BOCETO: verde solo mientras el visor de esa atención está abierto. */
+  window.addEventListener('iasyn2:vista-integral-abierta', function(evento){
+    vistaIntegralVisualId = String(evento && evento.detail && evento.detail.id_atencion || '').trim();
+    actualizarIndicadorVistaIntegral();
+  });
+  window.addEventListener('iasyn2:vista-integral-cerrada', function(){
+    vistaIntegralVisualId = '';
+    actualizarIndicadorVistaIntegral();
+  });
 
   /* IASYN2 · Sincronización antirregresiva del tipo desde Anamnesis.
      El evento se emite únicamente tras confirmar la escritura remota.
@@ -7000,8 +7244,12 @@
   }
 
   function cerrar(){
+    const teniaVistaIntegralVisible = !!document.getElementById('auroVistaIntegralOverlay');
     document.getElementById('auroVistaIntegralOverlay')?.remove();
     document.body.style.overflow = '';
+    if(teniaVistaIntegralVisible){
+      window.dispatchEvent(new CustomEvent('iasyn2:vista-integral-cerrada'));
+    }
   }
 
   function cerrarReceta(){
@@ -7322,6 +7570,10 @@
       */
       await new Promise(r=>setTimeout(r,280));
       renderizar(id);
+      // Indicador visual: solo tras confirmar y mostrar esta atención.
+      window.dispatchEvent(new CustomEvent('iasyn2:vista-integral-abierta', {
+        detail:{id_atencion:id}
+      }));
       setTimeout(function(){
         const actual = texto(
           typeof window.getIdAtencionActiva === 'function'
