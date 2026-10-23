@@ -2213,6 +2213,33 @@
       .auro-familiares-card > .clinical-note{margin-left:12px;margin-right:12px}
     }
 
+  
+    /* IASYN2 DASHBOARD · RELIEVE VISUAL 3D V1 · SOLO PRESENTACIÓN
+       Alcance exclusivo: #dashboard. Sin cambios de HTML, JS, datos ni configuración. */
+    #dashboard .hero{
+      box-shadow:0 15px 32px rgba(38,24,62,.13),0 3px 8px rgba(38,24,62,.07);
+    }
+    #dashboard .cardx{
+      box-shadow:0 13px 27px rgba(26,24,46,.09),0 3px 7px rgba(26,24,46,.045),inset 0 1px 0 rgba(255,255,255,.88);
+      transition:box-shadow .2s ease,transform .2s ease;
+    }
+    #dashboard .cardx.stat:hover{
+      transform:translateY(-2px);
+      box-shadow:0 17px 32px rgba(26,24,46,.12),0 5px 10px rgba(26,24,46,.06),inset 0 1px 0 rgba(255,255,255,.9);
+    }
+    #dashboard .stat-icon{
+      box-shadow:inset 0 1px 1px rgba(255,255,255,.75),0 5px 11px rgba(38,24,62,.07);
+    }
+    #dashboard .btn-soft,
+    #dashboard .btn-auro{
+      box-shadow:0 3px 7px rgba(26,24,46,.075);
+    }
+    @media (prefers-reduced-motion:reduce){
+      #dashboard .cardx{transition:none}
+      #dashboard .cardx.stat:hover{transform:none}
+    }
+    /* FIN IASYN2 DASHBOARD · RELIEVE VISUAL 3D V1 */
+
   </style>
 
 
@@ -9268,8 +9295,7 @@ async function guardarHistoriaClinicaERP(){
         {
           detail: {
             id_historia: editingHistoryId,
-            id_paciente: idPaciente,
-            operacion: esEdicion ? 'edicion' : 'creacion'
+            id_paciente: idPaciente
           }
         }
       ));
@@ -12583,8 +12609,6 @@ if(typeof showScreen==='function'){
 <script src="pacientes.js?v=20260824_1"></script>
 <!-- AUROSANAX - Módulo Agenda Médica -->
 <script src="agenda.js?v=20260824_1"></script>
-<!-- IASYN2: guía contextual aislada; no participa en persistencia clínica -->
-<script src="guia.js?v=EIC_GUIA_V1"></script>
 <script id="auro-erp-inicio-despues-seguridad">
   /* AUROSANAX: preparar el ERP, pero no cargar datos antes de validar la sesión. */
   window.__auroErpInicializacionPromesa = null;
