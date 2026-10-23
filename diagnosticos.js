@@ -1062,6 +1062,23 @@
       mensaje('ok','Corrección diagnóstica guardada correctamente.');
       notificacionGuardadoDx('ok','Corrección diagnóstica guardada correctamente.');
 
+      /* IASYN2 GUÍA V3 — notificación exclusivamente informativa.
+         El backend ya confirmó éxito; no modifica persistencia ni auditoría.
+         No anunciar si el usuario cambió de atención durante el guardado. */
+      try{
+        if(ctx.id && contextoAtencionSeleccionada().id===ctx.id){
+          window.dispatchEvent(new CustomEvent('aurosanax:diagnosticos-actualizados',{
+            detail:{
+              id_atencion:ctx.id,
+              origen:'diagnosticos_correccion_historica_confirmada',
+              persistencia_verificada:true
+            }
+          }));
+        }
+      }catch(errorGuia){
+        console.warn(MODULO+': aviso opcional de guía histórica no disponible.',errorGuia);
+      }
+
       /*
         Mantiene el estado visual de éxito el tiempo suficiente para que el
         usuario perciba la confirmación antes de volver al modo solo lectura.
