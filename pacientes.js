@@ -1184,6 +1184,14 @@ async function savePatient(){
     const contextoAgenda = !esEdicion ? auroContextoPacienteDesdeAgenda() : null;
     const payloadData = esEdicion ? {...pacienteSheet, id_paciente: editingPatientId} : pacienteSheet;
 
+    /* IASYN GUIA V1: captura inmutable; no altera el guardado existente. */
+    const guiaIdEdicion = esEdicion ? String(editingPatientId || '').trim() : '';
+    const guiaIdsPrevios = new Set((Array.isArray(patients) ? patients : [])
+      .map(p => String(p?.id_paciente || p?.id || '').trim()).filter(Boolean));
+    const guiaDocumento = String(pacienteSheet.numero_documento || '').replace(/\D/g, '');
+    const guiaNombres = String(pacienteSheet.nombres || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const guiaApellidos = String(pacienteSheet.apellidos || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
     await fetch(API_URL, {
       method: 'POST',
       mode: 'no-cors',
@@ -1214,6 +1222,40 @@ async function savePatient(){
        * selector de Historia y Dashboard. No se repiten esos renderizados.
        */
       await cargarPacientesDesdeSheets();
+
+      /* IASYN GUIA V1: lectura independiente y verificable de la fuente real.
+         El POST no-cors y el refresco visual NO son confirmaciones de guardado.
+         Cualquier fallo se aísla de Agenda y del flujo clínico existente. */
+      try{
+        const guiaRespuesta = await fetch(API_URL + '?accion=listarPacientes&_guia=' + Date.now(), {
+          cache:'no-store'
+        });
+        if(!guiaRespuesta.ok) throw new Error('GET Pacientes HTTP ' + guiaRespuesta.status);
+        const guiaDatos = await guiaRespuesta.json();
+        if(!Array.isArray(guiaDatos)) throw new Error('Respuesta de Pacientes no verificable');
+        const guiaCoincidencias = guiaDatos.filter(function(p){
+          const id = String(p?.id_paciente || p?.id || '').trim();
+          const doc = String(p?.numero_documento || p?.cedula || p?.documento || '').replace(/\D/g, '');
+          const nombres = String(p?.nombres || p?.primer_nombre || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          const apellidos = String(p?.apellidos || p?.apellido || p?.primer_apellido || '').replace(/\s+/g, ' ').trim().toLowerCase();
+          return !!id && doc === guiaDocumento && nombres === guiaNombres &&
+            apellidos === guiaApellidos &&
+            (esEdicion ? id === guiaIdEdicion : !guiaIdsPrevios.has(id));
+        });
+        if(guiaCoincidencias.length === 1){
+          window.dispatchEvent(new CustomEvent('aurosanax:paciente-confirmado', {
+            detail: {
+              id_paciente:String(guiaCoincidencias[0].id_paciente || guiaCoincidencias[0].id).trim(),
+              operacion:esEdicion ? 'edicion' : 'alta',
+              origen:contextoAgenda && contextoAgenda.id_cita ? 'agenda' : 'pacientes'
+            }
+          }));
+        }else{
+          console.warn('IASYN GUIA: guardado de paciente no confirmado por lectura inequívoca.');
+        }
+      }catch(errorGuia){
+        console.warn('IASYN GUIA: no se pudo verificar el guardado del paciente.', errorGuia);
+      }
 
       /* Solo Agenda: intenta vincular ESTA cita después de confirmar el
          paciente en la fuente real. El resto de guardados no entra aquí. */
