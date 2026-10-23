@@ -755,6 +755,144 @@
         outline:3px solid #93c5fd;
         outline-offset:2px;
       }
+
+      /* =============================================================
+         IASYN2 · AJUSTE QUIRÚRGICO DE ANCHO · V2 SIN DESPLAZAMIENTO
+         - Conserva el ÚLTIMO BOCETO aprobado y todas sus funciones.
+         - Neutraliza min-width de 1160/1180px sin borrar reglas previas.
+         - Las dos tablas caben en la tarjeta, con botones siempre visibles.
+         - En pantallas estrechas se usan las tarjetas móviles existentes.
+         ============================================================= */
+      #auroAtencionesBox,
+      #auroAtencionesBox #auroAtencionActivaBox,
+      #auroAtencionesBox #auroAtencionesLista,
+      #auroAtencionesBox .auro-recetas-atencion-box,
+      #auroAtencionesBox .auro-recetas-atencion-desktop,
+      #auroAtencionesBox .auro-atenciones-desktop{
+        min-width:0!important;
+        max-width:100%;
+        box-sizing:border-box;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop .table-responsive,
+      #auroAtencionesBox .auro-atenciones-desktop .table-responsive{
+        width:100%;
+        max-width:100%;
+        min-width:0!important;
+        overflow-x:visible!important;
+        overflow-y:visible!important;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop table,
+      #auroAtencionesBox .auro-atenciones-desktop table{
+        width:100%!important;
+        min-width:0!important;
+        max-width:100%!important;
+        table-layout:fixed!important;
+        margin:0!important;
+      }
+      /* Recetas: mantener FECHA | ID | CIE-10 | MEDICAMENTO | ESTADO | ACCIÓN. */
+      #auroAtencionesBox .auro-recetas-atencion-desktop{
+        padding:8px 0 8px;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop th,
+      #auroAtencionesBox .auro-recetas-atencion-desktop td{
+        padding:10px 5px!important;
+        font-size:clamp(10px,.91vw,12px);
+        overflow-wrap:break-word;
+        box-sizing:border-box;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(1){width:12%!important;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(2){width:27%!important;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(3){width:9%!important;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(4){width:27%!important;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(6){width:11%!important;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop th:nth-child(7){width:14%!important;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop td:nth-child(2){
+        font-size:clamp(9px,.85vw,11.5px)!important;
+        padding-left:4px!important;
+        padding-right:3px!important;
+        white-space:nowrap!important;
+        word-break:normal!important;
+        overflow-wrap:normal!important;
+        letter-spacing:-.28px;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop td:nth-child(1){white-space:nowrap;}
+      #auroAtencionesBox .auro-recetas-atencion-desktop .auro-receta-med-principal{
+        font-size:clamp(10px,.96vw,13px);
+        overflow-wrap:break-word;
+      }
+      #auroAtencionesBox .auro-recetas-atencion-desktop td:nth-child(7) .btn-action{
+        width:100%;
+        min-width:0!important;
+        padding:7px 3px!important;
+        font-size:clamp(9px,.83vw,11.5px)!important;
+        white-space:nowrap;
+      }
+      /* Historial: se mantiene #, ID, FECHA, HORA, TIPO,
+         ESPECIALIDAD / MÉDICO, ESTADO y los DOS botones preexistentes. */
+      #auroAtencionesBox .auro-atenciones-desktop{
+        padding:8px 7px 10px;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop th,
+      #auroAtencionesBox .auro-atenciones-desktop td{
+        padding:9px 4px!important;
+        box-sizing:border-box;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(1){width:4%!important;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(2){width:18%!important;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(3){width:12%!important;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(4){width:7%!important;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(5){width:12%!important;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(6){width:23%!important;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(7){width:10%!important;}
+      #auroAtencionesBox .auro-atenciones-desktop th:nth-child(8){width:14%!important;}
+      #auroAtencionesBox .auro-atenciones-desktop thead th{
+        font-size:clamp(9px,.75vw,10.5px)!important;
+        letter-spacing:0;
+        white-space:normal;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop tbody td{
+        font-size:clamp(10px,.91vw,12.5px)!important;
+        overflow-wrap:break-word;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop .iasyn-consulta-id small{
+        font-size:clamp(8.8px,.77vw,10.5px)!important;
+        letter-spacing:-.27px;
+        white-space:nowrap;
+        word-break:normal;
+        overflow-wrap:normal;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop td:nth-child(8){
+        min-width:0!important; /* anula el min-width inline heredado de 150px */
+      }
+      #auroAtencionesBox .auro-atenciones-desktop td:nth-child(8) > div{
+        width:100%;
+        min-width:0!important;
+        gap:4px!important;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop td:nth-child(8) .btn-action{
+        width:100%;
+        min-width:0!important;
+        box-sizing:border-box;
+        font-size:clamp(9px,.77vw,11px)!important;
+        padding:6px 2px!important;
+        white-space:nowrap;
+      }
+      #auroAtencionesBox .auro-atenciones-desktop td:nth-child(7) .badge-auro{
+        min-width:0!important;
+        width:100%;
+        padding:6px 2px!important;
+        font-size:clamp(9px,.80vw,11px);
+      }
+      /* Solo pantallas realmente estrechas: reutilizar tarjetas móviles.
+         No inventa otra vista ni oculta botones; evita scroll horizontal. */
+      @media (min-width:769px) and (max-width:920px){
+        #auroAtencionesBox .auro-recetas-atencion-desktop,
+        #auroAtencionesBox .auro-atenciones-desktop{display:none!important;}
+        #auroAtencionesBox .auro-recetas-atencion-mobile,
+        #auroAtencionesBox .auro-atenciones-mobile{display:block!important;}
+        #auroAtencionesBox .auro-receta-atencion-mobile-card .small,
+        #auroAtencionesBox .auro-consulta-card .small{overflow-wrap:anywhere;}
+      }
     `;
     document.head.appendChild(st);
   }
