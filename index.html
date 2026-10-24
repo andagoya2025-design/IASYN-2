@@ -2213,34 +2213,39 @@
       .auro-familiares-card > .clinical-note{margin-left:12px;margin-right:12px}
     }
 
-
-    /* IASYN2 DASHBOARD · RELIEVE VISUAL 3D V1 · SOLO PRESENTACIÓN
-       Alcance exclusivo: #dashboard. Sin cambios de HTML, JS, datos ni configuración. */
+  
+    /* IASYN2 DASHBOARD 3D V2: RELIEVE VISIBLE, EXCLUSIVO DEL DASHBOARD */
     #dashboard .hero{
-      box-shadow:0 15px 32px rgba(38,24,62,.13),0 3px 8px rgba(38,24,62,.07);
+      border:1px solid rgba(255,255,255,.25);
+      box-shadow:0 7px 0 rgba(91,18,54,.22),0 18px 36px rgba(75,22,56,.28),inset 0 2px 1px rgba(255,255,255,.22);
     }
     #dashboard .cardx{
-      box-shadow:0 13px 27px rgba(26,24,46,.09),0 3px 7px rgba(26,24,46,.045),inset 0 1px 0 rgba(255,255,255,.88);
-      transition:box-shadow .2s ease,transform .2s ease;
+      background:linear-gradient(155deg,#fff 0%,#fff 62%,#f7f0f8 100%);
+      border:1px solid rgba(114,70,116,.23);
+      box-shadow:0 6px 0 rgba(107,75,114,.15),0 17px 27px rgba(46,30,60,.20),inset 0 2px 0 rgba(255,255,255,.98);
+      transition:transform .18s ease,box-shadow .18s ease;
+    }
+    #dashboard .cardx.stat{
+      box-shadow:0 7px 0 rgba(107,75,114,.17),0 17px 28px rgba(46,30,60,.22),inset 0 2px 0 rgba(255,255,255,1);
     }
     #dashboard .cardx.stat:hover{
-      transform:translateY(-2px);
-      box-shadow:0 17px 32px rgba(26,24,46,.12),0 5px 10px rgba(26,24,46,.06),inset 0 1px 0 rgba(255,255,255,.9);
+      transform:translateY(-4px);
+      box-shadow:0 10px 0 rgba(107,75,114,.13),0 24px 34px rgba(46,30,60,.26),inset 0 2px 0 #fff;
     }
     #dashboard .stat-icon{
-      box-shadow:inset 0 1px 1px rgba(255,255,255,.75),0 5px 11px rgba(38,24,62,.07);
+      background:linear-gradient(145deg,#fff6fc,#ead5e9);
+      border:1px solid rgba(139,39,105,.18);
+      box-shadow:0 4px 0 rgba(135,83,131,.15),0 8px 14px rgba(69,34,73,.14),inset 0 2px 1px #fff;
     }
-    #dashboard .btn-soft,
-    #dashboard .btn-auro{
-      box-shadow:0 3px 7px rgba(26,24,46,.075);
+    #dashboard .btn-soft,#dashboard .btn-auro,#dashboard .hero .btn{
+      box-shadow:0 3px 0 rgba(80,48,89,.22),0 7px 12px rgba(43,26,58,.13);
     }
     @media (prefers-reduced-motion:reduce){
       #dashboard .cardx{transition:none}
       #dashboard .cardx.stat:hover{transform:none}
     }
-    /* FIN IASYN2 DASHBOARD · RELIEVE VISUAL 3D V1 */
-
-  </style>
+    /* FIN IASYN2 DASHBOARD 3D V2 */
+</style>
 
 
 <style id="receta-medicamentos-aurosanax-style">
