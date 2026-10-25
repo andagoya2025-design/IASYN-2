@@ -12,7 +12,7 @@
     return;
   }
 
-  const VERSION = '2.3.0-IASYN2-EMISION-BACKEND-VIGENTE';
+  const VERSION = '2.4.0-IASYN2-PORTAL-HTML-PROPIO';
   // Backend scrib 08 publicado: la interfaz permite solicitar emisión.
   // La autorización REAL ocurre en Apps Script: sesión ADMINISTRADOR, atención y archivos.
   // No depende de banderas globales configuradas manualmente.
@@ -374,34 +374,26 @@
     }
     return base;
   }
-  // Presentación del enlace: no cambia el token ni los permisos del servidor.
+  // El backend emite el token; el paciente recibe el HTML propio de IASYN-2.
+  // Verificar primero que el portal esté publicado y conectado al mismo /exec.
   function enlacePublicoResultados(enlaceServidor) {
     let url;
     try { url = new URL(txt(enlaceServidor)); }
     catch (_) { throw new Error('El servidor devolvió un enlace inválido.'); }
-
-    if (url.protocol !== 'https:') throw new Error('El enlace no es HTTPS.');
-    if (url.username || url.password || url.hash) throw new Error('El enlace contiene componentes no permitidos.');
-    if (url.hostname === 'iasyn.fyi' && url.pathname === '/resultados.html') {
-      const token = url.searchParams.get('token') || '';
-      if (!/^[A-Za-z0-9_-]{40,64}$/.test(token))
-        throw new Error('El enlace público no contiene un token válido.');
-      // El backend vigente devuelve el portal Apps Script, no una página web externa.
-      throw new Error('El backend devolvió un portal externo no configurado para esta emisión.');
-    }
-    if (url.hostname === 'script.google.com' &&
-        /^\/macros\/s\/[^/]+\/(exec|dev)$/.test(url.pathname) &&
-        url.searchParams.get('portal') === 'resultados') {
-      const token = url.searchParams.get('token') || '';
-      if (!/^[A-Za-z0-9_-]{40,64}$/.test(token))
-        throw new Error('No se encontró un token compatible para el portal público.');
-      const backend = new URL(endpointResultados());
-      if (url.origin !== backend.origin || url.pathname !== backend.pathname ||
-          backend.pathname.endsWith('/dev'))
-        throw new Error('El enlace no corresponde al despliegue EIC validado.');
-      return url.toString();
-    }
-    throw new Error('El servidor no devolvió un enlace compatible con el portal público.');
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash)
+      throw new Error('El servidor devolvió un enlace no autorizado.');
+    const backend = new URL(endpointResultados());
+    if (backend.pathname.endsWith('/dev'))
+      throw new Error('El despliegue de pruebas no admite enlaces públicos.');
+    if (url.origin !== backend.origin || url.pathname !== backend.pathname ||
+        url.searchParams.get('portal') !== 'resultados')
+      throw new Error('El enlace no corresponde al backend vigente de IASYN-2.');
+    const token = url.searchParams.get('token') || '';
+    if (!/^[A-Za-z0-9_-]{40,64}$/.test(token))
+      throw new Error('El servidor no entregó un token válido.');
+    const pagina = new URL('https://andagoya2025-design.github.io/IASYN-2/resultados.html');
+    pagina.searchParams.set('token', token);
+    return pagina.toString();
   }
   function tokenAdministrador() {
     // IASYN-2 guarda la sesión con prefijo iasyn_; la clave aurosanax_
