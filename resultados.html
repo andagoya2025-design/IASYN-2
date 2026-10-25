@@ -6,7 +6,7 @@
 <meta name="robots" content="noindex,nofollow,noarchive,nosnippet">
 <meta name="referrer" content="no-referrer">
 <meta name="color-scheme" content="light">
-<title>Resultados médicos | IASYN-2</title>
+<title>Entrega de resultados | Centro médico</title>
 <style>
 /* IASYN-2 | Portal de resultados V1.0 | Independiente, sin dependencias externas.
    Adaptado conceptualmente del portal de Aurosanax Prueba.
@@ -18,7 +18,7 @@
 </head>
 <body>
 <div class="shell">
-<header class="top"><div class="brand">IASYN-2 <span>MEDIC</span></div><div class="tag">Portal privado de resultados</div></header>
+<header class="top"><div class="brand" id="clinic-brand">Centro médico</div><div class="tag">Portal privado de resultados</div></header>
 <main>
 <section class="hero" aria-labelledby="page-title">
  <div class="hero-copy"><div class="eyebrow">Atención médica · Privacidad</div><h1 id="page-title">Tus resultados, <span>en un lugar seguro.</span></h1><p class="lead">Consulta únicamente los documentos autorizados para tu atención médica, mediante un enlace individual con vigencia limitada.</p></div>
@@ -26,14 +26,14 @@
 </section>
 <div class="sections">
  <section class="panel" aria-labelledby="documents-title"><h2 id="documents-title">Entrega de resultados</h2><p>Este espacio está reservado para los documentos médicos expresamente autorizados por el centro de atención.</p>
-  <div class="state" role="status" aria-live="polite"><div class="state-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div><div><strong id="state-title">Acceso protegido</strong><p id="state-message">El acceso estará disponible cuando el sistema de entregas de IASYN-2 haya sido habilitado y validado.</p></div></div>
+  <div class="state" role="status" aria-live="polite"><div class="state-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div><div><strong id="state-title">Acceso protegido</strong><p id="state-message">El acceso a los documentos requiere un enlace válido y un servidor habilitado.</p></div></div>
   <div id="portal-frame-host" class="portal-frame-host hidden" aria-label="Panel de documentos autorizados"></div>
   <p class="fine">Por confidencialidad, evita reenviar el enlace a terceros. Si tienes dificultades, contacta al centro médico.</p>
  </section>
  <aside class="panel" aria-label="Protección de información"><h2>Tu privacidad importa</h2><div class="security"><div class="security-item"><div class="number">01</div><p><strong>Acceso individual.</strong> Solo se mostrarán documentos expresamente autorizados para la entrega.</p></div><div class="security-item"><div class="number">02</div><p><strong>Enlace temporal.</strong> La vigencia y los accesos deben validarse en el servidor.</p></div><div class="security-item"><div class="number">03</div><p><strong>Documentos protegidos.</strong> No se utilizarán enlaces públicos directos de Google Drive.</p></div></div></aside>
 </div>
 </main>
-<footer class="footer"><span>IASYN-2 MEDIC · Resultados médicos</span><span>Privacidad y confianza · © <span id="year"></span></span></footer>
+<footer class="footer"><span><strong id="clinic-footer">Centro médico</strong> · Resultados médicos</span><span>Privacidad y confianza · © <span id="year"></span></span></footer>
 </div>
 <script>
 (function(){
@@ -46,12 +46,35 @@
  var mensaje=document.getElementById('state-message');
  document.getElementById('year').textContent=String(new Date().getFullYear());
  function estado(t,m){titulo.textContent=t;mensaje.textContent=m;}
+ function aplicarNombreInstitucional(valor){
+   if(typeof valor!=='string')return;
+   var nombre=valor.trim().replace(/\\s+/g,' ');
+   if(!nombre||nombre.length>120)return;
+   document.getElementById('clinic-brand').textContent=nombre;
+   document.getElementById('clinic-footer').textContent=nombre;
+   document.title='Entrega de resultados | '+nombre;
+ }
+ function extraerNombrePublico(cfg){
+   if(!cfg||typeof cfg!=='object'||Array.isArray(cfg))return '';
+   var obj=(cfg.configuracion&&typeof cfg.configuracion==='object')?cfg.configuracion:cfg;
+   return obj.nombre_clinica||obj.nombre_centro||obj.nombre_comercial||obj.razon_social||'';
+ }
+ /* La configuración se consulta SOLO en el backend EIC validado.
+    No se usan URLs, nombres ni credenciales de Aurosanax Prueba. */
+ function cargarNombreInstitucional(base){
+   var url=new URL(base.toString());
+   url.searchParams.set('accion','obtenerConfiguracion');
+   fetch(url.toString(),{method:'GET',credentials:'omit',cache:'no-store',referrerPolicy:'no-referrer'})
+     .then(function(r){if(!r.ok)throw new Error('Configuración no disponible');return r.json();})
+     .then(function(cfg){aplicarNombreInstitucional(extraerNombrePublico(cfg));})
+     .catch(function(){/* La identidad no interrumpe la validación de resultados. */});
+ }
  var token=new URLSearchParams(window.location.search).get('token')||'';
  if(!/^[A-Za-z0-9_-]{40,64}$/.test(token)){
    estado('Enlace no disponible','Abre el enlace individual enviado por el centro médico.');return;
  }
  if(!CONFIG.habilitado){
-   estado('Portal en preparación','El acceso a resultados aún no está habilitado en IASYN-2. Comunícate con el centro médico.');return;
+   estado('Portal en preparación','El acceso a resultados aún no está habilitado. Comunícate con el centro médico.');return;
  }
  var base;
  try{
@@ -61,6 +84,7 @@
      throw new Error('Endpoint no autorizado');
    }
  }catch(_){estado('Servicio no configurado','No es posible acceder a los resultados en este momento.');return;}
+ cargarNombreInstitucional(base);
  base.searchParams.set('portal','resultados');
  base.searchParams.set('token',token);
  var frame=document.createElement('iframe');
