@@ -38,10 +38,9 @@
 <script>
 (function(){
  'use strict';
- /* CONFIGURACIÓN PENDIENTE: no copiar el endpoint de Aurosanax Prueba.
-    Configurar únicamente después de validar el backend propio de EIC.
-    Ejemplo de valor permitido: https://script.google.com/macros/s/ID_DEL_DESPLIEGUE/exec */
- var CONFIG=Object.freeze({backendResultadosUrl:'',habilitado:false});
+ /* PORTAL IASYN-2: endpoint exclusivo de iasyn-config.js en GitHub,
+    verificado por lectura el 25/10/2026. No reutilizar el de Aurosanax Prueba. */
+ var CONFIG=Object.freeze({backendResultadosUrl:'https://script.google.com/macros/s/AKfycbz-Pc74aqgzRU95wyMzLw3UWj4OJtobRLhVfesWgT-WEbOX-JfLmzNpUPZKdNpVJnx8Ng/exec',habilitado:true});
  var titulo=document.getElementById('state-title');
  var mensaje=document.getElementById('state-message');
  document.getElementById('year').textContent=String(new Date().getFullYear());
