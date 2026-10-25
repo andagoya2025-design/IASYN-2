@@ -404,10 +404,25 @@
     throw new Error('El servidor no devolvió un enlace compatible con el portal público.');
   }
   function tokenAdministrador() {
-    const token = txt(sessionStorage.getItem('aurosanax_seguridad_token'));
-    const expira = Number(sessionStorage.getItem('aurosanax_seguridad_expira_en') || 0);
-    if (!token || (expira && Date.now() >= expira)) throw new Error('Sesión vencida. Inicie sesión nuevamente.');
-    return token;
+    // IASYN-2 guarda la sesión con prefijo iasyn_; la clave aurosanax_
+    // solo se conserva para compatibilidad con sesiones anteriores.
+    // No se inventan tokens ni se omite la validación del servidor.
+    const claves = [
+      ['iasyn_seguridad_token', 'iasyn_seguridad_expira_en'],
+      ['aurosanax_seguridad_token', 'aurosanax_seguridad_expira_en']
+    ];
+    for (const [claveToken, claveExpira] of claves) {
+      const token = txt(sessionStorage.getItem(claveToken));
+      if (!token) continue;
+      const expiraRaw = txt(sessionStorage.getItem(claveExpira));
+      const expira = Number(expiraRaw || 0);
+      if (expiraRaw && (!Number.isFinite(expira) || expira <= 0 || Date.now() >= expira)) {
+        // Una sesión vencida no debe reemplazarse por otra clave legacy.
+        throw new Error('Sesión vencida. Inicie sesión nuevamente.');
+      }
+      return token;
+    }
+    throw new Error('Sesión vencida. Inicie sesión nuevamente.');
   }
   async function emitirEnlace() {
     if (state.emitiendo) return;
