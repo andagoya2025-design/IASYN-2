@@ -1,9 +1,9 @@
 /* ============================================================================
  * AUROSANAX ERP | resultados.js | V1.3.2 - COMPATIBILIDAD ANTIRREGRESIVA
  * Basado en resultados.js V1.0.0, sin modificar documentos.js.
- * SOLO LECTURA: no crea enlaces, no escribe en Sheets/Drive, no envía mensajes.
+ * Emite enlaces exclusivamente mediante backend Apps Script validado; no envía mensajes automáticamente.
  * Requiere documentos.js con resultadosBridge V1.0.0 y carga del script en index.
- * Los controles de vigencia y accesos son PREPARACIÓN, no seguridad aplicada.
+ * Vigencia, accesos y autorización se aplican en el backend scrib 08 vigente.
  * ========================================================================== */
 (function () {
   'use strict';
@@ -12,11 +12,11 @@
     return;
   }
 
-  const VERSION = '2.2.0-IASYN2-EMISION-CONTROLADA-ANTIRREGRESIVA';
-  // Nunca habilitar por defecto: exige confirmación explícita de backend EIC y portal publicado.
-  // No se confía en el cliente como control de acceso: el backend revalida sesión, paciente y archivos.
-  const EMISION_HABILITADA = window.IASYN_RESULTADOS_EMISION_VALIDADA === true &&
-    window.IASYN_RESULTADOS_PORTAL_VALIDADO === true;
+  const VERSION = '2.3.0-IASYN2-EMISION-BACKEND-VIGENTE';
+  // Backend scrib 08 publicado: la interfaz permite solicitar emisión.
+  // La autorización REAL ocurre en Apps Script: sesión ADMINISTRADOR, atención y archivos.
+  // No depende de banderas globales configuradas manualmente.
+  const EMISION_HABILITADA = true;
   const CATEGORIAS = Object.freeze([
     { id: 'LABORATORIO', nombre: 'Laboratorios', icono: 'bi-droplet-half' },
     { id: 'ECOGRAFIA_IMAGEN', nombre: 'Ecografías / imágenes', icono: 'bi-image' },
@@ -386,10 +386,8 @@
       const token = url.searchParams.get('token') || '';
       if (!/^[A-Za-z0-9_-]{40,64}$/.test(token))
         throw new Error('El enlace público no contiene un token válido.');
-      // Este dominio solo puede utilizarse tras publicar y probar resultados.html.
-      if (window.IASYN_RESULTADOS_PORTAL_VALIDADO !== true)
-        throw new Error('Portal web de IASYN-2 no validado.');
-      return url.toString();
+      // El backend vigente devuelve el portal Apps Script, no una página web externa.
+      throw new Error('El backend devolvió un portal externo no configurado para esta emisión.');
     }
     if (url.hostname === 'script.google.com' &&
         /^\/macros\/s\/[^/]+\/(exec|dev)$/.test(url.pathname) &&
