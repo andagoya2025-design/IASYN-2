@@ -1819,74 +1819,49 @@
     cargarMedicosActivos
   };
 
-  // =====================================================================
-  // IASYN-2: PUENTE AISLADO PARA RESULTADOS — V1
-  // Solo lectura: no modifica colas, cargas, anulaciones ni API existente.
-  // =====================================================================
+
+  /* IASYN-2: puente de lectura para Entrega de Resultados. Sin escrituras. */
   (function instalarPuenteResultados(){
     function asegurarContenedor(){
-      const mount = asegurarMount();
-      if(!mount) return null;
-      const app = document.getElementById('auroDocumentosApp');
-      const shell = app && app.querySelector('.auro-doc-shell');
+      asegurarMount();
+      const shell = document.querySelector('#auroDocumentosApp .auro-doc-shell');
       if(!shell) return null;
       let slot = document.getElementById('auroResultadosMount');
       if(!slot){
         slot = document.createElement('section');
         slot.id = 'auroResultadosMount';
-        slot.setAttribute('aria-label','Entrega privada de resultados');
+        slot.setAttribute('aria-label','Entrega segura de resultados');
         shell.appendChild(slot);
       }
       return slot;
     }
-
     function obtenerSnapshot(){
       const ctx = contextoAtencion();
-      const cargado = state.contexto;
-      const mismoContexto = !!(
-        ctx.id && ctx.idPaciente && !ctx.bloqueada &&
-        cargado && txt(cargado.id) === txt(ctx.id) &&
-        txt(cargado.idPaciente) === txt(ctx.idPaciente) &&
-        !state.cargando && !state.subiendo &&
-        txt(state.idAtencion) === txt(ctx.id)
-      );
-      if(!mismoContexto){
-        return {listo:false,id_atencion:'',id_paciente:'',documentos:[]};
-      }
-      const documentos = registrosActivos().filter(r=>
-        txt(r.id_atencion) === txt(ctx.id) &&
-        (!txt(r.id_paciente) || txt(r.id_paciente) === txt(ctx.idPaciente)) &&
-        !!txt(r.id_documento)
-      ).map(r=>Object.freeze({
+      const actual = state.contexto;
+      const listo = !!(ctx.id && ctx.valido === true && !ctx.bloqueada && ctx.idPaciente &&
+        actual && actual.id === ctx.id && actual.idPaciente === ctx.idPaciente &&
+        !state.cargando && state.idAtencion === ctx.id);
+      if(!listo) return {listo:false,id_atencion:'',id_paciente:'',documentos:[]};
+      const documentos = state.registros.filter(r =>
+        txt(r.id_atencion) === ctx.id &&
+        (!txt(r.id_paciente) || txt(r.id_paciente) === ctx.idPaciente) &&
+        txt(r.id_documento) && !/(anulad|eliminad|inactiv)/i.test(txt(r.estado || 'Activo'))
+      ).map(r => ({
         id_documento:txt(r.id_documento),
-        categoria_documento:normalizarCategoria(r.categoria_documento || r.tipo_documento),
+        id_atencion:txt(r.id_atencion),
+        id_paciente:ctx.idPaciente,
         nombre_documento:txt(r.nombre_documento),
-        mime_type:txt(r.mime_type),
-        extension:txt(r.extension).toLowerCase(),
-        tamano_bytes:Number(r.tamano_bytes || 0),
-        fecha_documento:txt(r.fecha_documento || r.creado_en)
+        categoria_documento:txt(r.categoria_documento || r.tipo_documento),
+        mime_type:txt(r.mime_type), extension:txt(r.extension),
+        tamano_bytes:Number(r.tamano_bytes || 0)
       }));
-      return Object.freeze({
-        listo:true,
-        id_atencion:txt(ctx.id),
-        id_paciente:txt(ctx.idPaciente),
-        documentos:Object.freeze(documentos)
-      });
+      return {listo:true,id_atencion:ctx.id,id_paciente:ctx.idPaciente,documentos};
     }
-
     Object.defineProperty(window.auroDocumentos,'resultadosBridge',{
-      value:Object.freeze({
-        version:'1.0.0-IASYN2',
-        asegurarContenedor,
-        obtenerSnapshot
-      }),
-      enumerable:true,
-      writable:false,
-      configurable:false
+      value:Object.freeze({version:'1.0.0',asegurarContenedor,obtenerSnapshot}),
+      enumerable:true,writable:false,configurable:false
     });
   })();
-  // FIN PUENTE RESULTADOS
-  // =====================================================================
 
   /* Alias propio IASYN sin romper consumidores heredados de window.auroDocumentos. */
   window.iasynDocumentos = window.auroDocumentos;
