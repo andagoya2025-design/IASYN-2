@@ -12,8 +12,11 @@
     return;
   }
 
-  const VERSION = '2.1.0-IASYN2-INTERFAZ-ORIGINAL-EMISION-BLOQUEADA';
-  const EMISION_HABILITADA = false; // Requiere validación posterior de backend y portal propios de IASYN-2.
+  const VERSION = '2.2.0-IASYN2-EMISION-CONTROLADA-ANTIRREGRESIVA';
+  // Nunca habilitar por defecto: exige confirmación explícita de backend EIC y portal publicado.
+  // No se confía en el cliente como control de acceso: el backend revalida sesión, paciente y archivos.
+  const EMISION_HABILITADA = window.IASYN_RESULTADOS_EMISION_VALIDADA === true &&
+    window.IASYN_RESULTADOS_PORTAL_VALIDADO === true;
   const CATEGORIAS = Object.freeze([
     { id: 'LABORATORIO', nombre: 'Laboratorios', icono: 'bi-droplet-half' },
     { id: 'ECOGRAFIA_IMAGEN', nombre: 'Ecografías / imágenes', icono: 'bi-image' },
@@ -222,9 +225,9 @@
   function nombreInstitucionalResultados() {
     const cfg = window.auroConfiguracionCentro;
     if (cfg && typeof cfg === 'object' && !Array.isArray(cfg)) {
-      return txt(cfg.nombre_clinica || cfg.nombre_centro || cfg.nombre_comercial || cfg.razon_social) || 'AUROSANAX MEDIC';
+      return txt(cfg.nombre_clinica || cfg.nombre_centro || cfg.nombre_comercial || cfg.razon_social) || 'Centro médico';
     }
-    return 'AUROSANAX MEDIC';
+    return 'Centro médico';
   }
   function telefonoDestinatario(c) {
     const p = pacienteVinculado(c);
@@ -378,11 +381,15 @@
     catch (_) { throw new Error('El servidor devolvió un enlace inválido.'); }
 
     if (url.protocol !== 'https:') throw new Error('El enlace no es HTTPS.');
+    if (url.username || url.password || url.hash) throw new Error('El enlace contiene componentes no permitidos.');
     if (url.hostname === 'iasyn.fyi' && url.pathname === '/resultados.html') {
       const token = url.searchParams.get('token') || '';
       if (!/^[A-Za-z0-9_-]{40,64}$/.test(token))
         throw new Error('El enlace público no contiene un token válido.');
-      throw new Error('Portal IASYN-2 pendiente de verificación.');
+      // Este dominio solo puede utilizarse tras publicar y probar resultados.html.
+      if (window.IASYN_RESULTADOS_PORTAL_VALIDADO !== true)
+        throw new Error('Portal web de IASYN-2 no validado.');
+      return url.toString();
     }
     if (url.hostname === 'script.google.com' &&
         /^\/macros\/s\/[^/]+\/(exec|dev)$/.test(url.pathname) &&
@@ -390,7 +397,11 @@
       const token = url.searchParams.get('token') || '';
       if (!/^[A-Za-z0-9_-]{40,64}$/.test(token))
         throw new Error('No se encontró un token compatible para el portal público.');
-      throw new Error('Portal IASYN-2 pendiente de verificación.');
+      const backend = new URL(endpointResultados());
+      if (url.origin !== backend.origin || url.pathname !== backend.pathname ||
+          backend.pathname.endsWith('/dev'))
+        throw new Error('El enlace no corresponde al despliegue EIC validado.');
+      return url.toString();
     }
     throw new Error('El servidor no devolvió un enlace compatible con el portal público.');
   }
@@ -402,7 +413,7 @@
   }
   async function emitirEnlace() {
     if (state.emitiendo) return;
-    if (!EMISION_HABILITADA) { aviso('Emisión bloqueada: falta validar backend y portal privados de IASYN-2.'); render(); return; }
+    if (!EMISION_HABILITADA) { aviso('Emisión protegida: validar y publicar primero el backend EIC y el portal de resultados.'); render(); return; }
     const c = comprobarCambio();
     if (!valido(c)) { aviso('Seleccione una atención clínica válida.'); return; }
     const ids = seleccionActual();
@@ -554,7 +565,7 @@
     estado: () => ({
       id_atencion: state.idAtencion, id_paciente: state.idPaciente,
       seleccionados: state.seleccion.size, documentos: state.registros.length,
-      modo: 'VISTA_PREVIA_SEGURA', emisionHabilitada: EMISION_HABILITADA
+      modo: EMISION_HABILITADA ? 'EMISION_VALIDADA' : 'VISTA_PREVIA_SEGURA', emisionHabilitada: EMISION_HABILITADA
     })
   });
 })();
