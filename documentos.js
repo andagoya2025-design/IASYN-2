@@ -314,6 +314,8 @@
       editable:!bloqueada,
       bloqueada,
       finalizada,
+      // Contrato explícito para resultados.js: no aceptar atención sin paciente.
+      valido:!!(id && txt(a.id_paciente) && !bloqueada),
       idPaciente:txt(a.id_paciente),
       idHistoria:txt(a.id_historia),
       idMedico:txt(a.id_medico),
@@ -1079,7 +1081,8 @@
       Si ya tenemos el índice de la misma atención y no se pidió recarga,
       evitamos otra consulta de red.
     */
-    if(!forzar && state.idAtencion === ctx.id && state.registros.length){
+    if(!forzar && state.idAtencion === ctx.id &&
+       state.contexto?.idPaciente === ctx.idPaciente && state.registros.length){
       renderLista();
       return state.registros;
     }
@@ -1092,9 +1095,18 @@
       const data = await apiGet(ENDPOINTS.listar,{id_atencion:ctx.id});
 
       if(token !== state.tokenCarga) return state.registros;
+      const vigente = contextoAtencion();
+      if(vigente.id !== ctx.id || vigente.idPaciente !== ctx.idPaciente ||
+         vigente.idHistoria !== ctx.idHistoria){
+        // La respuesta pertenece a una atención anterior: nunca publicarla.
+        state.registros = [];
+        state.idAtencion = '';
+        return [];
+      }
 
       state.registros = arr(data).filter(r=>
-        !txt(r.id_atencion) || txt(r.id_atencion) === ctx.id
+        txt(r.id_atencion) === ctx.id &&
+        (!txt(r.id_paciente) || txt(r.id_paciente) === ctx.idPaciente)
       );
       state.idAtencion = ctx.id;
 
