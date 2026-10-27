@@ -12,7 +12,7 @@
     return;
   }
 
-  const VERSION = '2.4.0-IASYN2-PORTAL-HTML-PROPIO';
+  const VERSION = '2.5.0-IASYN2-FIRMADOS-ANTIRREGRESIVO';
   // Backend scrib 08 publicado: la interfaz permite solicitar emisión.
   // La autorización REAL ocurre en Apps Script: sesión ADMINISTRADOR, atención y archivos.
   // No depende de banderas globales configuradas manualmente.
@@ -22,7 +22,8 @@
     { id: 'ECOGRAFIA_IMAGEN', nombre: 'Ecografías / imágenes', icono: 'bi-image' },
     { id: 'FOTOGRAFIA_CLINICA', nombre: 'Fotografías clínicas', icono: 'bi-camera' },
     { id: 'PATOLOGIA', nombre: 'Patología', icono: 'bi-file-earmark-medical' },
-    { id: 'OTRO', nombre: 'Otros documentos', icono: 'bi-folder2-open' }
+    { id: 'OTRO', nombre: 'Otros documentos', icono: 'bi-folder2-open' },
+    { id: 'FIRMADOS', nombre: 'Documentos médicos firmados', icono: 'bi-file-earmark-check' }
   ]);
   const FORMATOS = Object.freeze({
     'application/pdf': 'PDF', 'image/jpeg': 'JPG', 'image/png': 'PNG',
@@ -40,6 +41,9 @@
   }[c]));
   const documentos = () => window.auroDocumentos || null;
   const puente = () => documentos()?.resultadosBridge || null;
+  // IASYN-2: adaptador de firmas, independiente de Documentos y de la firma original.
+  const puenteFirma = () => window.auroResultadosFirma || null;
+  const ID_FIRMA = 'FIRMA:';
 
   function contexto() {
     try { return documentos()?.obtenerContexto?.() || null; }
@@ -79,6 +83,7 @@
       state.tokenCarga++;
       state.seleccion.clear();
       state.registros = [];
+      puenteFirma()?.limpiar?.();
       state.idAtencion = clave?.[0] || '';
       state.idPaciente = clave?.[1] || '';
       state.idHistoria = clave?.[2] || '';
@@ -98,6 +103,7 @@
     state.tokenCarga++;
     state.seleccion.clear();
     state.registros = [];
+    puenteFirma()?.limpiar?.();
     state.idAtencion = '';
     state.idPaciente = '';
     state.idHistoria = '';
@@ -131,8 +137,31 @@
       tamano_bytes: Number(r.tamano_bytes) || 0
     }));
   }
-  function aplicarRegistros(lista, c) {
-    state.registros = normalizarRegistros(lista, c);
+  /* ===== IASYN-2: BLOQUE AISLADO DE RESULTADOS FIRMADOS (SOLO ÍNDICE) ===== */
+  function normalizarFirmados(snapshot, c) {
+    if (!snapshot?.listo || txt(snapshot.id_atencion) !== txt(c.id) ||
+        txt(snapshot.id_paciente) !== txt(c.idPaciente)) return [];
+    const vistos = new Set();
+    return (Array.isArray(snapshot.documentos) ? snapshot.documentos : []).filter(r => {
+      const id = txt(r.id_firma_documento);
+      if (!/^[A-Za-z0-9_-]+$/.test(id) || vistos.has(id) ||
+          txt(r.fuente) !== 'FIRMADOS' || txt(r.estado_firma) !== 'FIRMADO' ||
+          txt(r.id_atencion) !== txt(c.id) || txt(r.id_paciente) !== txt(c.idPaciente) ||
+          txt(r.mime_type).toLowerCase() !== 'application/pdf' ||
+          !['RECETA','RECOMENDACION','CERTIFICADO','ORDEN_MEDICA'].includes(txt(r.tipo_documento))) return false;
+      vistos.add(id);
+      return true;
+    }).map(r => ({
+      id_documento: ID_FIRMA + txt(r.id_firma_documento),
+      nombre_documento: txt(r.nombre_documento) || 'Documento médico firmado.pdf',
+      categoria_documento: 'FIRMADOS', tipo_documento: txt(r.tipo_documento),
+      mime_type: 'application/pdf', extension: 'pdf',
+      tamano_bytes: Number(r.tamano_bytes) || 0
+    }));
+  }
+  /* ===== FIN BLOQUE AISLADO ===== */
+  function aplicarRegistros(lista, c, firmados = []) {
+    state.registros = normalizarRegistros(lista, c).concat(firmados);
     const ids = new Set(state.registros.map(r => r.id_documento));
     if ([...state.seleccion].some(id => !ids.has(id))) invalidarEnlace();
     for (const id of state.seleccion) {
@@ -169,8 +198,30 @@
         }
       }
       if (token !== state.tokenCarga) return [];
-      aplicarRegistros(lista, c);
-      aviso(`${state.registros.length} archivo(s) disponibles. Ningún enlace ha sido generado.`);
+      // No bloquea los documentos ordinarios si falla la consulta de firmados.
+      let firmados = [];
+      let advertenciaFirma = '';
+      const adaptador = puenteFirma();
+      if (adaptador && typeof adaptador.cargar === 'function') {
+        try {
+          const snapshot = await adaptador.cargar({id_atencion:id, id_paciente:paciente});
+          if (token !== state.tokenCarga) return [];
+          const actual = contexto();
+          if (!valido(actual) || txt(actual.id) !== id ||
+              txt(actual.idPaciente) !== paciente || txt(actual.idHistoria) !== historia) {
+            comprobarCambio(); render(); return [];
+          }
+          firmados = normalizarFirmados(snapshot, actual);
+        } catch (errorFirma) {
+          if (token !== state.tokenCarga) return [];
+          advertenciaFirma = ' No se pudieron consultar los PDF firmados: ' + txt(errorFirma?.message || errorFirma);
+        }
+      } else {
+        advertenciaFirma = ' Adaptador de documentos firmados no cargado.';
+      }
+      if (token !== state.tokenCarga) return [];
+      aplicarRegistros(lista, c, firmados);
+      aviso(`${state.registros.length} archivo(s) disponibles (${firmados.length} firmado(s)). Ningún enlace ha sido generado.` + advertenciaFirma);
       return state.registros.map(r => ({...r}));
     } catch (error) {
       if (token === state.tokenCarga) {
@@ -313,7 +364,7 @@
             ${state.seleccion.has(r.id_documento) ? 'checked' : ''}>
           <span style="min-width:0">
             <span class="ar-file-name">${seguro(r.nombre_documento)}</span>
-            <span class="ar-file-meta" style="display:block">${seguro(tipo(r))} · ${r.tamano_bytes ? seguro((r.tamano_bytes / 1024).toFixed(1)) + ' KB' : 'Tamaño no disponible'}</span>
+            <span class="ar-file-meta" style="display:block">${r.categoria_documento === 'FIRMADOS' ? seguro(r.tipo_documento.replace(/_/g, ' ') + ' · Firmado · ') : ''}${seguro(tipo(r))} · ${r.tamano_bytes ? seguro((r.tamano_bytes / 1024).toFixed(1)) + ' KB' : 'Tamaño no disponible'}</span>
           </span>
         </label>`).join('');
       return `<div class="ar-group"><div class="ar-group-head"><span><i class="bi ${grupo.icono} me-1"></i>${seguro(grupo.nombre)}</span><span>${lista.length} archivo(s)</span></div>${archivos}</div>`;
