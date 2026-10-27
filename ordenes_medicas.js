@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.1-IASYN-CIE10-ANTIRREGRESIVO-PRESENTACION-CANDIDATA';
+const VERSION='1.4.2-IASYN-ORDENES-CANCELAR-FIRMA-CANDIDATA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -654,6 +654,8 @@ function instalarCSS(){
 .aom-btn{border:1px solid #d1d5db;background:#fff;color:#374151;border-radius:10px;padding:6px 9px;font-size:12px;font-weight:750}
 .aom-btn:hover{background:#f9fafb}
 .aom-btn.danger{border-color:#fecaca;color:#991b1b;background:#fff7f7}
+.aom-btn.firma-ok{border-color:#86efac;color:#166534;background:#f0fdf4}
+.aom-btn.firma-cancelar{border-color:#fcd34d;color:#92400e;background:#fffbeb}
 .aom-empty{font-size:12.5px;color:#6b7280;padding:4px 0}
 .aom-modal{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.55)}
 .aom-modal-panel{width:min(920px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;border:1px solid #e5e7eb;box-shadow:0 28px 80px rgba(15,23,42,.28);padding:18px}
@@ -784,6 +786,7 @@ function render(){
   app.querySelectorAll('[data-aom-imprimir]').forEach(b=>b.addEventListener('click',()=>imprimirPorId(b.dataset.aomImprimir)));
   app.querySelectorAll('[data-aom-anular]').forEach(b=>b.addEventListener('click',()=>anular(b.dataset.aomAnular)));
   app.querySelectorAll('[data-aom-firmar]').forEach(b=>b.addEventListener('click',()=>solicitarFirmaOrden(b.dataset.aomFirmar)));
+  app.querySelectorAll('[data-aom-cancelar-firma]').forEach(b=>b.addEventListener('click',()=>cancelarFirmaOrden(b.dataset.aomCancelarFirma)));
   app.querySelectorAll('[data-aom-ver-firmado]').forEach(b=>b.addEventListener('click',()=>verOrdenFirmada(b.dataset.aomVerFirmado)));
 }
 
@@ -807,8 +810,9 @@ function filaHistorial(r){
       <button type="button" class="aom-btn" data-aom-preview="${esc(id)}"><i class="bi bi-eye"></i> Vista previa</button>
       ${noEditable?'':`<button type="button" class="aom-btn" data-aom-editar="${esc(id)}"><i class="bi bi-pencil-square"></i> Editar</button>`}
       <button type="button" class="aom-btn" data-aom-imprimir="${esc(id)}"><i class="bi bi-printer"></i> Imprimir</button>
-      ${firmado?`<button type="button" class="aom-btn" data-aom-ver-firmado="${esc(id)}"><i class="bi bi-shield-check"></i> Ver firmado</button>`:''}
+      ${firmado?`<button type="button" class="aom-btn firma-ok" data-aom-ver-firmado="${esc(id)}"><i class="bi bi-shield-check"></i> Firmado · Ver PDF</button>`:''}
       ${!noEditable&&!firmado?`<button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" ${firmando?'disabled':''}><i class="bi bi-pen"></i> ${firmando?'Firma en proceso…':'Firmar'}</button>`:''}
+      ${!noEditable&&!firmado&&firmando?`<button type="button" class="aom-btn firma-cancelar" data-aom-cancelar-firma="${esc(id)}" ${proceso.cancelando?'disabled':''}><i class="bi bi-x-circle"></i> ${proceso.cancelando?'Cancelando firma…':'Cancelar firma'}</button>`:''}
       ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-slash-circle"></i> Anular</button>`}
     </div>
   </div>`;
@@ -1364,13 +1368,63 @@ async function sincronizarFirmasOrdenes(idAtencion,tokenCarga){
     state.firmasPorDocumento=nuevas;
   }
 }
+/* La cancelación afecta exclusivamente la solicitud de firma, nunca la orden médica. */
+async function cancelarFirmaOrden(id){
+  id=txt(id);
+  const proceso=state.firmaProcesos.get(id);
+  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===id);
+  if(!proceso||!reg||proceso.cancelando) return;
+  if(txt(contexto().id)!==txt(proceso.id_atencion)||txt(reg.id_atencion)!==txt(proceso.id_atencion)){
+    return aviso('Cambió la atención: no se cancelará una firma de otra atención.','err');
+  }
+  if(!window.confirm('¿Cancelar únicamente la solicitud de firma electrónica? La orden médica NO será anulada.')) return;
+  proceso.cancelando=true;
+  proceso.cancelacionSolicitada=true;
+  render();
+  try{
+    // La creación puede estar en tránsito. Esperar a disponer de un ID persistido.
+    if(!proceso.id_solicitud){
+      aviso('Cancelación solicitada. Esperando el identificador del servidor…','warn');
+      return;
+    }
+    await ejecutarCancelacionFirmaOrden(id,proceso);
+  }catch(e){
+    proceso.cancelando=false;
+    proceso.cancelacionSolicitada=false;
+    aviso('No se pudo cancelar la firma: '+txt(e?.message||e),'err');
+    render();
+  }
+}
+
+async function ejecutarCancelacionFirmaOrden(id,proceso){
+  if(!proceso.id_solicitud) throw Error('La solicitud aún no tiene identificador remoto.');
+  const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===id);
+  if(!reg||txt(reg.id_atencion)!==txt(proceso.id_atencion)) throw Error('La identidad de la orden cambió.');
+  const version=datosDocumentoEmitido(reg).version;
+  const r=await postFirmaOrden('firmarDocumento',{
+    operacion_frontend:'CANCELAR',
+    id_solicitud:proceso.id_solicitud,
+    id_atencion:proceso.id_atencion,
+    tipo_documento:'ORDEN_MEDICA',
+    id_documento_origen:id,
+    id_orden:id,
+    id_orden_medica:id,
+    version_documento:version
+  });
+  if(txt(r.estado_firma||r.estado).toUpperCase()!=='CANCELADA'){
+    throw Error('El servidor no confirmó el estado CANCELADA.');
+  }
+  proceso.cancelado=true;
+  aviso('Solicitud de firma cancelada. La orden médica permanece intacta.','ok');
+}
+
 async function solicitarFirmaOrden(id){
   id=txt(id);
   if(state.firmaProcesos.has(id)) return aviso('Ya existe una solicitud de firma en curso.','warn');
+  let proceso=null;
   try{
     const solicitud=await prepararSolicitudFirmaOrden(id);
     if(state.firmasPorDocumento[id]) return verOrdenFirmada(id);
-    // La consulta remota previa evita una firma duplicada tras recargar el navegador.
     const reg=state.ordenesEmitidas.find(x=>txt(x.id_orden)===id);
     const existente=await consultarFirmaOrden(reg);
     if(existente){
@@ -1379,7 +1433,7 @@ async function solicitarFirmaOrden(id){
       return aviso('Esta versión ya está firmada. Use Ver firmado.','ok');
     }
     if(!window.confirm('¿Firmar electrónicamente esta versión de la orden médica?')) return;
-    const proceso={id_atencion:solicitud.id_atencion,id_solicitud:'',cancelado:false};
+    proceso={id_atencion:solicitud.id_atencion,id_solicitud:'',cancelado:false,cancelando:false,cancelacionSolicitada:false};
     state.firmaProcesos.set(id,proceso);
     render();
     aviso('Enviando orden médica para una firma electrónica…');
@@ -1393,11 +1447,24 @@ async function solicitarFirmaOrden(id){
     }
     proceso.id_solicitud=txt(r.id_solicitud);
     if(!proceso.id_solicitud) throw Error('El servidor no devolvió id_solicitud.');
+    if(proceso.cancelacionSolicitada){
+      await ejecutarCancelacionFirmaOrden(id,proceso);
+      return;
+    }
+    render();
     aviso('Solicitud creada. Firme el PDF en Adobe y guárdelo.');
     const inicio=Date.now();
     while(Date.now()-inicio<35*60*1000){
+      if(proceso.cancelado) return;
+      if(proceso.cancelacionSolicitada){
+        // Si la cancelación está en curso, no consultar ni iniciar otra firma.
+        await new Promise(resolve=>setTimeout(resolve,400));
+        continue;
+      }
       await new Promise(resolve=>setTimeout(resolve,2000));
+      if(proceso.cancelado||proceso.cancelacionSolicitada) continue;
       const estado=await postFirmaOrden('obtenerEstadoFirmaElectronica',{id_solicitud:proceso.id_solicitud});
+      if(proceso.cancelado||proceso.cancelacionSolicitada) continue;
       const valor=txt(estado.estado_firma||estado.estado).toUpperCase();
       if(valor==='FIRMADO'){
         const firmada=await consultarFirmaOrden(reg);
@@ -1406,14 +1473,20 @@ async function solicitarFirmaOrden(id){
         aviso('Orden médica firmada electrónicamente y archivada.','ok');
         return;
       }
-      if(['ERROR','EXPIRADA','CANCELADA'].includes(valor)) throw Error(txt(estado.error)||'La firma terminó en estado '+valor+'.');
+      if(valor==='CANCELADA'){
+        proceso.cancelado=true;
+        aviso('La solicitud de firma fue cancelada. La orden médica permanece intacta.','ok');
+        return;
+      }
+      if(['ERROR','EXPIRADA'].includes(valor)) throw Error(txt(estado.error)||'La firma terminó en estado '+valor+'.');
       if(valor==='TOMADA') aviso('Adobe está abierto. Firme la orden y guarde el PDF.');
     }
     throw Error('La firma sigue pendiente. Consulte nuevamente el estado antes de intentar otra firma.');
   }catch(e){
     aviso('No se completó la firma: '+txt(e?.message||e),'err');
   }finally{
-    state.firmaProcesos.delete(id);
+    // Evita que un proceso antiguo borre el estado de uno nuevo.
+    if(proceso&&state.firmaProcesos.get(id)===proceso) state.firmaProcesos.delete(id);
     render();
   }
 }
@@ -1481,6 +1554,7 @@ window.IASYN_ORDENES_MEDICAS={
   jsonVersion:JSON_VERSION,
   firmaElectronicaHabilitada:true,
   firmar:solicitarFirmaOrden,
+  cancelarFirma:cancelarFirmaOrden,
   verFirmado:verOrdenFirmada,
   prepararSolicitudFirma:prepararSolicitudFirmaOrden,
   estado:state,
