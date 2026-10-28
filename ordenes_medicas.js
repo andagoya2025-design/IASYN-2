@@ -639,6 +639,9 @@ function instalarCSS(){
 .aom-meta{font-size:12px;color:#6b7280;margin-top:3px}
 .aom-primary{border:0;border-radius:12px;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:white;padding:10px 14px;font-weight:800;display:inline-flex;align-items:center;gap:7px}
 .aom-primary:disabled{opacity:.55;cursor:not-allowed}
+.aom-primary.firma-ok{background:linear-gradient(135deg,#15803d,#16a34a);color:#fff;border:1px solid #15803d}
+.aom-primary.firma-ok:hover{background:linear-gradient(135deg,#166534,#15803d)}
+.aom-primary.firma-pendiente{background:linear-gradient(135deg,#b45309,#d97706);color:#fff;border:1px solid #b45309}
 .aom-notice{margin-top:10px;padding:9px 11px;border-radius:11px;font-size:12.5px;background:#f8fafc;border:1px solid #e5e7eb;color:#475569}
 .aom-notice.ok{background:#f0fdf4;border-color:#bbf7d0;color:#166534}
 .aom-notice.warn{background:#fffbeb;border-color:#fde68a;color:#92400e}
@@ -656,6 +659,7 @@ function instalarCSS(){
 .aom-btn.danger{border-color:#fecaca;color:#991b1b;background:#fff7f7}
 .aom-btn.firma-ok{border-color:#86efac;color:#166534;background:#f0fdf4}
 .aom-btn.firma-cancelar{border-color:#fcd34d;color:#92400e;background:#fffbeb}
+.aom-btn.firma-pendiente{background:#fff7ed;border-color:#fdba74;color:#9a3412;cursor:progress}
 .aom-empty{font-size:12.5px;color:#6b7280;padding:4px 0}
 .aom-modal{position:fixed;inset:0;z-index:2147482000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(15,23,42,.55)}
 .aom-modal-panel{width:min(920px,96vw);max-height:90vh;overflow:auto;background:#fff;border-radius:18px;border:1px solid #e5e7eb;box-shadow:0 28px 80px rgba(15,23,42,.28);padding:18px}
@@ -736,11 +740,20 @@ function estadoPrimario(){
   }
 
   if(activaFormal){
+    const idActiva=txt(activaFormal.id_orden);
+    const firmaConfirmada=state.firmasPorDocumento[idActiva];
+    const versionActual=datosDocumentoEmitido(activaFormal).version;
+    const firmado=!!firmaConfirmada && firmaOrdenExacta(firmaConfirmada,idActiva,versionActual);
+    const enProceso=!firmado && state.firmaProcesos.has(idActiva);
     return {
       disabled:false,
-      texto:'Ver orden emitida',
-      icono:'bi-eye',
-      nota:`Ya existe una orden formal activa (${txt(activaFormal.id_orden)} · v${Number(activaFormal.version||1)}). El botón no emitirá otra v1 accidentalmente.`
+      texto:firmado?'Ver orden firmada':enProceso?'Ver orden emitida · Firmando…':'Ver orden emitida',
+      icono:firmado?'bi-shield-check':enProceso?'bi-hourglass-split':'bi-eye',
+      firmado,enProceso,
+      nota:firmado
+        ?`Orden médica firmada y archivada (${idActiva} · v${versionActual}). Abra el PDF firmado desde este botón.`
+        :enProceso?'La firma está en proceso. El botón sigue mostrando la vista previa de la orden emitida hasta confirmar el PDF firmado.'
+        :`Ya existe una orden formal activa (${idActiva} · v${Number(activaFormal.version||1)}). El botón no emitirá otra v1 accidentalmente.`
     };
   }
 
@@ -765,7 +778,7 @@ function render(){
           <div class="aom-title"><i class="bi bi-file-earmark-medical"></i> Documento formal de orden médica</div>
           <div class="aom-meta">Una emisión puede contener varias órdenes. Vinculada a la atención exacta.</div>
         </div>
-        <button type="button" id="iasynOrdenMedicaBtnPrincipal" class="aom-primary" ${e.disabled?'disabled':''}>
+        <button type="button" id="iasynOrdenMedicaBtnPrincipal" class="aom-primary${e.firmado?' firma-ok':(e.enProceso?' firma-pendiente':'')}" ${e.disabled?'disabled':''}>
           <i class="bi ${esc(e.icono)}"></i> ${esc(e.texto)}
         </button>
       </div>
@@ -811,7 +824,7 @@ function filaHistorial(r){
       ${noEditable?'':`<button type="button" class="aom-btn" data-aom-editar="${esc(id)}"><i class="bi bi-pencil-square"></i> Editar</button>`}
       <button type="button" class="aom-btn" data-aom-imprimir="${esc(id)}"><i class="bi bi-printer"></i> Imprimir</button>
       ${firmado?`<button type="button" class="aom-btn firma-ok" data-aom-ver-firmado="${esc(id)}"><i class="bi bi-shield-check"></i> Firmado · Ver PDF</button>`:''}
-      ${!noEditable&&!firmado?`<button type="button" class="aom-btn" data-aom-firmar="${esc(id)}" ${firmando?'disabled':''}><i class="bi bi-pen"></i> ${firmando?'Firma en proceso…':'Firmar'}</button>`:''}
+      ${!noEditable&&!firmado?`<button type="button" class="aom-btn${firmando?' firma-pendiente':''}" data-aom-firmar="${esc(id)}" ${firmando?'disabled aria-busy="true"':''}>${firmando?'<span class="spinner-border spinner-border-sm" aria-hidden="true"></span>':'<i class="bi bi-pen"></i>'} ${firmando?'Firma en proceso…':'Firmar'}</button>`:''}
       ${!noEditable&&!firmado&&firmando?`<button type="button" class="aom-btn firma-cancelar" data-aom-cancelar-firma="${esc(id)}" ${proceso.cancelando?'disabled':''}><i class="bi bi-x-circle"></i> ${proceso.cancelando?'Cancelando firma…':'Cancelar firma'}</button>`:''}
       ${noEditable?'':`<button type="button" class="aom-btn danger" data-aom-anular="${esc(id)}"><i class="bi bi-slash-circle"></i> Anular</button>`}
     </div>
@@ -843,7 +856,14 @@ async function accionPrincipal(){
     return;
   }
   const activaFormal=activas[0]||null;
-  if(activaFormal) return vistaPreviaPorId(activaFormal.id_orden);
+  if(activaFormal){
+    const id=txt(activaFormal.id_orden);
+    const registroFirma=state.firmasPorDocumento[id];
+    if(registroFirma && firmaOrdenExacta(registroFirma,id,datosDocumentoEmitido(activaFormal).version)){
+      return verOrdenFirmada(id);
+    }
+    return vistaPreviaPorId(id);
+  }
   return emitir();
 }
 
@@ -1351,6 +1371,23 @@ async function consultarFirmaOrden(reg){
   const docs=Array.isArray(r.documentos)?r.documentos:[];
   return docs.find(x=>firmaOrdenExacta(x,id,version))||null;
 }
+async function esperarArchivoFirmadoOrden(reg,proceso){
+  const atencionEsperada=txt(reg.id_atencion);
+  for(let intento=0;intento<5;intento++){
+    if(proceso?.cancelado || proceso?.cancelacionSolicitada) return null;
+    if(txt(contexto().id)!==atencionEsperada || txt(state.idAtencion)!==atencionEsperada){
+      throw Error('Cambió la atención durante la confirmación de la firma.');
+    }
+    try{
+      const confirmada=await consultarFirmaOrden(reg);
+      if(confirmada) return confirmada;
+    }catch(error){
+      if(intento===4) throw error;
+    }
+    if(intento<4) await new Promise(resolve=>setTimeout(resolve,400));
+  }
+  return null;
+}
 async function sincronizarFirmasOrdenes(idAtencion,tokenCarga){
   const t=++state.firmaConsultaToken;
   const nuevas={};
@@ -1439,9 +1476,10 @@ async function solicitarFirmaOrden(id){
     aviso('Enviando orden médica para una firma electrónica…');
     const r=await postFirmaOrden('firmarDocumento',solicitud);
     if(txt(r.estado_firma).toUpperCase()==='FIRMADO'){
-      const firmada=await consultarFirmaOrden(reg);
+      const firmada=await esperarArchivoFirmadoOrden(reg,proceso);
       if(!firmada) throw Error('El servidor indicó FIRMADO, pero no se confirmó el documento archivado.');
       state.firmasPorDocumento[id]=firmada;
+      render(); // Actualiza botones al confirmar el PDF archivado.
       aviso('Orden médica firmada y archivada.','ok');
       return;
     }
@@ -1461,15 +1499,16 @@ async function solicitarFirmaOrden(id){
         await new Promise(resolve=>setTimeout(resolve,400));
         continue;
       }
-      await new Promise(resolve=>setTimeout(resolve,2000));
+      await new Promise(resolve=>setTimeout(resolve,1000));
       if(proceso.cancelado||proceso.cancelacionSolicitada) continue;
       const estado=await postFirmaOrden('obtenerEstadoFirmaElectronica',{id_solicitud:proceso.id_solicitud});
       if(proceso.cancelado||proceso.cancelacionSolicitada) continue;
       const valor=txt(estado.estado_firma||estado.estado).toUpperCase();
       if(valor==='FIRMADO'){
-        const firmada=await consultarFirmaOrden(reg);
+        const firmada=await esperarArchivoFirmadoOrden(reg,proceso);
         if(!firmada) throw Error('La firma fue reportada, pero aún no se pudo confirmar su archivo para esta versión.');
         state.firmasPorDocumento[id]=firmada;
+        render(); // Actualizacion visual sin recargar la pagina.
         aviso('Orden médica firmada electrónicamente y archivada.','ok');
         return;
       }
