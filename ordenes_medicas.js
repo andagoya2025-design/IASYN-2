@@ -648,7 +648,7 @@ function instalarCSS(){
 .aom-notice.err{background:#fef2f2;border-color:#fecaca;color:#991b1b}
 .aom-history{margin-top:12px;border-top:1px solid #f1f5f9;padding-top:12px}
 .aom-history-title{font-size:12px;font-weight:850;text-transform:uppercase;letter-spacing:.04em;color:#64748b;margin-bottom:8px}
-.aom-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid #f1f5f9}
+.aom-row{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid #f1f5f9}
 .aom-row:last-child{border-bottom:0}
 .aom-row-main{min-width:0}
 .aom-row-main strong{display:block;font-size:13px;overflow-wrap:anywhere}
