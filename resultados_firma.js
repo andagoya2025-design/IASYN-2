@@ -1,5 +1,5 @@
 /* ============================================================================
- * IASYN2 | resultados_firma.js | V3.0.0-CONSULTA-UNIFICADA-ANTIRREGRESIVA
+ * IASYN2 | resultados_firma.js | V4.0.0-SESION-IASYN2-Y-CARGA-ANTIRREGRESIVA
  * Base: IASYN-2/main/resultados_firma.js (consultado 2026-10-27).
  * PROPOSITO: recuperar TODOS los PDF firmados de la atencion/paciente activo.
  * Solo lectura: no altera motor de firmas, PDFs, Drive, Sheets ni tokens.
@@ -7,7 +7,7 @@
  * NUNCA expone a Resultados drive_file_id, URL, hash, base64 ni credenciales.
  * Backend debe validar autorizacion real al emitir enlaces y al descargar.
  * ========================================================================== */
-(function iasyn2ResultadosFirmaV3() {
+(function iasyn2ResultadosFirmaV4() {
   'use strict';
 
   const NOMBRE = 'IASYN2_RESULTADOS_FIRMA';
@@ -141,9 +141,34 @@
     return texto(document.getElementById('appsScriptUrl')?.value);
   }
 
+  /* IASYN2 conserva la sesion principal con prefijo iasyn_.
+   * La clave aurosanax_ es exclusivamente retrocompatibilidad.
+   * Nunca se envia un token que figure como expirado.
+   * Compatible con el contrato de sesion del modulo resultados.js.
+   */
   function tokenSesion() {
-    try { return texto(window.sessionStorage.getItem('aurosanax_seguridad_token')); }
-    catch (_) { return ''; }
+    const claves = [
+      ['iasyn_seguridad_token', 'iasyn_seguridad_expira_en'],
+      ['aurosanax_seguridad_token', 'aurosanax_seguridad_expira_en']
+    ];
+    try {
+      for (const [claveToken, claveVence] of claves) {
+        const token = texto(window.sessionStorage.getItem(claveToken));
+        if (!token) continue;
+        const vencimiento = texto(window.sessionStorage.getItem(claveVence));
+        if (vencimiento) {
+          const expira = Number(vencimiento);
+          if (!Number.isFinite(expira) || expira <= 0 || Date.now() >= expira) {
+            throw new Error('La sesion IASYN2 expiro. Inicie sesion nuevamente.');
+          }
+        }
+        return token;
+      }
+      return '';
+    } catch (error) {
+      if (texto(error?.message).includes('expiro')) throw error;
+      return '';
+    }
   }
 
   async function consultarTodosPorAtencion(c) {
