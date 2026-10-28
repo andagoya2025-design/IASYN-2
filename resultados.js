@@ -12,7 +12,7 @@
     return;
   }
 
-  const VERSION = '2.5.0-IASYN2-FIRMADOS-ANTIRREGRESIVO';
+  const VERSION = '2.5.1-IASYN2-RESULTADOS-CARGA-ANTIRREGRESIVA';
   // Backend scrib 08 publicado: la interfaz permite solicitar emisión.
   // La autorización REAL ocurre en Apps Script: sesión ADMINISTRADOR, atención y archivos.
   // No depende de banderas globales configuradas manualmente.
@@ -171,7 +171,8 @@
   async function cargar() {
     const c = comprobarCambio();
     if (!valido(c)) { render(); return []; }
-    if (state.cargando) return [];
+    // Permitir una carga nueva: tokenCarga descarta respuestas anteriores.
+    // Bloquear aquí perdía actualizaciones de firmas durante consultas en curso.
     const id = txt(c.id), paciente = txt(c.idPaciente), historia = txt(c.idHistoria);
     const token = ++state.tokenCarga;
     state.cargando = true;
