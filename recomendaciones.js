@@ -7,7 +7,7 @@
  -----------------------------------------------------------------------
  ARQUITECTURA
  - Módulo funcional independiente.
- - Una sola fila por id_atencion en la hoja recomendaciones.
+ - Historial con varias recomendaciones independientes por id_atencion.
  - detalle_json compacto para contenido variable.
  - Contexto clínico derivado desde la atención real.
  - Diagnósticos solo se leen; NO se duplican ni se modifican.
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.3.2';
+  const VERSION = '1.4.0';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20260921_recomendaciones_tarjeta_unica_firma_sin_duplicidad_antirregresiva';
+  const RELEASE = '20261028_iasyn2_multidocumento_firma_premium_paginacion_a4_protegida';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -46,6 +46,10 @@
     contexto: null,
     diagnosticos: [],
     registro: null,
+    registros: [],
+    modoNuevo: false,
+    verificandoFirma: false,
+    firmaVerificacionFallida: false,
     cargando: false,
     guardando: false,
     inicializado: false,
@@ -449,6 +453,17 @@
       .auro-rec-btn.primary{border:0;background:linear-gradient(135deg,#8b1e5a,#c23b83);color:#fff}
       .auro-rec-btn.firma-ok{border-color:#86efac;background:#f0fdf4;color:#166534}
       .auro-rec-btn.firma-warn{border-color:#fdba74;background:#fff7ed;color:#9a3412}
+      /* IASYN V1.4.0: controles exclusivamente de pantalla, nunca PDF A4. */
+      .auro-rec-btn.nuevo{background:#fff0f6;border-color:#f3b1d2;color:#981b62}
+      .auro-rec-btn.nuevo:hover{background:#ffe1ef}
+      .auro-rec-saved-item.activo{border-color:#e9a5ca;box-shadow:0 5px 18px rgba(139,30,90,.09)}
+      .auro-rec-saved-actions .auro-rec-btn{white-space:normal;text-align:center;overflow-wrap:anywhere;line-height:1.35;min-height:40px}
+      .auro-rec-btn.firma-ok{background:#edfdf4;color:#166534;border-color:#7bdca8}
+      .auro-rec-btn.firma-warn{background:#fffbeb;color:#92400e;border-color:#f4cc76}
+      .auro-rec-saved-badge.proceso{background:#fff7ed;color:#9a3412;border-color:#fdba74}
+      .auro-rec-saved-meta{word-break:break-word}
+      .auro-rec-saved-title{line-height:1.4}
+      .auro-rec-actions .auro-rec-btn{line-height:1.35;white-space:normal}
       .auro-rec-firma-status{display:flex;align-items:center;justify-content:flex-end;gap:7px;width:100%;font-size:11px;font-weight:900;color:#64748b;margin-bottom:-3px}
       .auro-rec-saved-list{display:grid;gap:10px}
       .auro-rec-saved-item{border:1px solid #e5e7eb;border-radius:14px;background:#fff;padding:14px 16px;box-shadow:0 4px 16px rgba(15,23,42,.04)}
@@ -535,7 +550,7 @@
             </div>
           </section>
 
-          <div id="auroRecMensaje" class="auro-rec-msg info" hidden></div>
+          <div id="auroRecMensaje" class="auro-rec-msg info" role="status" aria-live="polite" hidden></div>
 
           <section class="auro-rec-card">
             <div class="auro-rec-card-head">
@@ -622,6 +637,7 @@
           </section>
 
           <div class="auro-rec-actions">
+            <button type="button" class="auro-rec-btn nuevo" id="auroRecBtnNueva"><i class="bi bi-plus-circle me-1"></i> Nueva recomendación</button>
             <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
             <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Imprimir recomendaciones</button>
             <button type="button" class="auro-rec-btn primary" id="auroRecBtnGuardar"><i class="bi bi-save2 me-1"></i> Guardar recomendaciones</button>
@@ -630,8 +646,8 @@
           <section class="auro-rec-card" id="auroRecGuardadaCard">
             <div class="auro-rec-card-head">
               <div>
-                <b>Recomendación guardada</b>
-                <small>Documento persistido de esta atención. Esta tarjeta no muestra cambios que aún no se hayan guardado.</small>
+                <b>Recomendaciones guardadas</b>
+                <small>Historial independiente por atención. Cada documento tiene su propia firma electrónica.</small>
               </div>
             </div>
             <div class="auro-rec-card-body">
@@ -1054,19 +1070,104 @@
     renderRecomendacionGuardada();
   }
 
+  /* ============================================================
+     IASYN2 RECOMENDACIONES MULTIDOCUMENTO V1.4.0 — BLINDAJE
+     Sin alterar recDocumentoHTML(), recEstilosImpresion(), SHA ni PDF.
+     ============================================================ */
+  function recCambiosSinGuardar(){
+    if(state.modoNuevo) return tieneContenido(detalleActual());
+    return auroRecFirmaHayCambiosSinGuardar();
+  }
+
+  function recPermitirDescartarCambios(){
+    return !recCambiosSinGuardar() || window.confirm(
+      'Existen cambios sin guardar. ¿Desea continuar y descartarlos?'
+    );
+  }
+
+  function recFirmaActivaEnAtencion(idAtencion){
+    return Array.from(recomendacionFirmaProcesos.values()).some(p=>
+      txt(p?.id_atencion)===txt(idAtencion) &&
+      ['PREPARANDO','PENDIENTE','TOMADA','PROCESO'].includes(txt(p?.estado).toUpperCase())
+    );
+  }
+
+  function recDocumentoFirmadoActivo(){
+    if(!state.idRecomendacion || state.modoNuevo) return false;
+    const e=auroRecFirmaEstado(state.idRecomendacion);
+    return ['FIRMADA','NUEVA_VERSION'].includes(txt(e?.estado).toUpperCase());
+  }
+
+  async function abrirRecomendacionHistorial(id){
+    const rid=txt(id);
+    const ctx=state.contexto||contextoAtencion();
+    if(!rid || state.guardando || state.cargando) return false;
+    if(recFirmaActivaEnAtencion(ctx.id)){
+      setMsg('Existe una firma en proceso. Espere su confirmación o cancele la solicitud.','error');
+      return false;
+    }
+    const registro=(state.registros||[]).find(r=>txt(r.id_recomendacion)===rid);
+    if(!registro || txt(registro.id_atencion)!==txt(ctx.id)){
+      setMsg('El documento no pertenece a esta atención. Recargue el historial.','error');
+      return false;
+    }
+    if(!recPermitirDescartarCambios()) return false;
+    state.modoNuevo=false;
+    state.verificandoFirma=true;
+    state.firmaVerificacionFallida=false;
+    ++recomendacionFirmaSyncToken;
+    aplicarRegistro(registro);
+    fijarFirmaPersistida(ctx.id);
+    aplicarModo();
+    try{
+      const consulta=await auroRecFirmaSincronizarPersistencia({
+        silencioso:true,id_atencion:ctx.id,id_recomendacion:rid
+      });
+      state.firmaVerificacionFallida=consulta?.success!==true;
+    }finally{
+      if(txt(state.idRecomendacion)===rid && txt(state.contexto?.id)===txt(ctx.id)){
+        state.verificandoFirma=false;
+        aplicarModo();
+      }
+    }
+    setMsg('Recomendación seleccionada: '+rid+'.','ok');
+    return true;
+  }
+
+  async function nuevaRecomendacion(){
+    const ctx=state.contexto||contextoAtencion();
+    if(!ctx.id || !ctx.editable || state.guardando || state.cargando){
+      setMsg('Seleccione una atención editable para crear una recomendación.','error');
+      return false;
+    }
+    if(recFirmaActivaEnAtencion(ctx.id)){
+      setMsg('Existe una firma en proceso. Espere o cancele antes de crear otro documento.','error');
+      return false;
+    }
+    if(!recPermitirDescartarCambios()) return false;
+    limpiar();
+    state.modoNuevo=true;
+    state.verificandoFirma=false;
+    state.firmaVerificacionFallida=false;
+    state.firmaPersistida='';
+    state.firmaPersistidaAtencion='';
+    precargarSeguimientoDesdePlanSiVacio();
+    aplicarModo();
+    renderRecomendacionGuardada();
+    setMsg('Nueva recomendación independiente. Al guardar no se modificará ninguna anterior.','info');
+    return true;
+  }
+
   function aplicarModo(){
     const ctx=state.contexto || contextoAtencion();
-    const editable=ctx.editable === true;
-    const bloqueadoPorGuardado=state.guardando === true;
+    const bloqueadaFirma=recDocumentoFirmadoActivo();
+    const editable=ctx.editable===true && !bloqueadaFirma && !state.verificandoFirma && !state.firmaVerificacionFallida;
+    const bloqueadoPorGuardado=state.guardando===true;
     const app=document.getElementById('auroRecomendacionesApp');
     if(app) app.classList.toggle('auro-rec-readonly',!editable);
-
-    document.querySelectorAll(
-      '#auroRecomendacionesApp input,#auroRecomendacionesApp textarea,#auroRecomendacionesApp select'
-    ).forEach(el=>{
+    document.querySelectorAll('#auroRecomendacionesApp input,#auroRecomendacionesApp textarea,#auroRecomendacionesApp select').forEach(el=>{
       el.disabled=!editable || bloqueadoPorGuardado;
     });
-
     const guardar=document.getElementById('auroRecBtnGuardar');
     if(guardar){
       guardar.disabled=!editable || !ctx.id || bloqueadoPorGuardado;
@@ -1078,28 +1179,24 @@
         guardar.innerHTML='<i class="bi bi-save2 me-1"></i> Guardar recomendaciones';
       }
     }
-
+    const nueva=document.getElementById('auroRecBtnNueva');
+    if(nueva) nueva.disabled=!ctx.editable || !ctx.id || state.guardando || state.cargando || recFirmaActivaEnAtencion(ctx.id);
     const agregarPlan=document.getElementById('auroRecBtnAgregarPlan');
     if(agregarPlan) agregarPlan.disabled=!editable || !ctx.id || bloqueadoPorGuardado;
-
     const recargar=document.getElementById('auroRecBtnRecargar');
     if(recargar) recargar.disabled=bloqueadoPorGuardado;
-
     const estado=document.getElementById('auroRecEstado');
     if(estado){
-      estado.className='auro-rec-state ' + (editable ? 'edit' : 'read');
-
-      if(!ctx.id){
-        estado.innerHTML='<i class="bi bi-lock"></i> Sin atención';
-      }else if(ctx.bloqueada){
-        estado.innerHTML='<i class="bi bi-lock"></i> Atención anulada/cancelada · Solo lectura';
-      }else if(ctx.finalizada){
-        estado.innerHTML='<i class="bi bi-check2-circle"></i> Atención finalizada · Recomendaciones editables';
-      }else{
-        estado.innerHTML='<i class="bi bi-pencil-square"></i> Atención activa · Editable';
-      }
+      estado.className='auro-rec-state '+(editable?'edit':'read');
+      if(!ctx.id) estado.innerHTML='<i class="bi bi-lock"></i> Sin atención';
+      else if(ctx.bloqueada) estado.innerHTML='<i class="bi bi-lock"></i> Atención anulada/cancelada · Solo lectura';
+      else if(state.modoNuevo) estado.innerHTML='<i class="bi bi-plus-circle"></i> Nueva recomendación · Sin guardar';
+      else if(state.firmaVerificacionFallida) estado.innerHTML='<i class="bi bi-exclamation-triangle"></i> Firma no verificada · Edición protegida';
+      else if(state.verificandoFirma) estado.innerHTML='<i class="bi bi-shield-check"></i> Comprobando firma…';
+      else if(bloqueadaFirma) estado.innerHTML='<i class="bi bi-lock"></i> Documento firmado · Protegido contra edición';
+      else if(ctx.finalizada) estado.innerHTML='<i class="bi bi-check2-circle"></i> Atención finalizada · Recomendaciones editables';
+      else estado.innerHTML='<i class="bi bi-pencil-square"></i> Atención activa · Editable';
     }
-
     auroRecFirmaActualizarUI();
   }
 
@@ -1150,13 +1247,15 @@
 
   async function cargar(forzar){
     let ctx=contextoAtencion();
-
     state.contexto=ctx;
     renderContexto();
-
     if(!ctx.id){
       state.tokenCarga++;
       state.cargando=false;
+      state.registros=[];
+      state.modoNuevo=false;
+      state.verificandoFirma=false;
+      state.firmaVerificacionFallida=false;
       limpiar();
       state.diagnosticos=[];
       state.firmaPersistida='';
@@ -1165,96 +1264,70 @@
       setMsg('Seleccione una atención antes de trabajar Recomendaciones.','info');
       return null;
     }
-
     const idSolicitada=txt(ctx.id);
+    const mantenerId=state.idAtencion===idSolicitada?txt(state.idRecomendacion):'';
+    const mantenerNuevo=state.idAtencion===idSolicitada && state.modoNuevo;
     const token=++state.tokenCarga;
     state.cargando=true;
-    setMsg('Cargando recomendaciones de esta atención...','info');
-
+    setMsg('Cargando historial de recomendaciones de esta atención…','info');
     try{
       const resultados=await Promise.all([
-        apiGet('buscarRecomendacionPorAtencion',{id_atencion:idSolicitada}),
+        apiGet('listarRecomendacionesPorAtencion',{id_atencion:idSolicitada}),
         enriquecerContextoDesdeServidor(ctx),
         cargarDiagnosticos(idSolicitada,token)
       ]);
-
-      if(token !== state.tokenCarga) return null;
-
+      if(token!==state.tokenCarga) return null;
       const ctxVigente=contextoAtencion();
-      if(txt(ctxVigente?.id) !== idSolicitada) return null;
-
-      const registro=resultados[0];
-      const contextoEnriquecido=resultados[1];
-
-      ctx=contextoEnriquecido || ctxVigente || ctx;
-      if(txt(ctx?.id) !== idSolicitada) return null;
+      if(txt(ctxVigente?.id)!==idSolicitada) return null;
+      ctx=resultados[1]||ctxVigente||ctx;
+      if(txt(ctx?.id)!==idSolicitada) return null;
       state.contexto=ctx;
-
+      const raw=resultados[0];
+      const items=Array.isArray(raw)?raw:(Array.isArray(raw?.registros)?raw.registros:[]);
+      const docs=items.filter(r=>txt(r?.id_atencion)===idSolicitada && txt(r?.id_recomendacion));
+      const registro=docs.find(r=>txt(r.id_recomendacion)===mantenerId)||docs[0]||null;
       limpiar();
-      /* La firma persistida se fija ANTES de cualquier precarga desde Plan. */
-      fijarFirmaPersistida(idSolicitada);
-
-      if(registro && registro.id_recomendacion){
+      state.registros=docs;
+      state.modoNuevo=mantenerNuevo;
+      state.verificandoFirma=!!(registro && !mantenerNuevo);
+      state.firmaVerificacionFallida=false;
+      if(!mantenerNuevo && registro){
         aplicarRegistro(registro);
         fijarFirmaPersistida(idSolicitada);
-
-        let precargadasIndicaciones=false;
+        let precargadas=false;
         if(ctx.editable && !getValue('auroRecGenerales')){
-          precargadasIndicaciones=await precargarIndicacionesDesdePlanSiVacio(idSolicitada);
-          if(token !== state.tokenCarga || txt(contextoAtencion()?.id) !== idSolicitada) return null;
+          precargadas=await precargarIndicacionesDesdePlanSiVacio(idSolicitada);
+          if(token!==state.tokenCarga || txt(contextoAtencion()?.id)!==idSolicitada) return null;
         }
-
-        setMsg(
-          ctx.editable
-            ? (precargadasIndicaciones
-                ? 'Recomendaciones cargadas. El campo general estaba vacío y se precargaron indicaciones del Plan para revisión.'
-                : 'Recomendaciones cargadas. Puede revisarlas y actualizarlas.')
-            : 'Recomendaciones históricas cargadas en modo solo lectura.',
-          precargadasIndicaciones ? 'info' : 'ok'
-        );
+        setMsg(precargadas?'Historial cargado; indicaciones del Plan precargadas para revisión.':'Historial de recomendaciones cargado correctamente.','ok');
+      }else if(!mantenerNuevo){
+        const precargado=ctx.editable?precargarSeguimientoDesdePlanSiVacio():false;
+        const desdePlan=ctx.editable?await precargarIndicacionesDesdePlanSiVacio(idSolicitada):false;
+        if(token!==state.tokenCarga || txt(contextoAtencion()?.id)!==idSolicitada) return null;
+        setMsg((precargado||desdePlan)?'No hay recomendaciones anteriores. Se precargaron indicaciones disponibles para revisión.':'Esta atención todavía no tiene recomendaciones guardadas.','info');
       }else{
-        const precargadoSeguimiento = ctx.editable
-          ? precargarSeguimientoDesdePlanSiVacio()
-          : false;
-
-        const precargadasIndicaciones = ctx.editable
-          ? await precargarIndicacionesDesdePlanSiVacio(idSolicitada)
-          : false;
-
-        if(token !== state.tokenCarga || txt(contextoAtencion()?.id) !== idSolicitada) return null;
-
-        setMsg(
-          ctx.editable
-            ? ((precargadoSeguimiento || precargadasIndicaciones)
-                ? 'Esta atención todavía no tiene recomendaciones guardadas. Se precargó información disponible en Plan para revisión y edición.'
-                : 'Esta atención todavía no tiene recomendaciones guardadas.')
-            : 'Esta atención está bloqueada y no tiene recomendaciones registradas.',
-          'info'
-        );
+        setMsg('Nueva recomendación en preparación. Sus cambios todavía no están guardados.','info');
       }
-
       state.idAtencion=idSolicitada;
       renderContexto();
-
-      if(registro && state.idRecomendacion){
-        await auroRecFirmaSincronizarPersistencia({
-          silencioso:true,
-          id_atencion:idSolicitada,
-          id_recomendacion:state.idRecomendacion
+      if(registro && state.idRecomendacion && !state.modoNuevo){
+        const consulta=await auroRecFirmaSincronizarPersistencia({
+          silencioso:true,id_atencion:idSolicitada,id_recomendacion:state.idRecomendacion
         });
+        state.firmaVerificacionFallida=consulta?.success!==true;
       }else{
         auroRecFirmaActualizarUI();
       }
-
-      return registro || null;
+      return state.modoNuevo?null:registro;
     }catch(e){
-      if(token !== state.tokenCarga || txt(contextoAtencion()?.id) !== idSolicitada) return null;
+      if(token!==state.tokenCarga || txt(contextoAtencion()?.id)!==idSolicitada) return null;
       console.error(MODULO+':',e);
-      setMsg('No se pudieron cargar las recomendaciones: '+txt(e.message || e),'error');
+      setMsg('No se pudo cargar el historial: '+txt(e.message||e),'error');
       return null;
     }finally{
-      if(token === state.tokenCarga){
+      if(token===state.tokenCarga){
         state.cargando=false;
+        state.verificandoFirma=false;
         aplicarModo();
       }
     }
@@ -1266,7 +1339,8 @@
     const detalle=detalleForzado || detalleActual();
 
     return {
-      id_recomendacion:state.idRecomendacion || '',
+      id_recomendacion:state.modoNuevo?'':(state.idRecomendacion || ''),
+      ...(state.modoNuevo?{forzar_nueva_recomendacion:'SI'}:{}),
       id_atencion:ctx.id || '',
       id_cita:txt(a.id_cita),
       id_paciente:txt(a.id_paciente),
@@ -1293,6 +1367,18 @@
       setMsg('La consulta seleccionada es histórica y está protegida contra edición.','error');
       return;
     }
+    if(state.verificandoFirma || state.firmaVerificacionFallida){
+      setMsg('Espere o recargue para comprobar el estado de firma antes de guardar.','info');
+      return;
+    }
+    if(recDocumentoFirmadoActivo()){
+      setMsg('Documento firmado: para agregar cambios cree una nueva recomendación.','error');
+      return;
+    }
+    if(recFirmaActivaEnAtencion(ctx.id)){
+      setMsg('Existe una firma en proceso. No se editará el documento mientras se firma.','error');
+      return;
+    }
 
     const idGuardado=txt(ctx.id);
     const detalle=detalleActual();
@@ -1304,6 +1390,7 @@
 
     /* Barrera no-op: mismo contenido clínico persistido = cero POST. */
     if(
+      !state.modoNuevo &&
       state.firmaPersistidaAtencion === idGuardado &&
       state.firmaPersistida &&
       firmaDetalle(detalle) === state.firmaPersistida
@@ -1333,6 +1420,20 @@
       }
 
       state.idRecomendacion=txt(r.id || r.id_recomendacion || data.id_recomendacion);
+      state.modoNuevo=false;
+      if(state.idRecomendacion){
+        const nuevo=Object.assign({},state.registro||{},data,{
+          id_recomendacion:state.idRecomendacion,
+          id_atencion:idGuardado,
+          actualizado_en:txt(r.actualizado_en||r.fecha_actualizacion||new Date().toISOString())
+        });
+        delete nuevo.forzar_nueva_recomendacion;
+        state.registros=(state.registros||[]).filter(x=>txt(x.id_recomendacion)!==state.idRecomendacion);
+        state.registros.unshift(nuevo);
+        aplicarRegistro(nuevo);
+        fijarFirmaPersistida(idGuardado);
+        auroRecFirmaActualizarUI();
+      }
 
       /*
         Recarga autoritativa de la MISMA atención. La carga fija la firma persistida
@@ -1647,7 +1748,23 @@
 
     const ubicacion=[cfg.direccion,[cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(', ')]
       .filter(Boolean).join(' · ');
-    const contacto=[cfg.telefono,cfg.email,cfg.web].filter(Boolean).join(' · ');
+    // Presentacion del pie institucional: misma iconografia SVG que Certificados.
+    // Solo se cambian los elementos visuales, no los datos ni el flujo clinico.
+    const contactoFilas=[
+      ['direccion',ubicacion],
+      ['correo',txt(cfg.email)],
+      ['telefono',txt(cfg.telefono)],
+      ['web',txt(cfg.web)]
+    ].filter(([,valor])=>!!valor);
+    const contactoIconos={
+      direccion:'<path d="M12 21s-7-4.4-7-11a7 7 0 0 1 14 0c0 6.6-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/>',
+      correo:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+      telefono:'<path d="M22 16.9v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7l.5 3a2 2 0 0 1-.6 1.7L7.1 10a16 16 0 0 0 6.9 6.9l1.6-1.9a2 2 0 0 1 1.7-.6l3 .5a2 2 0 0 1 1.7 2Z"/>',
+      web:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>'
+    };
+    const contactoHTML=contactoFilas.map(([tipo,valor])=>
+      `<div class="ar-contacto-fila"><svg class="ar-contacto-icono" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${contactoIconos[tipo]}</svg><span class="ar-contacto-texto">${esc(valor)}</span></div>`
+    ).join('');
     const registros=[
       medico.registro_msp ? 'MSP: '+medico.registro_msp : '',
       medico.registro_senescyt ? 'SENESCYT: '+medico.registro_senescyt : ''
@@ -1716,8 +1833,7 @@
 
       <footer class="ar-firma-area">
         <div class="ar-centro-contacto">
-          ${ubicacion?`<div>${esc(ubicacion)}</div>`:''}
-          ${contacto?`<div>${esc(contacto)}</div>`:''}
+          ${contactoHTML}
           ${cfg.razon_social?`<div>${esc(cfg.razon_social)}${cfg.ruc?' · RUC '+esc(cfg.ruc):''}</div>`:''}
         </div>
         <div class="ar-sign">
@@ -1762,7 +1878,10 @@ body{overflow-x:hidden}
 .ar-rec-list li{line-height:1.58;margin:4px 0;padding-left:2px}
 .ar-rec-text{line-height:1.62!important}
 .ar-firma-area{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;break-inside:avoid;page-break-inside:avoid}
-.ar-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere}
+.ar-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere;display:grid;gap:5px;align-content:end;min-width:0}
+.ar-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start;break-inside:avoid}
+.ar-contacto-icono{display:block;width:12px;height:12px;margin-top:2px;color:var(--ar-color,#8b1e5a)}
+.ar-contacto-texto{min-width:0;overflow-wrap:anywhere}
 .ar-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
 .ar-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ar-sign b{font-size:12.4px}
@@ -1890,7 +2009,7 @@ html,body{background:#dfe3e8}
       return {texto:'Firmada ✓',clase:'ok',accion:'Ver recomendación firmada ✓',disabled:false,cancelar:false};
     }
     if(estado.estado==='NUEVA_VERSION'){
-      return {texto:'Nueva versión sin firmar',clase:'warn',accion:'Firmar nueva versión',disabled:false,cancelar:false};
+      return {texto:'Firma histórica · Documento protegido',clase:'ok',accion:'Ver documento firmado ✓',disabled:false,cancelar:false};
     }
     return {texto:'Sin firma',clase:'',accion:'Firmar recomendación',disabled:false,cancelar:false};
   }
@@ -1898,59 +2017,49 @@ html,body{background:#dfe3e8}
   function renderRecomendacionGuardada(){
     const box=document.getElementById('auroRecGuardada');
     if(!box) return;
-
-    const registro=state.registro;
     const ctx=state.contexto||contextoAtencion();
     const idAtn=txt(ctx?.id);
-    const id=txt(registro?.id_recomendacion||state.idRecomendacion);
-    const idRegistroAtn=txt(registro?.id_atencion);
-
-    if(!registro || !id || !idAtn || idRegistroAtn!==idAtn){
-      box.innerHTML='<div class="auro-rec-empty">No existe una recomendación guardada para esta atención.</div>';
+    const registros=Array.isArray(state.registros)?state.registros:[];
+    const docs=registros.filter(r=>txt(r.id_atencion)===idAtn && txt(r.id_recomendacion));
+    if(!idAtn || !docs.length){
+      box.innerHTML='<div class="auro-rec-empty">No existen recomendaciones guardadas para esta atención.</div>';
       return;
     }
-
-    const f=fechaVisual(registro.actualizado_en||registro.creado_en||registro.fecha_atencion);
-    const consulta=txt(registro.numero_consulta||ctx?.numeroConsulta);
-    const firma=auroRecGuardadaEstadoFirmaVisual(id);
-    const bloqueada=ctx?.bloqueada===true;
-    const deshabilitarFirma=state.guardando || bloqueada || firma.disabled;
-    const claseFirma=firma.clase ? ' '+firma.clase : '';
-
-    box.innerHTML=`
-      <div class="auro-rec-saved-item">
-        <div class="auro-rec-saved-top">
-          <div>
-            <div class="auro-rec-saved-title">Recomendaciones médicas</div>
-            <div class="auro-rec-saved-meta">
-              ${consulta?'Consulta #'+esc(consulta)+' · ':''}${esc(f||'Fecha no disponible')}<br>
-              ${esc(id)}
-            </div>
-            <div class="auro-rec-saved-badges">
-              <span class="auro-rec-saved-badge ok"><i class="bi bi-check2-circle"></i> Guardada</span>
-              <span class="auro-rec-saved-badge${claseFirma}"><i class="bi bi-shield-check"></i> ${esc(firma.texto)}</span>
-            </div>
-          </div>
-          <div class="auro-rec-saved-actions">
-            <button type="button" class="auro-rec-btn" data-auro-rec-abrir-guardada="${esc(id)}">
-              <i class="bi bi-folder2-open me-1"></i> Abrir guardada
-            </button>
-            <button type="button" class="auro-rec-btn${firma.clase==='ok'?' firma-ok':(firma.clase==='warn'?' firma-warn':' primary')}" data-auro-rec-firma-guardada="${esc(id)}" ${deshabilitarFirma?'disabled':''}>
-              <i class="bi ${firma.clase==='ok'?'bi-file-earmark-check':'bi-pen'} me-1"></i> ${esc(firma.accion)}
-            </button>
-            ${firma.cancelar?`
-              <button type="button" class="auro-rec-btn firma-warn" data-auro-rec-cancelar-guardada="${esc(id)}" ${state.guardando?'disabled':''}>
-                <i class="bi bi-x-circle me-1"></i> Cancelar firma
-              </button>`:''}
-          </div>
-        </div>
-      </div>`;
-
-    box.querySelectorAll('[data-auro-rec-abrir-guardada]').forEach(el=>{
-      el.onclick=()=>auroRecAbrirGuardada(el.dataset.auroRecAbrirGuardada);
+    box.innerHTML=docs.map(registro=>{
+      const id=txt(registro.id_recomendacion);
+      const activa=!state.modoNuevo && id===txt(state.idRecomendacion);
+      const firma=activa?auroRecGuardadaEstadoFirmaVisual(id):{
+        texto:'Abrir para verificar firma',clase:'',accion:'Abrir para firmar',disabled:false,cancelar:false
+      };
+      const f=fechaVisual(registro.actualizado_en||registro.creado_en||registro.fecha_atencion);
+      const consulta=txt(registro.numero_consulta||ctx.numeroConsulta);
+      const deshabilitarFirma=state.guardando || state.cargando || state.verificandoFirma || state.firmaVerificacionFallida || ctx?.bloqueada===true || (activa&&firma.disabled);
+      const claseFirma=firma.clase?' '+firma.clase:'';
+      return `<div class="auro-rec-saved-item${activa?' activo':''}">
+        <div class="auro-rec-saved-top"><div>
+          <div class="auro-rec-saved-title">Recomendaciones médicas${activa?' · Abierta ✓':''}</div>
+          <div class="auro-rec-saved-meta">${consulta?'Consulta #'+esc(consulta)+' · ':''}${esc(f||'Fecha no disponible')}<br>${esc(id)}</div>
+          <div class="auro-rec-saved-badges"><span class="auro-rec-saved-badge ok"><i class="bi bi-check2-circle"></i> Guardada</span>
+          <span class="auro-rec-saved-badge${claseFirma}"><i class="bi bi-shield-check"></i> ${esc(firma.texto)}</span></div>
+        </div><div class="auro-rec-saved-actions">
+          <button type="button" class="auro-rec-btn" data-auro-rec-seleccionar="${esc(id)}">${activa?'Abierta ✓':'Abrir'}</button>
+          <button type="button" class="auro-rec-btn${firma.clase==='ok'?' firma-ok':(firma.clase==='warn'?' firma-warn':' primary')}" data-auro-rec-firma-guardada="${esc(id)}" ${deshabilitarFirma?'disabled':''}>
+            <i class="bi ${firma.clase==='ok'?'bi-file-earmark-check':'bi-pen'} me-1"></i> ${esc(firma.accion)}
+          </button>
+          ${activa&&firma.cancelar?`<button type="button" class="auro-rec-btn firma-warn" data-auro-rec-cancelar-guardada="${esc(id)}" ${state.guardando?'disabled':''}>Cancelar firma</button>`:''}
+        </div></div></div>`;
+    }).join('');
+    box.querySelectorAll('[data-auro-rec-seleccionar]').forEach(el=>{
+      el.onclick=()=>abrirRecomendacionHistorial(el.dataset.auroRecSeleccionar);
     });
     box.querySelectorAll('[data-auro-rec-firma-guardada]').forEach(el=>{
-      el.onclick=()=>auroRecFirmaAccionPrincipal();
+      el.onclick=async()=>{
+        const id=txt(el.dataset.auroRecFirmaGuardada);
+        if(state.modoNuevo||id!==txt(state.idRecomendacion)){
+          if(!(await abrirRecomendacionHistorial(id))) return;
+        }
+        return auroRecFirmaAccionPrincipal();
+      };
     });
     box.querySelectorAll('[data-auro-rec-cancelar-guardada]').forEach(el=>{
       el.onclick=()=>auroRecFirmaCancelar();
@@ -2199,13 +2308,13 @@ html,body{background:#dfe3e8}
   }
 
   async function auroRecFirmaPersistidaExacta(id,idAtencion){
-    const r=await apiGet('buscarRecomendacionPorAtencion',{id_atencion:txt(idAtencion)});
-    if(!r || !txt(r.id_recomendacion)) return null;
-    if(txt(r.id_recomendacion)!==txt(id)) return null;
-    if(txt(r.id_atencion)!==txt(idAtencion)) return null;
-
+    /* IASYN V1.4.0: documento exacto, aunque no sea el más reciente. */
+    const data=await apiGet('listarRecomendacionesPorAtencion',{id_atencion:txt(idAtencion)});
+    const docs=Array.isArray(data)?data:(Array.isArray(data?.registros)?data.registros:[]);
+    const r=docs.find(x=>txt(x.id_recomendacion)===txt(id) && txt(x.id_atencion)===txt(idAtencion));
+    if(!r) return null;
     const estado=norm(r.estado||'activo');
-    if(estado.includes('anulad') || estado.includes('cancelad')) return null;
+    if(estado.includes('anulad')||estado.includes('cancelad')) return null;
     return r;
   }
 
@@ -2353,6 +2462,9 @@ html,body{background:#dfe3e8}
   }
 
   async function auroRecFirmaObtenerDocumentoActual(){
+    if(state.verificandoFirma || state.firmaVerificacionFallida){
+      return {success:false,estado:'FIRMA_NO_VERIFICADA',message:'No se ha podido verificar el estado de firma. Recargue el documento.'};
+    }
     const ctx=state.contexto||contextoAtencion();
     const idAtn=txt(ctx?.id);
     const id=txt(state.idRecomendacion);
@@ -2431,13 +2543,14 @@ html,body{background:#dfe3e8}
   }
 
   async function auroRecFirmaFirmarActual(){
-    const doc=await auroRecFirmaObtenerDocumentoActual();
-    if(!doc.success){
-      setMsg(doc.message||'Las recomendaciones no están listas para firmar.','error');
+    const id=txt(state.idRecomendacion);
+    if(!id){
+      setMsg('Guarde la recomendación antes de solicitar firma electrónica.','error');
       auroRecFirmaActualizarUI();
-      return doc;
+      return {success:false,estado:'RECOMENDACION_NO_GUARDADA'};
     }
-    return auroRecFirmaFirmar(doc.id_recomendacion);
+    /* Evita doble obtención del HTML/PDF antes de mostrar progreso. */
+    return auroRecFirmaFirmar(id);
   }
 
   async function auroRecFirmaFirmar(id){
@@ -2454,11 +2567,26 @@ html,body{background:#dfe3e8}
       return auroRecFirmaReabrir(rid);
     }
 
-    const doc=await auroRecFirmaObtenerDocumentoActual();
-    if(!doc.success || doc.id_recomendacion!==rid){
-      setMsg(doc.message||'La recomendación no está lista para firmar.','error');
+    /* Estado inmediato antes de consultas a servidor y generación del HTML. */
+    recomendacionFirmaProcesos.set(rid,{
+      estado:'PREPARANDO',id_solicitud:'',id_atencion:txt((state.contexto||contextoAtencion())?.id)
+    });
+    auroRecFirmaActualizarUI();
+    setMsg('Preparando firma digital… Se está verificando el documento.','info');
+    let doc;
+    try{
+      doc=await auroRecFirmaObtenerDocumentoActual();
+      if(!doc.success || doc.id_recomendacion!==rid){
+        recomendacionFirmaProcesos.delete(rid);
+        setMsg(doc.message||'La recomendación no está lista para firmar.','error');
+        auroRecFirmaActualizarUI();
+        return doc;
+      }
+    }catch(error){
+      recomendacionFirmaProcesos.delete(rid);
       auroRecFirmaActualizarUI();
-      return doc;
+      setMsg(txt(error?.message||'No se pudo preparar el documento.'),'error');
+      return {success:false,error:txt(error?.message||error)};
     }
 
     /*
@@ -2482,6 +2610,7 @@ html,body{background:#dfe3e8}
       );
 
       if(exacto){
+        recomendacionFirmaProcesos.delete(rid);
         recomendacionFirmasPorDocumento.set(rid,{
           estado:'FIRMADA',
           documento:exacto,
@@ -2525,6 +2654,11 @@ html,body{background:#dfe3e8}
 
       if(txt(r?.estado_firma).toUpperCase()==='FIRMADO'){
         recomendacionFirmaProcesos.delete(rid);
+        recomendacionFirmasPorDocumento.set(rid,{
+          estado:'FIRMADA',documento:r,sha_actual:doc.sha256_origen,
+          version_documento:doc.version_documento,error:''
+        });
+        aplicarModo();
         await auroRecFirmaSincronizarPersistencia({
           silencioso:true,
           id_atencion:doc.id_atencion,
@@ -2588,6 +2722,10 @@ html,body{background:#dfe3e8}
 
       if(estado==='FIRMADO'){
         recomendacionFirmaProcesos.delete(id);
+        recomendacionFirmasPorDocumento.set(id,{
+          estado:'FIRMADA',documento:r,sha_actual:'',version_documento:'',error:''
+        });
+        if(auroRecFirmaEsContextoActual(id,idAtencion)) aplicarModo();
 
         if(auroRecFirmaEsContextoActual(id,idAtencion)){
           await auroRecFirmaSincronizarPersistencia({
@@ -2803,7 +2941,7 @@ html,body{background:#dfe3e8}
     }
 
     const estado=auroRecFirmaEstado(id);
-    if(estado.estado==='FIRMADA' && !proceso){
+    if(['FIRMADA','NUEVA_VERSION'].includes(estado.estado) && !proceso){
       return auroRecFirmaVerFirmada();
     }
 
@@ -2813,18 +2951,27 @@ html,body{background:#dfe3e8}
 
   function enlazar(){
     const guardarBtn=document.getElementById('auroRecBtnGuardar');
+    const nuevaBtn=document.getElementById('auroRecBtnNueva');
     const recargarBtn=document.getElementById('auroRecBtnRecargar');
     const vistaBtn=document.getElementById('auroRecBtnVista');
     const agregarPlanBtn=document.getElementById('auroRecBtnAgregarPlan');
     const app=document.getElementById('auroRecomendacionesApp');
 
+    if(nuevaBtn && nuevaBtn.dataset.auroRec!=='1'){
+      nuevaBtn.dataset.auroRec='1';
+      nuevaBtn.addEventListener('click',nuevaRecomendacion);
+    }
     if(guardarBtn && guardarBtn.dataset.auroRec!=='1'){
       guardarBtn.dataset.auroRec='1';
       guardarBtn.addEventListener('click',guardar);
     }
     if(recargarBtn && recargarBtn.dataset.auroRec!=='1'){
       recargarBtn.dataset.auroRec='1';
-      recargarBtn.addEventListener('click',()=>cargar(true));
+      recargarBtn.addEventListener('click',()=>{
+        if(!recPermitirDescartarCambios()) return;
+        state.modoNuevo=false;
+        return cargar(true);
+      });
     }
     if(vistaBtn && vistaBtn.dataset.auroRec!=='1'){
       vistaBtn.dataset.auroRec='1';
@@ -2871,6 +3018,10 @@ html,body{background:#dfe3e8}
     state.idAtencion='';
     state.idRecomendacion='';
     state.registro=null;
+    state.registros=[];
+    state.modoNuevo=false;
+    state.verificandoFirma=false;
+    state.firmaVerificacionFallida=false;
     state.diagnosticos=[];
     state.firmaPersistida='';
     state.firmaPersistidaAtencion='';
@@ -2903,6 +3054,10 @@ html,body{background:#dfe3e8}
       state.idAtencion=id;
       state.idRecomendacion='';
       state.registro=null;
+      state.registros=[];
+      state.modoNuevo=false;
+      state.verificandoFirma=false;
+      state.firmaVerificacionFallida=false;
       state.diagnosticos=[];
       state.firmaPersistida='';
       state.firmaPersistidaAtencion='';
@@ -2938,7 +3093,7 @@ html,body{background:#dfe3e8}
     const idEvento=txt(evento?.detail?.id_atencion || evento?.detail?.idAtencion);
     const ctx=state.contexto || contextoAtencion();
 
-    if(state.guardando) return;
+    if(state.guardando || state.verificandoFirma || recDocumentoFirmadoActivo()) return;
     if(!idEvento || !ctx?.id || idEvento !== txt(ctx.id)) return;
     if(getValue('auroRecGenerales')) return;
 
@@ -2970,6 +3125,8 @@ html,body{background:#dfe3e8}
     inicializar:inicializar,
     cargar:function(){return cargar(true);},
     guardar:guardar,
+    nueva:nuevaRecomendacion,
+    abrirHistorial:abrirRecomendacionHistorial,
     vistaPrevia:vistaPrevia,
     estado:state,
 
