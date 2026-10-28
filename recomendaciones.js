@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.2.0
+ Versión: 1.4.1 — Multidocumento / fecha / correo profesional (antirregresiva)
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.4.0';
+  const VERSION = '1.4.1';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20261028_iasyn2_multidocumento_firma_premium_paginacion_a4_protegida';
+  const RELEASE = '20261028_iasyn2_multidocumento_firma_premium_fecha_medico_v141_antirregresiva';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -1282,6 +1282,8 @@
       ctx=resultados[1]||ctxVigente||ctx;
       if(txt(ctx?.id)!==idSolicitada) return null;
       state.contexto=ctx;
+      // Precarga no bloqueante: la ficha médica ya estará disponible al imprimir o firmar.
+      recPrecargarMedicoImpresion(ctx).catch(()=>{});
       const raw=resultados[0];
       const items=Array.isArray(raw)?raw:(Array.isArray(raw?.registros)?raw.registros:[]);
       const docs=items.filter(r=>txt(r?.id_atencion)===idSolicitada && txt(r?.id_recomendacion));
@@ -1658,10 +1660,51 @@
     };
   }
 
+  /* ============================================================
+     IASYN RECOMENDACIONES V1.4.1 — CORRECCIÓN QUIRÚRGICA DE IMPRESIÓN
+     - Solo lectura: se reutiliza el endpoint existente listarMedicosActivos.
+     - Caché por ID exacto del médico: no cruza datos entre consultas.
+     - Una solicitud en vuelo por médico: no ralentiza innecesariamente
+       las vistas previas ni crea consultas duplicadas.
+     - Fallo de lectura: mantiene impresión y firma con datos disponibles.
+     - No altera guardado, motor de firma, PDF firmado ni estilos A4.
+     ============================================================ */
+  const recMedicosImpresionPorId = new Map();
+  const recMedicosImpresionPendientes = new Map();
+
+  async function recPrecargarMedicoImpresion(ctx){
+    const id=txt(ctx?.atencion?.id_medico||ctx?.idMedico);
+    if(!id) return null;
+    if(recMedicosImpresionPorId.has(id)) return recMedicosImpresionPorId.get(id);
+    if(recMedicosImpresionPendientes.has(id)) return recMedicosImpresionPendientes.get(id);
+
+    const pendiente=(async()=>{
+      try{
+        const respuesta=await apiGet('listarMedicosActivos');
+        if(respuesta?.success===false) throw new Error(txt(respuesta.message||'No se pudo consultar médicos.'));
+        const lista=Array.isArray(respuesta)?respuesta:
+          (Array.isArray(respuesta?.data)?respuesta.data:
+          (Array.isArray(respuesta?.medicos)?respuesta.medicos:
+          (Array.isArray(respuesta?.registros)?respuesta.registros:[])));
+        const medico=lista.find(m=>txt(m?.id_medico||m?.id||m?.codigo)===id)||null;
+        if(medico) recMedicosImpresionPorId.set(id,medico);
+        return medico;
+      }catch(error){
+        console.warn(MODULO+': no se pudo precargar la ficha del médico para impresión; se conserva el origen local.',error);
+        return null;
+      }finally{
+        recMedicosImpresionPendientes.delete(id);
+      }
+    })();
+    recMedicosImpresionPendientes.set(id,pendiente);
+    return pendiente;
+  }
+
   function recMedicoImpresion(ctx){
     const a=ctx?.atencion||{};
-    const id=txt(a.id_medico);
+    const id=txt(a.id_medico||ctx?.idMedico);
     const listas=[
+      recMedicosImpresionPorId.has(id)?[recMedicosImpresionPorId.get(id)]:[],
       window.medicos,
       window.medicosActivos,
       window.listaMedicos,
@@ -1811,7 +1854,7 @@
           <div class="ar-brand">${esc(cfg.nombre)}</div>
           ${cfg.subtitulo?`<div class="ar-brand-sub">${esc(cfg.subtitulo)}</div>`:''}
         </div>
-        <div class="ar-doc-date">${esc(cfg.ciudad)}, ${esc(fecha)}</div>
+        <div class="ar-doc-date">${esc([cfg.ciudad,fecha].map(txt).filter(Boolean).join(', '))}</div>
       </header>
 
       <h1>RECOMENDACIONES MÉDICAS</h1>
@@ -1912,7 +1955,9 @@ body{overflow-x:hidden}
       setMsg('El navegador bloqueó la vista de impresión. Permita ventanas emergentes para este sitio.','error');
       return;
     }
+    const medicoPendiente=recPrecargarMedicoImpresion(ctx);
     const identidad=await recIdentidadDocumento();
+    await medicoPendiente;
     if(w.closed) return;
     const htmlDoc=recDocumentoHTML({configuracion:identidad.configuracion,logo:identidad.logo});
 
@@ -2086,7 +2131,9 @@ html,body{background:#dfe3e8}
       setMsg('El navegador bloqueó la vista de la recomendación guardada. Permita ventanas emergentes para este sitio.','error');
       return null;
     }
+    const medicoPendiente=recPrecargarMedicoImpresion(ctx);
     const identidad=await recIdentidadDocumento();
+    await medicoPendiente;
     if(w.closed) return null;
     const htmlDoc=recDocumentoHTML({
       ctx:ctx,
@@ -2341,9 +2388,12 @@ html,body{background:#dfe3e8}
     }
 
     const detalle=parseDetalle(registro.detalle_json);
+    // El motor mantiene su secuencia; la consulta de médico se inicia en paralelo.
+    const medicoPendiente=recPrecargarMedicoImpresion(ctxActual);
     const diagnosticos=await auroRecFirmaDiagnosticos(idAtn);
     const logo=await auroRecFirmaLogoDataUrl();
     const identidad=await recIdentidadDocumento();
+    await medicoPendiente;
 
     const cuerpo=recDocumentoHTML({
       ctx:ctxActual,
