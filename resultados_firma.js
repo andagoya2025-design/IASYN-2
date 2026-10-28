@@ -1,30 +1,17 @@
 /* ============================================================================
- * IASYN-2 | resultados_firma.js | V2.0.0-CANDIDATO-ANTIRREGRESIVO
- * Referencia funcional: Aurosanax Prueba, resultados_firma.js V1.0.0.
- * ADAPTADOR DE ÍNDICE DE DOCUMENTOS FIRMADOS — SOLO LECTURA.
- *
- * CONTRATO PÚBLICO CONSERVADO:
- * window.auroResultadosFirma.cargar({id_atencion,id_paciente})
- * window.auroResultadosFirma.obtenerSnapshot()
- * window.auroResultadosFirma.limpiar()
- * window.auroResultadosFirma.estado()
- *
- * RESTRICCIONES:
- * - No modifica resultados.js, documentos.js ni firma_electronica.js.
- * - No escribe en Google Sheets, Drive, firmas, PDFs ni auditorías.
- * - No genera enlaces, tokens, permisos ni autoriza descargas.
- * - Nunca expone drive_file_id, URL, base64, SHA256 o credenciales.
- * - Solo admite documentos FIRMADOS, PDF, de la atención y paciente activos.
- * - La autorización definitiva se valida en el backend, al emitir y descargar.
- * - El ID lógico FIRMA: requiere resolución segura en el backend IASYN-2.
- * - Cargar este módulo antes de resultados.js y después de firma_electronica.js.
- * - La integración visual con resultados.js se realiza en un paso separado.
+ * IASYN2 | resultados_firma.js | V3.0.0-CONSULTA-UNIFICADA-ANTIRREGRESIVA
+ * Base: IASYN-2/main/resultados_firma.js (consultado 2026-10-27).
+ * PROPOSITO: recuperar TODOS los PDF firmados de la atencion/paciente activo.
+ * Solo lectura: no altera motor de firmas, PDFs, Drive, Sheets ni tokens.
+ * Preserva ventana.auroResultadosFirma: cargar/obtenerSnapshot/limpiar/estado.
+ * NUNCA expone a Resultados drive_file_id, URL, hash, base64 ni credenciales.
+ * Backend debe validar autorizacion real al emitir enlaces y al descargar.
  * ========================================================================== */
-(function iasyn2ResultadosFirmaV2() {
+(function iasyn2ResultadosFirmaV3() {
   'use strict';
 
   const NOMBRE = 'IASYN2_RESULTADOS_FIRMA';
-  const VERSION = '2.0.0-IASYN2-CANDIDATO';
+  const VERSION = '3.0.0-IASYN2-CONSULTA-UNIFICADA';
   const TIPOS = Object.freeze([
     'RECETA', 'RECOMENDACION', 'CERTIFICADO', 'ORDEN_MEDICA'
   ]);
@@ -34,7 +21,6 @@
     listo: false, cargando: false, error: '', secuencia: 0
   };
 
-  // No reemplazar módulos previos ni duplicar escuchas o consultas.
   if (window.auroResultadosFirma) {
     console.warn(NOMBRE + ': adaptador ya cargado; no se sobrescribe.');
     return;
@@ -68,7 +54,7 @@
   }
 
   function vaciar() {
-    estado.secuencia += 1; // Invalida respuestas asíncronas anteriores.
+    estado.secuencia += 1;
     estado.atencion = '';
     estado.paciente = '';
     estado.documentos = [];
@@ -77,7 +63,6 @@
     estado.error = '';
   }
 
-  // Acepta envolturas de respuesta existentes, sin inventar registros.
   function respuestaDocumentos(respuesta) {
     const candidatos = [respuesta, respuesta?.data, respuesta?.resultado];
     const salida = [];
@@ -107,13 +92,11 @@
     const idPaciente = texto(registro.id_paciente);
     const mime = texto(registro.mime_type || registro.mime).toLowerCase();
 
-    // Fallar cerrado: la pertenencia no se deduce del filtro de consulta.
     if (!/^[A-Za-z0-9_-]+$/.test(id)) return null;
-    if (tipo !== tipoConsultado || !TIPOS.includes(tipo)) return null;
+    if ((tipoConsultado && tipo !== tipoConsultado) || !TIPOS.includes(tipo)) return null;
     if (firma !== 'FIRMADO') return null;
     if (idAtencion !== atencion || idPaciente !== paciente) return null;
     if (mime && mime !== 'application/pdf') return null;
-
     const nombre = texto(registro.nombre_archivo || registro.nombre_documento) ||
       (tipo.replace(/_/g, ' ') + ' firmado.pdf');
     const tamano = Number(registro.tamano_bytes);
@@ -144,6 +127,84 @@
     };
   }
 
+  /* Consulta directa SOLO LECTURA: el contrato del Apps Script IASYN2 permite
+   * filtrar por id_atencion + id_paciente SIN imponer tipo_documento=RECETA.
+   * Evita pasar por los wrappers de firma, que por compatibilidad histórica
+   * predeterminan RECETA cuando el tipo está vacío.
+   * Se limita a la URL ya configurada en el ERP y a la sesión vigente.
+   */
+  function urlServidor() {
+    try {
+      if (typeof API_URL !== 'undefined' && API_URL) return texto(API_URL);
+    } catch (_) {}
+    if (window.API_URL) return texto(window.API_URL);
+    return texto(document.getElementById('appsScriptUrl')?.value);
+  }
+
+  function tokenSesion() {
+    try { return texto(window.sessionStorage.getItem('aurosanax_seguridad_token')); }
+    catch (_) { return ''; }
+  }
+
+  async function consultarTodosPorAtencion(c) {
+    const url = urlServidor();
+    const token = tokenSesion();
+    if (!url) throw new Error('No existe el endpoint configurado del ERP.');
+    if (!token) throw new Error('La sesión del ERP no está disponible.');
+    const respuesta = await fetch(url, {
+      method: 'POST',
+      headers: {'Content-Type': 'text/plain;charset=utf-8'},
+      body: JSON.stringify({
+        accion: 'consultarDocumentosFirmados',
+        data: {token, id_atencion: c.atencion, id_paciente: c.paciente}
+      }),
+      cache: 'no-store'
+    });
+    if (!respuesta.ok) {
+      throw new Error('HTTP ' + respuesta.status + ' al consultar documentos firmados.');
+    }
+    const json = await respuesta.json();
+    if (!json || json.success !== true) {
+      throw new Error(texto(json?.message || 'El servidor rechazó la consulta unificada.'));
+    }
+    return json;
+  }
+
+  // Compatibilidad: si una instalación aún no admite el camino unificado,
+  // conservar la lectura anterior por categorías y sus resultados parciales.
+  async function consultarPorTipos(api, c) {
+    const respuestas = await Promise.allSettled(TIPOS.map(tipo =>
+      api.consultarDocumentosFirmados({
+        tipo_documento: tipo,
+        id_atencion: c.atencion,
+        id_paciente: c.paciente
+      })
+    ));
+    const documentos = [];
+    const errores = [];
+    let correctas = 0;
+    for (let i = 0; i < TIPOS.length; i++) {
+      const r = respuestas[i];
+      if (r.status !== 'fulfilled') {
+        errores.push(TIPOS[i] + ': ' + texto(r.reason?.message || r.reason));
+        continue;
+      }
+      const respuesta = r.value;
+      if (!respuesta || typeof respuesta !== 'object' ||
+          respuesta.success === false || respuesta.ok === false) {
+        errores.push(TIPOS[i] + ': respuesta inválida');
+        continue;
+      }
+      correctas++;
+      for (const doc of respuestaDocumentos(respuesta)) {
+        const seguro = documentoSeguro(doc, TIPOS[i], c.atencion, c.paciente);
+        if (seguro) documentos.push(seguro);
+      }
+    }
+    if (!correctas) throw new Error('Fallaron todas las categorías: ' + errores.join(' | '));
+    return {documentos, errores};
+  }
+
   async function cargar(contexto) {
     const c = normalizarContexto(contexto);
     if (!c.atencion || !c.paciente || !contextoCoincide(c.atencion, c.paciente)) {
@@ -165,53 +226,32 @@
     estado.error = '';
 
     try {
-      // El contrato de firma utiliza RECETA como filtro por defecto.
-      // Por ello se consultan los cuatro tipos de manera explícita.
-      // Cada categoría se consulta de forma independiente: una falla no oculta
-      // los documentos firmados válidos de las demás categorías.
-      const respuestas = await Promise.allSettled(TIPOS.map(tipo =>
-        api.consultarDocumentosFirmados({
-          tipo_documento: tipo,
-          id_atencion: c.atencion,
-          id_paciente: c.paciente
-        })
-      ));
+      let documentos = [];
+      const errores = [];
+      try {
+        const respuesta = await consultarTodosPorAtencion(c);
+        for (const registro of respuestaDocumentos(respuesta)) {
+          const seguro = documentoSeguro(registro, '', c.atencion, c.paciente);
+          if (seguro) documentos.push(seguro);
+        }
+      } catch (errUnificada) {
+        errores.push('Consulta por atención: ' + texto(errUnificada?.message || errUnificada));
+        const respaldo = await consultarPorTipos(api, c);
+        documentos = respaldo.documentos;
+        errores.push(...respaldo.errores);
+      }
 
-      if (secuencia !== estado.secuencia ||
-          !contextoCoincide(c.atencion, c.paciente)) {
+      if (secuencia !== estado.secuencia || !contextoCoincide(c.atencion, c.paciente)) {
         if (secuencia === estado.secuencia) vaciar();
         return snapshot();
       }
-
       const unicos = new Map();
-      const fallos = [];
-      let consultasCorrectas = 0;
-      for (let i = 0; i < TIPOS.length; i++) {
-        const resultado = respuestas[i];
-        if (resultado.status !== 'fulfilled') {
-          fallos.push(TIPOS[i] + ': ' + texto(resultado.reason?.message || resultado.reason));
-          continue;
-        }
-        const respuesta = resultado.value;
-        if (!respuesta || typeof respuesta !== 'object' ||
-            respuesta.success === false || respuesta.ok === false) {
-          fallos.push(TIPOS[i] + ': respuesta rechazada o inválida');
-          continue;
-        }
-        consultasCorrectas++;
-        for (const registro of respuestaDocumentos(respuesta)) {
-          const seguro = documentoSeguro(registro, TIPOS[i], c.atencion, c.paciente);
-          if (seguro && !unicos.has(seguro.id_firma_documento)) {
-            unicos.set(seguro.id_firma_documento, seguro);
-          }
-        }
+      for (const doc of documentos) {
+        if (!unicos.has(doc.id_firma_documento)) unicos.set(doc.id_firma_documento, doc);
       }
-      if (!consultasCorrectas) {
-        throw new Error('Fallaron todas las consultas de documentos firmados: ' + fallos.join(' | '));
-      }
-      // Se conserva la advertencia de consultas parciales para diagnóstico.
-      estado.error = fallos.length ? 'Consultas parciales: ' + fallos.join(' | ') : '';
       estado.documentos = [...unicos.values()];
+      estado.error = errores.length ? 'Consulta parcial: ' + errores.join(' | ') : '';
+      if (errores.length) console.warn(NOMBRE + ': ' + estado.error);
       estado.listo = true;
       return snapshot();
     } catch (error) {
@@ -220,8 +260,6 @@
         estado.listo = false;
         estado.error = texto(error?.message || error);
       }
-      // Si la consulta antigua falló después de un cambio de contexto,
-      // no transmitir el error antiguo al nuevo contexto.
       if (secuencia !== estado.secuencia) return snapshot();
       throw error;
     } finally {
