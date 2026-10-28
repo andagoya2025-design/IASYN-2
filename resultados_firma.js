@@ -167,7 +167,9 @@
     try {
       // El contrato de firma utiliza RECETA como filtro por defecto.
       // Por ello se consultan los cuatro tipos de manera explícita.
-      const respuestas = await Promise.all(TIPOS.map(tipo =>
+      // Cada categoría se consulta de forma independiente: una falla no oculta
+      // los documentos firmados válidos de las demás categorías.
+      const respuestas = await Promise.allSettled(TIPOS.map(tipo =>
         api.consultarDocumentosFirmados({
           tipo_documento: tipo,
           id_atencion: c.atencion,
@@ -175,7 +177,6 @@
         })
       ));
 
-      // Evitar contaminar la atención actual con una respuesta antigua.
       if (secuencia !== estado.secuencia ||
           !contextoCoincide(c.atencion, c.paciente)) {
         if (secuencia === estado.secuencia) vaciar();
@@ -183,12 +184,21 @@
       }
 
       const unicos = new Map();
+      const fallos = [];
+      let consultasCorrectas = 0;
       for (let i = 0; i < TIPOS.length; i++) {
-        const respuesta = respuestas[i];
+        const resultado = respuestas[i];
+        if (resultado.status !== 'fulfilled') {
+          fallos.push(TIPOS[i] + ': ' + texto(resultado.reason?.message || resultado.reason));
+          continue;
+        }
+        const respuesta = resultado.value;
         if (!respuesta || typeof respuesta !== 'object' ||
             respuesta.success === false || respuesta.ok === false) {
-          throw new Error('El servidor no confirmó la consulta de ' + TIPOS[i] + '.');
+          fallos.push(TIPOS[i] + ': respuesta rechazada o inválida');
+          continue;
         }
+        consultasCorrectas++;
         for (const registro of respuestaDocumentos(respuesta)) {
           const seguro = documentoSeguro(registro, TIPOS[i], c.atencion, c.paciente);
           if (seguro && !unicos.has(seguro.id_firma_documento)) {
@@ -196,7 +206,11 @@
           }
         }
       }
-
+      if (!consultasCorrectas) {
+        throw new Error('Fallaron todas las consultas de documentos firmados: ' + fallos.join(' | '));
+      }
+      // Se conserva la advertencia de consultas parciales para diagnóstico.
+      estado.error = fallos.length ? 'Consultas parciales: ' + fallos.join(' | ') : '';
       estado.documentos = [...unicos.values()];
       estado.listo = true;
       return snapshot();
