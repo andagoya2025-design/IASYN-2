@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.5.1 — verificación automática de todas las firmas del historial (candidata antirregresiva)
+ Versión: 1.5.3 — cierre A4 y tarjetas compactas (candidata antirregresiva)
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.5.1-RECOMENDACIONES-HISTORIAL-FIRMAS-ANTIRREGRESIVA';
+  const VERSION = '1.5.3-RECOMENDACIONES-PAGINACION-TARJETAS-COMPACTAS';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20261028_iasyn2_recomendaciones_historial_firmas_verdes_v151_candidata';
+  const RELEASE = '20261028_iasyn2_recomendaciones_a4_tarjetas_compactas_v153_candidata';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -547,6 +547,24 @@
         .auro-rec-saved-top{display:grid}
         .auro-rec-saved-actions{justify-content:stretch}
         .auro-rec-saved-actions .auro-rec-btn{width:100%}
+      }
+      /* IASYN 1.5.3: compactación SOLO VISUAL del historial. Se mantienen
+         accesibilidad, badges, firmas verdes y acciones tal como funcionan. */
+      #auroRecGuardadaCard .auro-rec-card-body{padding:10px 12px}
+      #auroRecGuardada .auro-rec-saved-list{gap:6px}
+      #auroRecGuardada.auro-rec-saved-list{gap:6px}
+      #auroRecGuardada .auro-rec-saved-item{padding:8px 11px;border-radius:11px;box-shadow:0 2px 9px rgba(15,23,42,.035)}
+      #auroRecGuardada .auro-rec-saved-top{align-items:center;gap:10px}
+      #auroRecGuardada .auro-rec-saved-title{font-size:13px;line-height:1.22}
+      #auroRecGuardada .auro-rec-saved-meta{font-size:10px;line-height:1.25;margin-top:2px;overflow-wrap:anywhere}
+      #auroRecGuardada .auro-rec-saved-badges{gap:4px;margin-top:4px}
+      #auroRecGuardada .auro-rec-saved-badge{gap:4px;padding:2px 6px;font-size:9.5px;line-height:1.18}
+      #auroRecGuardada .auro-rec-saved-actions{gap:6px;align-items:center;flex:0 0 auto}
+      #auroRecGuardada .auro-rec-saved-actions .auro-rec-btn{min-height:34px;padding:6px 9px;font-size:11px;line-height:1.22;max-width:238px}
+      @media(max-width:700px){
+        #auroRecGuardada .auro-rec-saved-item{padding:10px}
+        #auroRecGuardada .auro-rec-saved-top{display:grid;gap:7px}
+        #auroRecGuardada .auro-rec-saved-actions .auro-rec-btn{max-width:none;min-height:42px;font-size:12px}
       }
       .auro-rec-btn:disabled{opacity:.5;cursor:not-allowed}
       .auro-rec-msg{padding:10px 12px;border-radius:13px;font-size:12px;font-weight:750}
@@ -1917,7 +1935,9 @@
      - No consulta servidor, no guarda ni altera el proceso de firma.
      - Ante navegador sin medición, utiliza la maquetación fluida segura. */
   function recPaginarHTML(html){
-    if(typeof document==='undefined' || !document.body || window.IASYN_REC_PAGINACION_FLUIDA===true) return html;
+    if(typeof document==='undefined' || !document.body || window.IASYN_REC_PAGINACION_FLUIDA===true) {
+      return recPaginarRespaldoSeguro(html);
+    }
     let marco=null;
     try{
       marco=document.createElement('iframe');
@@ -1925,7 +1945,7 @@
       marco.style.cssText='position:fixed;left:-10000px;top:0;width:180mm;height:273mm;visibility:hidden;pointer-events:none;border:0';
       document.body.appendChild(marco);
       const d=marco.contentDocument;
-      if(!d) return html;
+      if(!d) return recPaginarRespaldoSeguro(html);
       d.open();
       d.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><style>'+recEstilosImpresion()+
         '.ar-page{width:100%!important;height:273mm!important;min-height:273mm!important;max-height:273mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}'+
@@ -1935,7 +1955,7 @@
       const plantilla=d.createElement('template');plantilla.innerHTML=html;
       const origen=plantilla.content.querySelector('.ar-paper');
       const footerOriginal=origen?.querySelector(':scope > .ar-firma-area');
-      if(!origen || !footerOriginal) return html;
+      if(!origen || !footerOriginal) return recPaginarRespaldoSeguro(html);
       const raiz=d.createElement('div');raiz.className='ar-paginas';d.body.appendChild(raiz);
       let paginaActual=null,cuerpoActual=null,seccionActual=null;
       const paginas=[];
@@ -1978,7 +1998,7 @@
           candidato.remove();
           if(!mejor) return restante;
           const parte=partes.slice(0,mejor).join('');
-          const pedazo=elemento.cloneNode(false);pedazo.textContent=parte;
+          const pedazo=elemento.cloneNode(false);pedazo.textContent=parte;pedazo.classList.add('ar-parrafo-fragmento');
           padreNuevo.appendChild(pedazo);
           restante=partes.slice(mejor).join('');
           if(!restante) return '';
@@ -2121,12 +2141,26 @@
         }
       }
       paginaActual.appendChild(footerOriginal.cloneNode(true));
+      /* V1.5.2 — inspección preventiva del cierre: nunca entregar al motor
+         un artículo final vacío cuyo único contenido sea el pie. Si se
+         produce por falta de altura utilizable, el respaldo seguro fluirá
+         el pie detrás del último párrafo en lugar de forzar hoja exclusiva. */
+      if(paginas.length>1 && !paginas[paginas.length-1].querySelector('.ar-page-main')?.textContent.trim()){
+        throw new Error('Cierre paginado sin contenido clínico en la última hoja');
+      }
       // La vista previa y el documento remitido a firma utilizan exactamente el mismo HTML.
       return raiz.innerHTML;
     }catch(e){
-      console.warn(MODULO+': paginación A4 manual no disponible; se conserva fragmentación fluida.',e);
-      return html;
+      console.warn(MODULO+': paginación A4 manual no disponible; se aplica respaldo de flujo legible.',e);
+      return recPaginarRespaldoSeguro(html);
     }finally{if(marco) marco.remove();}
+  }
+
+  /* Respaldo de impresión cuando Chromium/iframe no puede medir.
+     Un documento extenso no debe crear una última página solo para el pie.
+     No se usa firma falsa ni se altera la firma electrónica. */
+  function recPaginarRespaldoSeguro(html){
+    return String(html||'').replace('class="ar-paper"', 'class="ar-paper ar-flujo-respaldo"');
   }
 
   function recDocumentoHTML(opciones){
@@ -2266,7 +2300,10 @@
      El pie se ancla al final de una página corta, y pasa al flujo en documentos largos. */
   function recEstilosImpresion(){
     return `
-@page{size:A4 portrait;margin:12mm 15mm}
+/* V1.5.2: se mantienen 12mm superiores y 15mm laterales; 2mm adicionales
+   de holgura inferior evitan que Chromium desplace el pie de una hoja A4
+   exacta a otra por redondeo/subpíxeles o bloque no divisible. */
+@page{size:A4 portrait;margin:12mm 15mm 10mm}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;max-width:100%;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}
 body{overflow-x:hidden}
@@ -2295,6 +2332,7 @@ body{overflow-x:hidden}
 .ar-rec-list{margin-top:6px}
 .ar-rec-list li{line-height:1.58;margin:4px 0;padding-left:2px}
 .ar-rec-text{line-height:1.62!important;text-align:justify}
+.ar-parrafo-fragmento{margin-bottom:0!important}
 .ar-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:auto;padding-top:12mm;break-inside:avoid;page-break-inside:avoid}
 .ar-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere;display:grid;gap:5px;align-content:end;min-width:0}
 .ar-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start;break-inside:avoid}
@@ -2310,9 +2348,15 @@ body{overflow-x:hidden}
 .ar-paginas .ar-page:last-child{break-after:auto;page-break-after:auto}
 .ar-paginas .ar-page-main{display:flow-root;width:100%;flex:0 0 auto}
 .ar-paginas .ar-page .ar-firma-area{padding-top:0!important;margin-top:auto!important}
+/* En flujo de respaldo, el documento sigue teniendo páginas A4 pero el cierre
+   se mantiene con el texto que lo precede, nunca en una hoja aislada por flex. */
+.ar-flujo-respaldo{display:block!important;min-height:0!important;height:auto!important}
+.ar-flujo-respaldo .ar-firma-area{display:grid!important;margin-top:12mm!important;padding-top:0!important;break-inside:avoid;page-break-inside:avoid}
 @media print{
   html,body{width:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:273mm!important;margin:0!important;padding:0!important;overflow:visible!important;position:relative!important;transform:none!important;break-inside:auto!important;page-break-inside:auto!important}
+  .ar-paper.ar-flujo-respaldo{display:block!important;min-height:0!important;height:auto!important}
+  .ar-flujo-respaldo .ar-firma-area{margin-top:12mm!important}
   .ar-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
   .ar-doc-head-no-logo{grid-template-columns:minmax(0,1fr) auto!important}
   .ar-firma-area{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
