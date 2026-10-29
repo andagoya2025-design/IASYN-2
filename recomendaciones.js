@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.5.0 — PDF A4 / UX premium / edición ampliada (candidata antirregresiva)
+ Versión: 1.5.1 — verificación automática de todas las firmas del historial (candidata antirregresiva)
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.5.0-RECOMENDACIONES-ANTIRREGRESIVA';
+  const VERSION = '1.5.1-RECOMENDACIONES-HISTORIAL-FIRMAS-ANTIRREGRESIVA';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20261028_iasyn2_recomendaciones_pdf_toast_editor_paginacion_v150_candidata';
+  const RELEASE = '20261028_iasyn2_recomendaciones_historial_firmas_verdes_v151_candidata';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -70,6 +70,7 @@
   const recomendacionFirmasPorDocumento = new Map();
   const recomendacionFirmaProcesos = new Map();
   let recomendacionFirmaSyncToken = 0;
+  let recomendacionFirmaHistorialToken = 0; // Aísla comprobación masiva de la comprobación del documento abierto.
   let recomendacionFirmaLogoCache = null;
   let recomendacionFirmaLogoPromesa = null;
 
@@ -523,6 +524,10 @@
       .auro-rec-saved-actions .auro-rec-btn{white-space:normal;text-align:center;overflow-wrap:anywhere;line-height:1.35;min-height:40px}
       .auro-rec-btn.firma-ok{background:#edfdf4;color:#166534;border-color:#7bdca8}
       .auro-rec-btn.firma-warn{background:#fffbeb;color:#92400e;border-color:#f4cc76}
+      /* V1.5.1: verde evidente SOLO para PDF con firma confirmada por el servidor. */
+      .auro-rec-saved-actions .auro-rec-btn.firma-ok{background:linear-gradient(135deg,#047857,#059669);color:#fff;border:1px solid #047857;box-shadow:0 3px 11px rgba(4,120,87,.13)}
+      .auro-rec-saved-actions .auro-rec-btn.firma-ok:hover{background:#047857}
+      .auro-rec-saved-actions .auro-rec-btn.firma-ok:focus-visible{outline:3px solid #6ee7b7;outline-offset:2px}
       .auro-rec-saved-badge.proceso{background:#fff7ed;color:#9a3412;border-color:#fdba74}
       .auro-rec-saved-meta{word-break:break-word}
       .auro-rec-saved-title{line-height:1.4}
@@ -1369,6 +1374,7 @@
     const mantenerId=state.idAtencion===idSolicitada?txt(state.idRecomendacion):'';
     const mantenerNuevo=state.idAtencion===idSolicitada && state.modoNuevo;
     const token=++state.tokenCarga;
+    ++recomendacionFirmaHistorialToken;
     state.cargando=true;
     setMsg('Cargando historial de recomendaciones de esta atención…','info');
     try{
@@ -1391,6 +1397,17 @@
       const registro=docs.find(r=>txt(r.id_recomendacion)===mantenerId)||docs[0]||null;
       limpiar();
       state.registros=docs;
+      // Ninguna tarjeta se presume sin firma antes de consultar al servidor.
+      // Los procesos locales de firma en curso tienen prioridad sobre la lectura.
+      docs.forEach(reg=>{
+        const rid=txt(reg.id_recomendacion);
+        if(!recomendacionFirmaProcesos.has(rid)){
+          recomendacionFirmasPorDocumento.set(rid,{
+            estado:'VERIFICANDO',documento:null,sha_actual:'',
+            version_documento:auroRecFirmaVersionDocumento(reg),error:'',id_atencion:idSolicitada
+          });
+        }
+      });
       state.modoNuevo=mantenerNuevo;
       state.verificandoFirma=!!(registro && !mantenerNuevo);
       state.firmaVerificacionFallida=false;
@@ -1432,6 +1449,12 @@
         state.cargando=false;
         state.verificandoFirma=false;
         aplicarModo();
+        // Lectura en segundo plano de TODAS las demás recomendaciones de esta atención.
+        // Dos consultas simultáneas como máximo, sin POST de firma ni regeneración de PDF.
+        if(txt(contextoAtencion()?.id)===idSolicitada && state.registros.length){
+          void recFirmaSincronizarHistorial(idSolicitada,state.registros.slice(),token,
+            !state.modoNuevo?state.idRecomendacion:'');
+        }
       }
     }
   }
@@ -2391,11 +2414,12 @@ html,body{background:#dfe3e8}
      - “Abrir guardada” usa detalle_json persistido, no el formulario.
      ============================================================ */
 
-  function auroRecGuardadaEstadoFirmaVisual(id){
+  function auroRecGuardadaEstadoFirmaVisual(id,esActiva){
     const rid=txt(id);
     const proceso=auroRecFirmaProceso(rid);
     const estado=auroRecFirmaEstado(rid);
-    const hayCambios=auroRecFirmaHayCambiosSinGuardar();
+    // No trasladar el estado "cambios sin guardar" a todas las demás tarjetas.
+    const hayCambios=!!esActiva && auroRecFirmaHayCambiosSinGuardar();
 
     if(proceso){
       const op=txt(proceso.estado).toUpperCase();
@@ -2406,15 +2430,21 @@ html,body{background:#dfe3e8}
       if(op==='EXPIRADA') return {texto:'Firma expirada',clase:'warn',accion:'Reintentar firma',disabled:false,cancelar:false};
     }
 
-    if(hayCambios){
-      return {texto:'Guardada · cambios sin guardar',clase:'warn',accion:'Guarde cambios antes de firmar',disabled:true,cancelar:false};
-    }
-
+    // El estado de firma archivado permanece visible aunque otro editor tenga cambios.
     if(estado.estado==='FIRMADA'){
       return {texto:'Firmada ✓',clase:'ok',accion:'Ver recomendación firmada ✓',disabled:false,cancelar:false};
     }
     if(estado.estado==='NUEVA_VERSION'){
-      return {texto:'Firma histórica · Documento protegido',clase:'ok',accion:'Ver documento firmado ✓',disabled:false,cancelar:false};
+      return {texto:'Firma histórica ✓ · Versión distinta',clase:'ok',accion:'Ver documento firmado ✓',disabled:false,cancelar:false};
+    }
+    if(estado.estado==='VERIFICANDO'){
+      return {texto:'Verificando firma…',clase:'warn',accion:'Verificando firma…',disabled:true,cancelar:false};
+    }
+    if(estado.estado==='NO_VERIFICADA'){
+      return {texto:'Firma no verificada',clase:'warn',accion:'Firma no verificada · Recargue',disabled:true,cancelar:false};
+    }
+    if(hayCambios){
+      return {texto:'Guardada · cambios sin guardar',clase:'warn',accion:'Guarde cambios antes de firmar',disabled:true,cancelar:false};
     }
     return {texto:'Sin firma',clase:'',accion:'Firmar recomendación',disabled:false,cancelar:false};
   }
@@ -2433,12 +2463,14 @@ html,body{background:#dfe3e8}
     box.innerHTML=docs.map(registro=>{
       const id=txt(registro.id_recomendacion);
       const activa=!state.modoNuevo && id===txt(state.idRecomendacion);
-      const firma=activa?auroRecGuardadaEstadoFirmaVisual(id):{
-        texto:'Abrir para verificar firma',clase:'',accion:'Abrir para firmar',disabled:false,cancelar:false
-      };
+      // Todas las tarjetas usan el estado individual que verificó el servidor.
+      const firma=auroRecGuardadaEstadoFirmaVisual(id,activa);
       const f=fechaVisual(registro.actualizado_en||registro.creado_en||registro.fecha_atencion);
       const consulta=txt(registro.numero_consulta||ctx.numeroConsulta);
-      const deshabilitarFirma=state.guardando || state.cargando || state.verificandoFirma || state.firmaVerificacionFallida || ctx?.bloqueada===true || (activa&&firma.disabled);
+      const esPdfFirmado=firma.clase==='ok';
+      const deshabilitarFirma=state.guardando || state.cargando ||
+        (activa&&(state.verificandoFirma || state.firmaVerificacionFallida)) ||
+        (ctx?.bloqueada===true && !esPdfFirmado) || firma.disabled;
       const claseFirma=firma.clase?' '+firma.clase:'';
       return `<div class="auro-rec-saved-item${activa?' activo':''}">
         <div class="auro-rec-saved-top"><div>
@@ -2460,6 +2492,13 @@ html,body{background:#dfe3e8}
     box.querySelectorAll('[data-auro-rec-firma-guardada]').forEach(el=>{
       el.onclick=async()=>{
         const id=txt(el.dataset.auroRecFirmaGuardada);
+        const actual=state.contexto||contextoAtencion();
+        const registro=(state.registros||[]).find(r=>txt(r.id_recomendacion)===id && txt(r.id_atencion)===txt(actual?.id));
+        if(!registro){setMsg('La recomendación ya no pertenece a la atención visible. Recargue el historial.','error');return;}
+        // PDF firmado: abrir el original DIRECTAMENTE, sin seleccionar/editar la ficha.
+        if(['FIRMADA','NUEVA_VERSION'].includes(auroRecFirmaEstado(id).estado) && !auroRecFirmaProceso(id)){
+          return auroRecFirmaVerFirmada(id,txt(actual.id));
+        }
         if(state.modoNuevo||id!==txt(state.idRecomendacion)){
           if(!(await abrirRecomendacionHistorial(id))) return;
         }
@@ -2771,6 +2810,78 @@ html,body{background:#dfe3e8}
       '</head><body>'+cuerpo+'</body></html>';
   }
 
+  /* IASYN V1.5.1 — VERIFICACIÓN DEL HISTORIAL COMPLETO, EXCLUSIVAMENTE LECTURA.
+     Se reutiliza consultarDocumentosFirmados por ID exacta porque el backend
+     existente NO garantiza una acción masiva. Limita la concurrencia a 2.
+     No modifica el motor, documentos_firmados, Sheets, hashes ni solicitudes. */
+  async function recFirmaSincronizarHistorial(idAtencion,registros,tokenCarga,excluirId){
+    const idAtn=txt(idAtencion);
+    const token=++recomendacionFirmaHistorialToken;
+    const sigueVigente=()=>token===recomendacionFirmaHistorialToken &&
+      tokenCarga===state.tokenCarga && txt(state.contexto?.id)===idAtn &&
+      txt(contextoAtencion()?.id)===idAtn;
+    if(!idAtn || !sigueVigente()) return;
+    const docs=(Array.isArray(registros)?registros:[]).filter(r=>
+      txt(r?.id_recomendacion) && txt(r?.id_atencion)===idAtn &&
+      txt(r?.id_recomendacion)!==txt(excluirId));
+    let siguiente=0;
+    async function trabajador(){
+      while(sigueVigente() && siguiente<docs.length){
+        const registro=docs[siguiente++];
+        const id=txt(registro.id_recomendacion);
+        // Una solicitud de firma en curso tiene su propia máquina de estados.
+        if(recomendacionFirmaProcesos.has(id)) continue;
+        try{
+          const respuesta=await auroRecFirmaPost('consultarDocumentosFirmados',{
+            tipo_documento:'RECOMENDACION',
+            id_documento_origen:id,
+            id_recomendacion:id,
+            id_atencion:idAtn
+          });
+          if(!sigueVigente()) return;
+          if(recomendacionFirmaProcesos.has(id)) continue;
+          const firmados=(Array.isArray(respuesta?.documentos)?respuesta.documentos:[]).filter(d=>
+            txt(d?.tipo_documento).toUpperCase()==='RECOMENDACION' &&
+            txt(d?.id_documento_origen||d?.id_recomendacion)===id &&
+            txt(d?.id_atencion)===idAtn &&
+            txt(d?.estado_firma).toUpperCase()==='FIRMADO'
+          );
+          const version=auroRecFirmaVersionDocumento(registro);
+          if(!firmados.length){
+            // No borrar una firma confirmada mientras se propaga entre servicios.
+            const previo=auroRecFirmaEstado(id);
+            if(!['FIRMADA','NUEVA_VERSION'].includes(previo.estado)){
+              recomendacionFirmasPorDocumento.set(id,{
+                estado:'SIN_FIRMA',documento:null,sha_actual:'',version_documento:version,
+                error:'',id_atencion:idAtn
+              });
+            }
+          }else{
+            const exacto=version?firmados.find(d=>auroRecFirmaVersionDesdeFirmado(d)===version):null;
+            // Si versión no coincide, preservar la firma histórica sin atribuirla
+            // equivocadamente a la versión clínica actual.
+            recomendacionFirmasPorDocumento.set(id,{
+              estado:exacto?'FIRMADA':'NUEVA_VERSION',documento:exacto||firmados[0],
+              sha_actual:'',version_documento:version,error:'',id_atencion:idAtn
+            });
+          }
+        }catch(error){
+          if(!sigueVigente()) return;
+          const previo=auroRecFirmaEstado(id);
+          if(!['FIRMADA','NUEVA_VERSION'].includes(previo.estado)){
+            recomendacionFirmasPorDocumento.set(id,{
+              estado:'NO_VERIFICADA',documento:null,sha_actual:'',
+              version_documento:auroRecFirmaVersionDocumento(registro),
+              error:txt(error?.message||error),id_atencion:idAtn
+            });
+          }
+        }
+        if(sigueVigente()) auroRecFirmaActualizarUI();
+      }
+    }
+    await Promise.all([trabajador(),trabajador()]);
+  }
+
   async function auroRecFirmaSincronizarPersistencia(opciones){
     opciones=opciones||{};
     const token=++recomendacionFirmaSyncToken;
@@ -2849,7 +2960,7 @@ html,body{background:#dfe3e8}
           firmado prevalece hasta poder sincronizar correctamente.
         */
         recomendacionFirmasPorDocumento.set(id,{
-          estado:'FIRMADA',
+          estado:'NUEVA_VERSION',
           documento:docs[0],
           sha_actual:'',
           version_documento:versionActual,
@@ -3300,14 +3411,17 @@ html,body{background:#dfe3e8}
     return new Blob([bytes],{type:'application/pdf'});
   }
 
-  async function auroRecFirmaVerFirmada(){
-    const id=txt(state.idRecomendacion);
-    const idAtn=txt((state.contexto||contextoAtencion())?.id);
-    if(!id || !idAtn){
-      setMsg('No se pudo identificar la recomendación firmada.','error');
+  async function auroRecFirmaVerFirmada(idSolicitado,idAtencionSolicitada){
+    const ctx=state.contexto||contextoAtencion();
+    const id=txt(idSolicitado||state.idRecomendacion);
+    const idAtn=txt(idAtencionSolicitada||ctx?.id);
+    const pertenece=(state.registros||[]).some(r=>
+      txt(r?.id_recomendacion)===id && txt(r?.id_atencion)===idAtn);
+    if(!id || !idAtn || txt(ctx?.id)!==idAtn || !pertenece ||
+       !['FIRMADA','NUEVA_VERSION'].includes(auroRecFirmaEstado(id).estado)){
+      setMsg('No se ha confirmado una firma de esta recomendación en la atención seleccionada.','error');
       return null;
     }
-
     const ventana=window.open('','_blank');
     if(ventana){
       ventana.document.title='Cargando recomendación firmada…';
@@ -3433,6 +3547,7 @@ html,body{background:#dfe3e8}
     state.tokenCarga++;
     state.tokenGuardado++;
     recomendacionFirmaSyncToken++;
+    recomendacionFirmaHistorialToken++;
     state.cargando=false;
     state.guardando=false;
     state.idAtencion='';
@@ -3470,6 +3585,7 @@ html,body{background:#dfe3e8}
       state.tokenCarga++;
       state.tokenGuardado++;
       recomendacionFirmaSyncToken++;
+      recomendacionFirmaHistorialToken++;
       state.cargando=false;
       state.guardando=false;
       state.idAtencion=id;
