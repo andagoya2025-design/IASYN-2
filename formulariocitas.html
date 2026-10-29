@@ -351,6 +351,7 @@
               <div>
                 <h5>Datos del paciente</h5>
                 <p>Complete sus datos para que Secretaría pueda confirmar la cita.</p>
+                <div id="iasynAvisoPacientePrecargado" class="micro-help" role="status" hidden style="color:#166534"></div>
               </div>
             </div>
 
@@ -427,6 +428,81 @@
     let miniCalendarDate = new Date();
     const miniMonthNames = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
     const miniDayNames = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+
+
+    /* ============================================================
+       IASYN2 - AGENDAR DESDE PACIENTES / RECEPTOR V2
+       Contrato con pacientes.js: iasyn_cita_paciente_desde_erp_v1.
+       Solo precarga datos administrativos. NO consulta fichas, NO guarda,
+       NO crea pacientes, NO modifica Agenda, Script ni firma.
+       Consume y elimina el contexto una sola vez en la misma pestaña.
+    ============================================================ */
+    function iasynRecibirPacienteDesdeERP(){
+      const clave = 'iasyn_cita_paciente_desde_erp_v1';
+      let texto = '';
+      try{
+        texto = sessionStorage.getItem(clave) || '';
+        if(texto) sessionStorage.removeItem(clave);
+      }catch(error){
+        console.warn('IASYN CITAS: no se pudo leer el contexto temporal.', error);
+        return {ok:false, motivo:'almacenamiento'};
+      }
+      if(!texto) return {ok:false, motivo:'sin_contexto'};
+
+      let contexto;
+      try{
+        contexto = JSON.parse(texto);
+      }catch(_error){
+        return {ok:false, motivo:'contexto_invalido'};
+      }
+      if(!contexto || contexto.version !== 1 || contexto.origen !== 'pacientes'){
+        return {ok:false, motivo:'origen_invalido'};
+      }
+
+      const ahora = Date.now();
+      const creado = Number(contexto.creado_en);
+      if(!Number.isFinite(creado) || creado <= 0 || creado > ahora + 60000 || ahora - creado > 600000){
+        return {ok:false, motivo:'contexto_caducado'};
+      }
+
+      const p = contexto.paciente;
+      if(!p || typeof p !== 'object' || Array.isArray(p) ||
+         !String(p.id_paciente || '').trim()){
+        return {ok:false, motivo:'paciente_invalido'};
+      }
+
+      // No se inventan ni se dividen apellidos de fichas históricas.
+      // La cédula se trata como texto para preservar el cero inicial.
+      const campos = {
+        numero_documento: String(p.numero_documento || '').trim(),
+        nombres: String(p.nombres || '').replace(/\s+/g,' ').trim(),
+        apellidos: String(p.apellidos || '').replace(/\s+/g,' ').trim(),
+        whatsapp: String(p.whatsapp || '').trim(),
+        email: String(p.email || '').trim()
+      };
+      const elementos = {};
+      for(const id of Object.keys(campos)){
+        elementos[id] = document.getElementById(id);
+        if(!elementos[id]) return {ok:false, motivo:'formulario_incompleto'};
+      }
+
+      // Los cinco campos pertenecen exclusivamente al paciente seleccionado.
+      // No toca fecha, médico, servicio, horario, observaciones ni reservas.
+      for(const id of Object.keys(campos)) elementos[id].value = campos[id];
+      const consentimiento = document.getElementById('acepta_privacidad');
+      if(consentimiento) consentimiento.checked = false;
+
+      const aviso = document.getElementById('iasynAvisoPacientePrecargado');
+      if(aviso){
+        const faltantes = ['numero_documento','nombres','apellidos','whatsapp']
+          .filter(id => !campos[id]);
+        aviso.textContent = faltantes.length
+          ? 'Paciente seleccionado desde IASYN. Se precargaron los datos disponibles. Complete los campos obligatorios faltantes y verifique la información.'
+          : 'Paciente seleccionado desde IASYN. Sus datos se han precargado; verifique la información y elija médico, servicio, fecha y hora.';
+        aviso.hidden = false;
+      }
+      return {ok:true, id_paciente:String(p.id_paciente).trim()};
+    }
 
     async function apiGet(accion, params){
       const query = new URLSearchParams({accion: accion, t: Date.now()});
@@ -1420,6 +1496,8 @@
         form.classList.remove('reserva-completada');
         form.reset();
       }
+      const avisoAnterior = document.getElementById('iasynAvisoPacientePrecargado');
+      if(avisoAnterior){ avisoAnterior.textContent = ''; avisoAnterior.hidden = true; }
 
       selectedSlot = null;
       window.__slotsDisponibles = [];
@@ -1611,6 +1689,7 @@
       miniCalendarDate = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
 
       await cargarConfiguracionCentroFormulario();
+      iasynRecibirPacienteDesdeERP();
 
       actualizarResumenSeleccion();
       actualizarEspecialidadMedico();
