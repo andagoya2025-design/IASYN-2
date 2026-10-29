@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.5.4 — paginación estable y lectura segura de documentos firmados (candidata antirregresiva)
+ Versión: 1.5.5 — reserva de firma estilo Certificados; A4 y lectura blindadas (candidata)
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.5.4-RECOMENDACIONES-PAGINACION-LECTURA-SEGURA';
+  const VERSION = '1.5.5-RECOMENDACIONES-ANCLA-FIRMA-HTML';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20261029_iasyn2_recomendaciones_a4_lectura_segura_v154_candidata';
+  const RELEASE = '20261029_iasyn2_recomendaciones_firma_html_a4_v155_candidata';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -1982,7 +1982,7 @@
       d.open();
       d.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><style>'+recEstilosImpresion()+
         '.ar-page{width:100%!important;height:263mm!important;min-height:263mm!important;max-height:263mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}'+
-        '.ar-page-main{width:100%;flex:0 0 auto;display:flow-root}.ar-page .ar-firma-area{padding-top:0!important;margin-top:auto!important}'+
+        '.ar-page-main{width:100%;flex:0 0 auto;display:flow-root}.ar-page .ar-firma-area{padding-top:18mm!important;margin-top:auto!important}'+
         '</style></head><body></body></html>');
       d.close();
       const plantilla=d.createElement('template');plantilla.innerHTML=html;
@@ -2002,7 +2002,7 @@
       crearPagina();
       const mm=d.createElement('div');mm.style.cssText='height:1mm;width:1mm;position:absolute;visibility:hidden';d.body.appendChild(mm);
       const pxmm=mm.getBoundingClientRect().height||3.779527559;mm.remove();
-      const tempFooter=footerOriginal.cloneNode(true);tempFooter.style.marginTop='0';tempFooter.style.paddingTop='0';
+      const tempFooter=footerOriginal.cloneNode(true);tempFooter.style.marginTop='0';tempFooter.style.paddingTop='18mm';
       paginaActual.appendChild(tempFooter);
       const altoFooter=tempFooter.getBoundingClientRect().height;
       tempFooter.remove();
@@ -2368,7 +2368,7 @@ body{overflow-x:hidden}
 .ar-rec-list li{line-height:1.58;margin:4px 0;padding-left:2px}
 .ar-rec-text{line-height:1.62!important;text-align:justify}
 .ar-parrafo-fragmento{margin-bottom:0!important}
-.ar-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:auto;padding-top:12mm;break-inside:avoid;page-break-inside:avoid}
+.ar-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:auto;padding-top:18mm;break-inside:avoid;page-break-inside:avoid}
 .ar-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere;display:grid;gap:5px;align-content:end;min-width:0}
 .ar-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start;break-inside:avoid}
 .ar-contacto-icono{display:block;width:12px;height:12px;margin-top:2px;color:var(--ar-color,#8b1e5a)}
@@ -2382,11 +2382,11 @@ body{overflow-x:hidden}
 .ar-paginas .ar-page{height:263mm!important;min-height:263mm!important;max-height:263mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}
 .ar-paginas .ar-page:last-child{break-after:auto;page-break-after:auto}
 .ar-paginas .ar-page-main{display:flow-root;width:100%;flex:0 0 auto}
-.ar-paginas .ar-page .ar-firma-area{padding-top:0!important;margin-top:auto!important}
+.ar-paginas .ar-page .ar-firma-area{padding-top:18mm!important;margin-top:auto!important}
 /* En flujo de respaldo, el documento sigue teniendo páginas A4 pero el cierre
    se mantiene con el texto que lo precede, nunca en una hoja aislada por flex. */
 .ar-flujo-respaldo{display:block!important;min-height:0!important;height:auto!important}
-.ar-flujo-respaldo .ar-firma-area{display:grid!important;margin-top:12mm!important;padding-top:0!important;break-inside:avoid;page-break-inside:avoid}
+.ar-flujo-respaldo .ar-firma-area{display:grid!important;margin-top:12mm!important;padding-top:18mm!important;break-inside:avoid;page-break-inside:avoid}
 @media print{
   html,body{width:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
   .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:273mm!important;margin:0!important;padding:0!important;overflow:visible!important;position:relative!important;transform:none!important;break-inside:auto!important;page-break-inside:auto!important}
@@ -2881,9 +2881,20 @@ html,body{background:#dfe3e8}
       logo:logo
     });
 
+    // Solo RECOMENDACION: ancla exacta en la ultima hoja A4 ya paginada.
+    // Usa el contrato HTML de anclas existente en IASYN Firma, sin cambiar el agente.
+    // El flujo de respaldo mantiene el comportamiento previo si no hay paginas verificables.
+    const paginasFirma=(cuerpo.match(/<article class="ar-paper ar-page"/g)||[]).length;
+    const anclaFirma=paginasFirma>0
+      ? '<meta name="iasyn-signature-anchors" content="'+btoa(JSON.stringify({
+          tipo_documento:'RECOMENDACION',coordinate_system:'pdf',
+          anchors:[{name:'IASYN_RECOMENDACION',page:paginasFirma,rect:[347.211,97.6985,512.211,143.6985]}]
+        }))+'">'
+      : '';
     return '<!DOCTYPE html><html lang="es"><head>'+
       '<meta charset="UTF-8">'+
       '<meta name="viewport" content="width=device-width,initial-scale=1">'+
+      anclaFirma+
       '<title>Recomendaciones médicas</title>'+
       '<style>'+recEstilosImpresion()+'</style>'+
       '</head><body>'+cuerpo+'</body></html>';
