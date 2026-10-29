@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.5.3 — cierre A4 y tarjetas compactas (candidata antirregresiva)
+ Versión: 1.5.4 — paginación estable y lectura segura de documentos firmados (candidata antirregresiva)
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.5.3-RECOMENDACIONES-PAGINACION-TARJETAS-COMPACTAS';
+  const VERSION = '1.5.4-RECOMENDACIONES-PAGINACION-LECTURA-SEGURA';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20261028_iasyn2_recomendaciones_a4_tarjetas_compactas_v153_candidata';
+  const RELEASE = '20261029_iasyn2_recomendaciones_a4_lectura_segura_v154_candidata';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -524,6 +524,9 @@
       .auro-rec-saved-actions .auro-rec-btn{white-space:normal;text-align:center;overflow-wrap:anywhere;line-height:1.35;min-height:40px}
       .auro-rec-btn.firma-ok{background:#edfdf4;color:#166534;border-color:#7bdca8}
       .auro-rec-btn.firma-warn{background:#fffbeb;color:#92400e;border-color:#f4cc76}
+      /* El botón Abierta se distingue del botón Abrir y del verde firmado. */
+      #auroRecGuardada .auro-rec-btn.doc-abierto{background:#f7e6f1;border:1px solid #c763a0;color:#81245a;box-shadow:inset 0 0 0 1px #e9afd0}
+      #auroRecGuardada .auro-rec-btn.doc-abierto:focus-visible{outline:2px solid #8b1e5a;outline-offset:2px}
       /* V1.5.1: verde evidente SOLO para PDF con firma confirmada por el servidor. */
       .auro-rec-saved-actions .auro-rec-btn.firma-ok{background:linear-gradient(135deg,#047857,#059669);color:#fff;border:1px solid #047857;box-shadow:0 3px 11px rgba(4,120,87,.13)}
       .auro-rec-saved-actions .auro-rec-btn.firma-ok:hover{background:#047857}
@@ -572,6 +575,8 @@
       .auro-rec-msg.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
       .auro-rec-msg.error{background:#fff1f2;color:#9f1239;border:1px solid #fecdd3}
       .auro-rec-readonly input,.auro-rec-readonly textarea,.auro-rec-readonly select{background:#f8fafc!important;color:#475569!important}
+      .auro-rec-readonly textarea[readonly],.auro-rec-readonly input[readonly]{user-select:text!important;-webkit-user-select:text!important;cursor:text!important;color:#334155!important;opacity:1!important}
+      .auro-rec-expand-text[readonly]{user-select:text!important;-webkit-user-select:text!important;cursor:text;background:#f8fafc}
       @media(max-width:900px){
         .auro-rec-context{grid-template-columns:repeat(2,minmax(0,1fr))}
         .auro-rec-context-item{border-bottom:1px solid #f0e1e9}
@@ -675,6 +680,7 @@
               <div class="auro-rec-check-grid">${checksHtml(ALERTAS,'alerta')}</div>
               <div class="auro-rec-field" style="margin-top:12px">
                 <label for="auroRecAlertaOtros">Otros signos / observaciones</label>
+                <div class="auro-rec-expand-row"><button type="button" class="auro-rec-expand-btn" data-auro-rec-expand="auroRecAlertaOtros">⛶ Ampliar / ver texto</button></div>
                 <textarea id="auroRecAlertaOtros" placeholder="Otros signos de alarma o aclaraciones específicas."></textarea>
               </div>
             </div>
@@ -688,6 +694,7 @@
               <div class="auro-rec-check-grid">${checksHtml(INFECCION,'infeccion')}</div>
               <div class="auro-rec-field" style="margin-top:12px">
                 <label for="auroRecInfeccionOtros">Otros signos / observaciones</label>
+                <div class="auro-rec-expand-row"><button type="button" class="auro-rec-expand-btn" data-auro-rec-expand="auroRecInfeccionOtros">⛶ Ampliar / ver texto</button></div>
                 <textarea id="auroRecInfeccionOtros" placeholder="Observaciones relacionadas con infección o cuidados locales."></textarea>
               </div>
             </div>
@@ -772,36 +779,52 @@
     return txt(document.getElementById(id)?.value);
   }
 
-  /* La edición ampliada no guarda: revalida atención, documento y firma al aplicar. */
+  /* V1.5.4: editor ampliado en SOLO LECTURA para documentos firmados.
+     La opción Aplicar jamás existe en modo lectura; no se altera el firmado. */
   function recAmpliarEditor(id){
-    if(!['auroRecDieta','auroRecGenerales'].includes(id)) return;
+    if(!['auroRecDieta','auroRecGenerales','auroRecAlertaOtros','auroRecInfeccionOtros'].includes(id)) return;
     const origen=document.getElementById(id);
     const ctx=state.contexto||contextoAtencion();
     const idAtencion=txt(ctx?.id),idDocumento=txt(state.idRecomendacion),modoNuevo=!!state.modoNuevo;
-    if(!origen || origen.disabled || !ctx.editable || !idAtencion || state.guardando || state.cargando ||
-       state.verificandoFirma || state.firmaVerificacionFallida || recDocumentoFirmadoActivo() || recFirmaActivaEnAtencion(idAtencion)) return;
-    const titulo=id==='auroRecDieta'?'Dieta / cuidados recomendados':'Recomendaciones para el paciente';
+    if(!origen || !idAtencion || state.guardando || state.cargando) return;
+    const editable=ctx.editable===true && !origen.readOnly && !origen.disabled &&
+      !state.verificandoFirma && !state.firmaVerificacionFallida &&
+      !recDocumentoFirmadoActivo() && !recFirmaActivaEnAtencion(idAtencion);
+    const titulos={
+      auroRecDieta:'Dieta / cuidados recomendados',
+      auroRecGenerales:'Recomendaciones para el paciente',
+      auroRecAlertaOtros:'Otros signos de alerta / observaciones',
+      auroRecInfeccionOtros:'Otros signos de infección / observaciones'
+    };
+    const titulo=titulos[id];
     const dialog=document.createElement('dialog');dialog.className='auro-rec-expand-dialog';
     const panel=document.createElement('div');panel.className='auro-rec-expand-panel';
     const h=document.createElement('h3');h.textContent=titulo;
     const ayuda=document.createElement('div');ayuda.className='auro-rec-expand-help';
-    ayuda.textContent='Aplicar el texto solo actualiza el formulario; para guardar pulse Guardar recomendaciones.';
-    const campo=document.createElement('textarea');campo.className='auro-rec-expand-text';campo.value=origen.value;campo.setAttribute('aria-label',titulo);
+    ayuda.textContent=editable
+      ? 'Aplicar el texto solo actualiza el formulario; para guardar pulse Guardar recomendaciones.'
+      : 'Consulta de solo lectura: seleccione el texto y use Ctrl+A / Ctrl+C para copiarlo. El documento firmado no se modifica.';
+    const campo=document.createElement('textarea');campo.className='auro-rec-expand-text';
+    campo.value=origen.value;campo.readOnly=!editable;campo.setAttribute('aria-label',titulo);
     const acciones=document.createElement('div');acciones.className='auro-rec-expand-actions';
-    const cancelar=document.createElement('button');cancelar.type='button';cancelar.textContent='Cancelar';
-    const aplicar=document.createElement('button');aplicar.type='button';aplicar.textContent='Aplicar texto';aplicar.className='aplicar';
-    acciones.append(cancelar,aplicar);panel.append(h,ayuda,campo,acciones);dialog.append(panel);document.body.append(dialog);
+    const cancelar=document.createElement('button');cancelar.type='button';cancelar.textContent=editable?'Cancelar':'Cerrar';
+    acciones.append(cancelar);
     const cerrar=()=>{if(dialog.open && typeof dialog.close==='function') dialog.close();dialog.remove();};
     dialog.addEventListener('close',()=>dialog.remove(),{once:true});
     cancelar.addEventListener('click',cerrar);
-    aplicar.addEventListener('click',()=>{
-      const actual=state.contexto||contextoAtencion();
-      const invalido=txt(actual.id)!==idAtencion || txt(state.idRecomendacion)!==idDocumento || !!state.modoNuevo!==modoNuevo ||
-        !actual.editable || !origen.isConnected || origen.disabled || state.guardando || state.cargando ||
-        state.verificandoFirma || state.firmaVerificacionFallida || recDocumentoFirmadoActivo() || recFirmaActivaEnAtencion(idAtencion);
-      if(invalido){cerrar();setMsg('Cambió la atención, el documento o la firma. No se aplicó el texto.','error');return;}
-      origen.value=campo.value;origen.dispatchEvent(new Event('input',{bubbles:true}));cerrar();origen.focus();
-    });
+    if(editable){
+      const aplicar=document.createElement('button');aplicar.type='button';aplicar.textContent='Aplicar texto';aplicar.className='aplicar';
+      acciones.append(aplicar);
+      aplicar.addEventListener('click',()=>{
+        const actual=state.contexto||contextoAtencion();
+        const invalido=txt(actual.id)!==idAtencion || txt(state.idRecomendacion)!==idDocumento || !!state.modoNuevo!==modoNuevo ||
+          !actual.editable || !origen.isConnected || origen.disabled || origen.readOnly || state.guardando || state.cargando ||
+          state.verificandoFirma || state.firmaVerificacionFallida || recDocumentoFirmadoActivo() || recFirmaActivaEnAtencion(idAtencion);
+        if(invalido){cerrar();setMsg('Cambió la atención, el documento o la firma. No se aplicó el texto.','error');return;}
+        origen.value=campo.value;origen.dispatchEvent(new Event('input',{bubbles:true}));cerrar();origen.focus();
+      });
+    }
+    panel.append(h,ayuda,campo,acciones);dialog.append(panel);document.body.append(dialog);
     if(typeof dialog.showModal==='function') dialog.showModal();else{dialog.setAttribute('open','');campo.focus();}
   }
 
@@ -1286,8 +1309,18 @@
     const bloqueadoPorGuardado=state.guardando===true;
     const app=document.getElementById('auroRecomendacionesApp');
     if(app) app.classList.toggle('auro-rec-readonly',!editable);
+    // V1.5.4: un documento firmado se puede LEER y COPIAR, nunca editar.
+    // Textarea/texto usan readonly (permite foco, selección, Ctrl+A y Ctrl+C).
+    // Checkboxes/fecha/select permanecen deshabilitados si están protegidos.
     document.querySelectorAll('#auroRecomendacionesApp input,#auroRecomendacionesApp textarea,#auroRecomendacionesApp select').forEach(el=>{
-      el.disabled=!editable || bloqueadoPorGuardado;
+      const seleccionable=el.tagName==='TEXTAREA' || (el.tagName==='INPUT' && ['text','search','email','tel','url'].includes(el.type));
+      if(seleccionable){
+        el.readOnly=!editable || bloqueadoPorGuardado;
+        el.disabled=false;
+        el.setAttribute('aria-readonly',String(el.readOnly));
+      }else{
+        el.disabled=!editable || bloqueadoPorGuardado;
+      }
     });
     const guardar=document.getElementById('auroRecBtnGuardar');
     if(guardar){
@@ -1307,7 +1340,7 @@
     const recargar=document.getElementById('auroRecBtnRecargar');
     if(recargar) recargar.disabled=bloqueadoPorGuardado;
     document.querySelectorAll('[data-auro-rec-expand]').forEach(btn=>{
-      btn.disabled=!editable || !ctx.id || bloqueadoPorGuardado;
+      btn.disabled=!ctx.id || bloqueadoPorGuardado || state.cargando;
     });
     const estado=document.getElementById('auroRecEstado');
     if(estado){
@@ -1948,7 +1981,7 @@
       if(!d) return recPaginarRespaldoSeguro(html);
       d.open();
       d.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><style>'+recEstilosImpresion()+
-        '.ar-page{width:100%!important;height:273mm!important;min-height:273mm!important;max-height:273mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}'+
+        '.ar-page{width:100%!important;height:263mm!important;min-height:263mm!important;max-height:263mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}'+
         '.ar-page-main{width:100%;flex:0 0 auto;display:flow-root}.ar-page .ar-firma-area{padding-top:0!important;margin-top:auto!important}'+
         '</style></head><body></body></html>');
       d.close();
@@ -1973,7 +2006,9 @@
       paginaActual.appendChild(tempFooter);
       const altoFooter=tempFooter.getBoundingClientRect().height;
       tempFooter.remove();
-      const maximo=(273*pxmm)-(4*pxmm); // 7 mm: separador y tolerancia de impresión.
+      // Altura segura 263 mm: margen interior para los distintos motores de PDF.
+      // No se modifica @page ni la geometría externa de A4.
+      const maximo=(263*pxmm)-(4*pxmm); // 259 mm de cuerpo clínico por hoja.
       const cabe=()=>cuerpoActual.getBoundingClientRect().height <= maximo+0.5;
       const intentar=(n,padre)=>{padre.appendChild(n);if(cabe()) return true;n.remove();return false;};
       const moverPagina=()=>crearPagina();
@@ -2097,7 +2132,7 @@
       // Reserva del pie SOLO en la última página. El resto conserva máxima capacidad.
       // Si queda un espacio insuficiente, trasladar los últimos párrafos completos
       // a una nueva última página, manteniendo el orden y la identidad de los bloques.
-      const maximaFinal=(273*pxmm)-(3*pxmm);
+      const maximaFinal=(263*pxmm)-(3*pxmm);
       if(cuerpoActual.getBoundingClientRect().height + altoFooter > maximaFinal){
         const anterior=cuerpoActual;
         moverPagina();
@@ -2344,7 +2379,7 @@ body{overflow-x:hidden}
 /* La medición opcional añade relleno únicamente cuando cabe en la última página. */
 .ar-firma-area.ar-firma-ajustada{margin-top:var(--ar-ajuste-pie,0px)!important}
 .ar-paginas{width:100%}
-.ar-paginas .ar-page{height:273mm!important;min-height:273mm!important;max-height:273mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}
+.ar-paginas .ar-page{height:263mm!important;min-height:263mm!important;max-height:263mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}
 .ar-paginas .ar-page:last-child{break-after:auto;page-break-after:auto}
 .ar-paginas .ar-page-main{display:flow-root;width:100%;flex:0 0 auto}
 .ar-paginas .ar-page .ar-firma-area{padding-top:0!important;margin-top:auto!important}
@@ -2523,7 +2558,7 @@ html,body{background:#dfe3e8}
           <div class="auro-rec-saved-badges"><span class="auro-rec-saved-badge ok"><i class="bi bi-check2-circle"></i> Guardada</span>
           <span class="auro-rec-saved-badge${claseFirma}"><i class="bi bi-shield-check"></i> ${esc(firma.texto)}</span></div>
         </div><div class="auro-rec-saved-actions">
-          <button type="button" class="auro-rec-btn" data-auro-rec-seleccionar="${esc(id)}">${activa?'Abierta ✓':'Abrir'}</button>
+          <button type="button" class="auro-rec-btn${activa?' doc-abierto':''}" data-auro-rec-seleccionar="${esc(id)}" ${activa?'aria-current="true"':''}>${activa?'Abierta ✓':'Abrir'}</button>
           <button type="button" class="auro-rec-btn${firma.clase==='ok'?' firma-ok':(firma.clase==='warn'?' firma-warn':' primary')}" data-auro-rec-firma-guardada="${esc(id)}" ${deshabilitarFirma?'disabled':''}>
             <i class="bi ${firma.clase==='ok'?'bi-file-earmark-check':'bi-pen'} me-1"></i> ${esc(firma.accion)}
           </button>
