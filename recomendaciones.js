@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: recomendaciones.js
  Módulo: Recomendaciones clínicas por atención
- Versión: 1.4.1 — Multidocumento / fecha / correo profesional (antirregresiva)
+ Versión: 1.5.0 — PDF A4 / UX premium / edición ampliada (candidata antirregresiva)
  Fecha: 2026-09-10
  -----------------------------------------------------------------------
  ARQUITECTURA
@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.4.1';
+  const VERSION = '1.5.0-RECOMENDACIONES-ANTIRREGRESIVA';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20261028_iasyn2_multidocumento_firma_premium_fecha_medico_v141_antirregresiva';
+  const RELEASE = '20261028_iasyn2_recomendaciones_pdf_toast_editor_paginacion_v150_candidata';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -398,12 +398,52 @@
     return raw;
   }
 
+  /* V1.5.0 — Avisos premium limitados a acciones operativas visibles.
+     Las cargas automáticas y los cambios de atención no generan ventanas emergentes. */
+  let recToastTemporizador=null;
+  let recToastUltimaClave='';
+  function recPantallaVisible(){
+    const el=document.getElementById('auroRecomendacionesApp');
+    if(!el || !el.isConnected || !el.getClientRects().length || !idAtencionActiva()) return false;
+    for(let n=el;n && n!==document.body;n=n.parentElement){
+      if(n.hidden || n.inert || n.getAttribute('aria-hidden')==='true') return false;
+      const s=window.getComputedStyle(n);
+      if(s.display==='none' || s.visibility==='hidden') return false;
+    }
+    return true;
+  }
+  function recNotificacionPremium(tipo,texto){
+    const mensaje=txt(texto);
+    if(!mensaje || !recPantallaVisible()) return;
+    if(/^(Seleccione una atención|Cargando |Historial de recomendaciones cargado|Historial cargado|Esta atención todavía no tiene recomendaciones|No hay recomendaciones anteriores|Nueva recomendación en preparación|Se precargaron las indicaciones)/i.test(mensaje)) return;
+    const clave=(tipo||'info')+'|'+mensaje;
+    if(recToastUltimaClave===clave) return;
+    recToastUltimaClave=clave;
+    let zone=document.getElementById('auroRecToastZone');
+    if(!zone){
+      zone=document.createElement('div');zone.id='auroRecToastZone';
+      zone.className='auro-rec-toast-zone';zone.setAttribute('aria-live','polite');
+      document.body.appendChild(zone);
+    }
+    const dic={ok:['ok','✓','Operación confirmada'],info:['info','i','IASYN 2'],warn:['warn','!','Firma electrónica'],error:['error','×','Atención requerida']};
+    const c=dic[tipo]||dic.info;
+    zone.innerHTML='<div class="auro-rec-toast auro-rec-toast-'+c[0]+'" role="status"><div class="auro-rec-toast-icon">'+c[1]+'</div><div><div class="auro-rec-toast-title">'+esc(c[2])+'</div><div class="auro-rec-toast-text">'+esc(mensaje)+'</div></div></div>';
+    if(recToastTemporizador) clearTimeout(recToastTemporizador);
+    recToastTemporizador=setTimeout(()=>{zone.remove();recToastTemporizador=null;recToastUltimaClave='';},3600);
+  }
+  function recCerrarNotificaciones(){
+    if(recToastTemporizador){clearTimeout(recToastTemporizador);recToastTemporizador=null;}
+    recToastUltimaClave='';
+    document.getElementById('auroRecToastZone')?.remove();
+  }
   function setMsg(texto, tipo){
-    const el = document.getElementById('auroRecMensaje');
-    if(!el) return;
-    el.className = 'auro-rec-msg ' + (tipo || 'info');
-    el.innerHTML = texto ? esc(texto) : '';
-    el.hidden = !texto;
+    const el=document.getElementById('auroRecMensaje');
+    if(el){
+      el.className='auro-rec-msg '+(tipo||'info');
+      el.textContent=texto||'';
+      el.hidden=!texto;
+    }
+    if(texto) recNotificacionPremium(tipo,texto);
   }
 
   function instalarEstilos(){
@@ -412,6 +452,29 @@
     const style=document.createElement('style');
     style.id='auroRecomendacionesStyles';
     style.textContent=`
+      /* V1.5.0 — notificaciones premium no invasivas y editor ampliado. */
+      .auro-rec-toast-zone{position:fixed;right:18px;top:18px;z-index:2147483000;width:min(390px,calc(100vw - 28px));pointer-events:none}
+      .auro-rec-toast{display:grid;grid-template-columns:42px minmax(0,1fr);gap:11px;align-items:center;padding:13px 15px;border-radius:16px;color:#fff;box-shadow:0 18px 45px rgba(15,23,42,.23);border:1px solid rgba(255,255,255,.2);animation:auroRecToastIn .22s ease-out}
+      .auro-rec-toast-icon{width:42px;height:42px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.16);font-size:21px;font-weight:900}
+      .auro-rec-toast-title{font-size:13px;font-weight:900}.auro-rec-toast-text{font-size:12px;line-height:1.45;margin-top:3px;overflow-wrap:anywhere}
+      .auro-rec-toast-ok{background:linear-gradient(135deg,#047857,#059669)}.auro-rec-toast-info{background:linear-gradient(135deg,#6c1749,#8b1e5a)}
+      .auro-rec-toast-warn{background:linear-gradient(135deg,#945b08,#b7791f)}.auro-rec-toast-error{background:linear-gradient(135deg,#8f1d18,#b42318)}
+      @keyframes auroRecToastIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+      @media(prefers-reduced-motion:reduce){.auro-rec-toast{animation:none}}
+      #auroRecDieta,#auroRecGenerales{text-align:justify;white-space:pre-wrap;line-height:1.55}
+      .auro-rec-expand-row{display:flex;justify-content:flex-end;margin:6px 0 7px}
+      .auro-rec-expand-btn{border:1px solid #e5b7d0;background:#fff7fb;color:#8b1e5a;border-radius:9px;padding:6px 11px;font-size:12px;font-weight:800;cursor:pointer}
+      .auro-rec-expand-btn:disabled{opacity:.5;cursor:not-allowed}
+      .auro-rec-expand-dialog{width:min(1000px,96vw);max-height:94vh;padding:0;border:0;border-radius:18px;box-shadow:0 20px 70px #0005}
+      .auro-rec-expand-dialog::backdrop{background:rgba(17,24,39,.65)}
+      .auro-rec-expand-panel{padding:18px;display:grid;gap:11px;background:#fff}
+      .auro-rec-expand-panel h3{margin:0;font-size:18px;color:#374151}
+      .auro-rec-expand-help{font-size:12px;color:#64748b}
+      .auro-rec-expand-text{width:100%;min-height:52vh;max-height:69vh;resize:vertical;padding:14px;border:1px solid #cbd5e1;border-radius:12px;font:15px/1.62 Arial,sans-serif;text-align:justify;white-space:pre-wrap;color:#111827}
+      .auro-rec-expand-actions{display:flex;gap:9px;justify-content:flex-end;flex-wrap:wrap}
+      .auro-rec-expand-actions button{border:1px solid #ded5dd;border-radius:10px;padding:9px 16px;background:#fff;color:#475569;font-weight:800;cursor:pointer}
+      .auro-rec-expand-actions .aplicar{background:linear-gradient(135deg,#8b1e5a,#c23b83);border-color:#8b1e5a;color:#fff}
+      @media(max-width:640px){.auro-rec-expand-panel{padding:12px}.auro-rec-expand-text{min-height:55vh;font-size:16px}}
       #auroRecomendacionesApp{width:100%;max-width:1180px;margin:0 auto;color:#1f2937}
       #auroRecomendacionesApp *{box-sizing:border-box}
       .auro-rec-shell{display:grid;gap:16px}
@@ -614,6 +677,7 @@
             <div class="auro-rec-card-body">
               <div class="auro-rec-field">
                 <label for="auroRecDieta">Dieta / cuidados recomendados</label>
+                <div class="auro-rec-expand-row"><button type="button" class="auro-rec-expand-btn" data-auro-rec-expand="auroRecDieta">⛶ Ampliar editor</button></div>
                 <textarea id="auroRecDieta" placeholder="Ej.: hidratación, dieta, reposo relativo, higiene, cuidados del procedimiento..."></textarea>
               </div>
             </div>
@@ -626,6 +690,7 @@
             <div class="auro-rec-card-body">
               <div class="auro-rec-field">
                 <label for="auroRecGenerales">Recomendaciones para el paciente</label>
+                <div class="auro-rec-expand-row"><button type="button" class="auro-rec-expand-btn" data-auro-rec-expand="auroRecGenerales">⛶ Ampliar editor</button></div>
                 <textarea id="auroRecGenerales" style="min-height:180px" placeholder="Escriba las recomendaciones finales de esta atención."></textarea>
                 <div style="margin-top:10px;display:flex;justify-content:flex-end">
                   <button type="button" class="auro-rec-btn" id="auroRecBtnAgregarPlan">
@@ -682,6 +747,39 @@
 
   function getValue(id){
     return txt(document.getElementById(id)?.value);
+  }
+
+  /* La edición ampliada no guarda: revalida atención, documento y firma al aplicar. */
+  function recAmpliarEditor(id){
+    if(!['auroRecDieta','auroRecGenerales'].includes(id)) return;
+    const origen=document.getElementById(id);
+    const ctx=state.contexto||contextoAtencion();
+    const idAtencion=txt(ctx?.id),idDocumento=txt(state.idRecomendacion),modoNuevo=!!state.modoNuevo;
+    if(!origen || origen.disabled || !ctx.editable || !idAtencion || state.guardando || state.cargando ||
+       state.verificandoFirma || state.firmaVerificacionFallida || recDocumentoFirmadoActivo() || recFirmaActivaEnAtencion(idAtencion)) return;
+    const titulo=id==='auroRecDieta'?'Dieta / cuidados recomendados':'Recomendaciones para el paciente';
+    const dialog=document.createElement('dialog');dialog.className='auro-rec-expand-dialog';
+    const panel=document.createElement('div');panel.className='auro-rec-expand-panel';
+    const h=document.createElement('h3');h.textContent=titulo;
+    const ayuda=document.createElement('div');ayuda.className='auro-rec-expand-help';
+    ayuda.textContent='Aplicar el texto solo actualiza el formulario; para guardar pulse Guardar recomendaciones.';
+    const campo=document.createElement('textarea');campo.className='auro-rec-expand-text';campo.value=origen.value;campo.setAttribute('aria-label',titulo);
+    const acciones=document.createElement('div');acciones.className='auro-rec-expand-actions';
+    const cancelar=document.createElement('button');cancelar.type='button';cancelar.textContent='Cancelar';
+    const aplicar=document.createElement('button');aplicar.type='button';aplicar.textContent='Aplicar texto';aplicar.className='aplicar';
+    acciones.append(cancelar,aplicar);panel.append(h,ayuda,campo,acciones);dialog.append(panel);document.body.append(dialog);
+    const cerrar=()=>{if(dialog.open && typeof dialog.close==='function') dialog.close();dialog.remove();};
+    dialog.addEventListener('close',()=>dialog.remove(),{once:true});
+    cancelar.addEventListener('click',cerrar);
+    aplicar.addEventListener('click',()=>{
+      const actual=state.contexto||contextoAtencion();
+      const invalido=txt(actual.id)!==idAtencion || txt(state.idRecomendacion)!==idDocumento || !!state.modoNuevo!==modoNuevo ||
+        !actual.editable || !origen.isConnected || origen.disabled || state.guardando || state.cargando ||
+        state.verificandoFirma || state.firmaVerificacionFallida || recDocumentoFirmadoActivo() || recFirmaActivaEnAtencion(idAtencion);
+      if(invalido){cerrar();setMsg('Cambió la atención, el documento o la firma. No se aplicó el texto.','error');return;}
+      origen.value=campo.value;origen.dispatchEvent(new Event('input',{bubbles:true}));cerrar();origen.focus();
+    });
+    if(typeof dialog.showModal==='function') dialog.showModal();else{dialog.setAttribute('open','');campo.focus();}
   }
 
   function checksSeleccionados(tipo){
@@ -1185,6 +1283,9 @@
     if(agregarPlan) agregarPlan.disabled=!editable || !ctx.id || bloqueadoPorGuardado;
     const recargar=document.getElementById('auroRecBtnRecargar');
     if(recargar) recargar.disabled=bloqueadoPorGuardado;
+    document.querySelectorAll('[data-auro-rec-expand]').forEach(btn=>{
+      btn.disabled=!editable || !ctx.id || bloqueadoPorGuardado;
+    });
     const estado=document.getElementById('auroRecEstado');
     if(estado){
       estado.className='auro-rec-state '+(editable?'edit':'read');
@@ -1531,6 +1632,7 @@
     return {
       nombre:primerTexto(c.nombre_clinica,c.nombre_centro,c.nombre_comercial,c.razon_social,'IASYN'),
       subtitulo:primerTexto(c.subtitulo_clinica,c.descripcion_clinica,c.eslogan_clinica),
+      especialidad:primerTexto(c.especialidad_clinica,c.especialidad_centro,c.especialidad_principal,c.especialidad),
       razon_social:txt(c.razon_social),
       ruc:txt(c.ruc),
       direccion:recDireccionConfig(c),
@@ -1597,6 +1699,7 @@
     const cfg=Object.assign({},base,{
       nombre:campo('nombre_clinica','nombre_centro','nombre_comercial','razon_social')||base.nombre,
       subtitulo:campo('subtitulo_clinica','descripcion_clinica','eslogan_clinica')||base.subtitulo,
+       especialidad:campo('especialidad_clinica','especialidad_centro','especialidad_principal','especialidad')||base.especialidad,
       razon_social:campo('razon_social')||base.razon_social,
       ruc:campo('ruc')||base.ruc,
       direccion:recDireccionConfig(remoto)||base.direccion,
@@ -1723,7 +1826,7 @@
       nombre:recNombreCompleto(m)||nombreMedicoDesdeContexto(a)||'Profesional tratante',
       especialidad:primerTexto(
         m.especialidad_principal,m.especialidad,m.especialidad_medica,
-        a.especialidad,a.medico_especialidad,'Ginecología y Obstetricia'
+        a.especialidad,a.medico_especialidad
       ),
       registro_msp:primerTexto(m.registro_msp,m.msp,m.registro_profesional),
       registro_senescyt:primerTexto(m.registro_senescyt,m.senescyt),
@@ -1737,6 +1840,14 @@
     return m?`${m[3]}/${m[2]}/${m[1]}`:(raw||'—');
   }
 
+  function recCie10Visual(valor){
+    const raw=txt(valor);if(!raw) return '';
+    const s=raw.toUpperCase().replace(/\s+/g,'');
+    if(/^([A-Z]\d{2})(?:\.[0-9A-Z]{1,4})?$/.test(s)) return s;
+    const m=s.match(/^([A-Z]\d{2})([0-9A-Z]{1,4})$/);
+    return m?m[1]+'.'+m[2]:raw;
+  }
+
   function recListaHTML(items){
     const arr=(items||[]).filter(Boolean);
     return arr.length
@@ -1744,19 +1855,255 @@
       : '';
   }
 
+  /* V1.5.0 — conserva literalmente los párrafos, repeticiones y saltos de línea.
+     Solo representa listas si el profesional introdujo marcadores explícitos. */
   function recRecomendacionesHTML(texto){
-    const raw=txt(texto);
-    if(!raw) return '';
-
-    const lineasRaw=raw.split(/\r?\n+/).map(x=>txt(x)).filter(Boolean);
-    const teniaVineta=lineasRaw.some(x=>/^\s*(?:[•●▪◦\-–—*]|\d+[.)])\s+/.test(x));
-    const items=lineasClinicasUnicas(lineasRaw);
-
-    if(items.length>1 || teniaVineta){
-      return `<ul class="ar-doc-list ar-rec-list">${items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+    const raw=txt(texto);if(!raw) return '';
+    const lineas=raw.split(/\r?\n/);
+    let actual=[],tipo='',salida=[];
+    function cerrar(){
+      if(!actual.length) return;
+      if(tipo==='ul'){
+        salida.push('<ul class="ar-doc-list ar-rec-list">'+actual.map(v=>'<li>'+esc(v)+'</li>').join('')+'</ul>');
+      }else if(tipo==='ol'){
+        salida.push('<ol class="ar-doc-list ar-rec-list">'+actual.map(v=>'<li value="'+v.n+'">'+esc(v.t)+'</li>').join('')+'</ol>');
+      }else{
+        salida.push('<p class="ar-rec-text">'+actual.map(esc).join('<br>')+'</p>');
+      }
+      actual=[];tipo='';
     }
+    lineas.forEach(l=>{
+      const v=l.trim();
+      if(!v){cerrar();return;}
+      const bullet=v.match(/^[•●▪◦\-*–—]\s+(.+)$/);
+      const num=v.match(/^(\d+)[.)]\s+(.+)$/);
+      const next=bullet?'ul':(num?'ol':'p');
+      if(tipo && next!==tipo) cerrar();
+      tipo=next;
+      if(next==='ul') actual.push(bullet[1]);
+      else if(next==='ol') actual.push({n:Number(num[1]),t:num[2]});
+      else actual.push(v);
+    });
+    cerrar();return salida.join('');
+  }
 
-    return `<p class="ar-rec-text">${esc(items[0] || raw)}</p>`;
+  /* IASYN2 V1.5 — paginación A4 aislada y determinista.
+     - Ensambla páginas físicas con tamaño imprimible 180 x 273 mm.
+     - Conserva el texto de cada párrafo, incluidos los repetidos.
+     - Solo reproduce el pie institucional en la última página.
+     - No consulta servidor, no guarda ni altera el proceso de firma.
+     - Ante navegador sin medición, utiliza la maquetación fluida segura. */
+  function recPaginarHTML(html){
+    if(typeof document==='undefined' || !document.body || window.IASYN_REC_PAGINACION_FLUIDA===true) return html;
+    let marco=null;
+    try{
+      marco=document.createElement('iframe');
+      marco.setAttribute('aria-hidden','true');marco.setAttribute('tabindex','-1');
+      marco.style.cssText='position:fixed;left:-10000px;top:0;width:180mm;height:273mm;visibility:hidden;pointer-events:none;border:0';
+      document.body.appendChild(marco);
+      const d=marco.contentDocument;
+      if(!d) return html;
+      d.open();
+      d.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><style>'+recEstilosImpresion()+
+        '.ar-page{width:100%!important;height:273mm!important;min-height:273mm!important;max-height:273mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}'+
+        '.ar-page-main{width:100%;flex:0 0 auto;display:flow-root}.ar-page .ar-firma-area{padding-top:0!important;margin-top:auto!important}'+
+        '</style></head><body></body></html>');
+      d.close();
+      const plantilla=d.createElement('template');plantilla.innerHTML=html;
+      const origen=plantilla.content.querySelector('.ar-paper');
+      const footerOriginal=origen?.querySelector(':scope > .ar-firma-area');
+      if(!origen || !footerOriginal) return html;
+      const raiz=d.createElement('div');raiz.className='ar-paginas';d.body.appendChild(raiz);
+      let paginaActual=null,cuerpoActual=null,seccionActual=null;
+      const paginas=[];
+      const crearPagina=()=>{
+        paginaActual=d.createElement('article');paginaActual.className='ar-paper ar-page';
+        paginaActual.style.cssText=origen.style.cssText;
+        cuerpoActual=d.createElement('div');cuerpoActual.className='ar-page-main';
+        paginaActual.appendChild(cuerpoActual);raiz.appendChild(paginaActual);
+        paginas.push(paginaActual);seccionActual=null;return paginaActual;
+      };
+      crearPagina();
+      const mm=d.createElement('div');mm.style.cssText='height:1mm;width:1mm;position:absolute;visibility:hidden';d.body.appendChild(mm);
+      const pxmm=mm.getBoundingClientRect().height||3.779527559;mm.remove();
+      const tempFooter=footerOriginal.cloneNode(true);tempFooter.style.marginTop='0';tempFooter.style.paddingTop='0';
+      paginaActual.appendChild(tempFooter);
+      const altoFooter=tempFooter.getBoundingClientRect().height;
+      tempFooter.remove();
+      const maximo=(273*pxmm)-(4*pxmm); // 7 mm: separador y tolerancia de impresión.
+      const cabe=()=>cuerpoActual.getBoundingClientRect().height <= maximo+0.5;
+      const intentar=(n,padre)=>{padre.appendChild(n);if(cabe()) return true;n.remove();return false;};
+      const moverPagina=()=>crearPagina();
+      // Agrega párrafos largos por palabras cuando no caben enteros.
+      function textoElemento(el){
+        return Array.from(el.childNodes).map(n=>n.nodeName==='BR'?'\n':(n.textContent||'')).join('');
+      }
+      function dividirTexto(elemento,padreNuevo){
+        let restante=textoElemento(elemento);
+        let total=0;
+        while(restante){
+          if(++total>300) throw new Error('Límite preventivo de segmentación alcanzado');
+          const partes=restante.split(/(\s+)/).filter(x=>x!=='');
+          let lo=1,hi=partes.length,mejor=0;
+          const candidato=elemento.cloneNode(false);
+          padreNuevo.appendChild(candidato);
+          while(lo<=hi){
+            const mid=(lo+hi)>>1;
+            candidato.textContent=partes.slice(0,mid).join('');
+            if(cabe()){mejor=mid;lo=mid+1;}else hi=mid-1;
+          }
+          candidato.remove();
+          if(!mejor) return restante;
+          const parte=partes.slice(0,mejor).join('');
+          const pedazo=elemento.cloneNode(false);pedazo.textContent=parte;
+          padreNuevo.appendChild(pedazo);
+          restante=partes.slice(mejor).join('');
+          if(!restante) return '';
+          // El llamador seguirá en la página siguiente, sin perder texto.
+          return restante;
+        }
+        return '';
+      }
+      function agregarNormal(node){
+        if(intentar(node.cloneNode(true),cuerpoActual)) return;
+        if(cuerpoActual.children.length) moverPagina();
+        if(intentar(node.cloneNode(true),cuerpoActual)) return;
+        if(node.tagName==='P'){
+          let restante=textoElemento(node),n=0;
+          while(restante){
+            if(++n>300) throw new Error('Párrafo excesivo para impresión');
+            const frag=node.cloneNode(false);frag.textContent=restante;
+            if(intentar(frag,cuerpoActual)) break;
+            const nuevo=dividirTexto(frag,cuerpoActual);
+            if(nuevo===restante){moverPagina();continue;}
+            restante=nuevo;if(restante) moverPagina();
+          }
+        }else{
+          // El bloque inusual se conserva íntegro en vez de descartar información.
+          cuerpoActual.appendChild(node.cloneNode(true));moverPagina();
+        }
+      }
+      function nuevaSeccion(template,continuacion){
+        const s=template.cloneNode(false);
+        if(template.dataset.iasynSeccion) s.dataset.iasynSeccion=template.dataset.iasynSeccion;
+        if(!continuacion){const h=template.querySelector(':scope > h3');if(h) s.appendChild(h.cloneNode(true));}
+        cuerpoActual.appendChild(s);seccionActual=s;return s;
+      }
+      function agregarParrafoSeccion(node,seccionPlantilla){
+        let original=node.cloneNode(true);
+        if(intentar(original,seccionActual)) return;
+        // Cuando el título quedaría solo al pie, trasladarlo con el primer texto.
+        const espacioRestante=maximo-cuerpoActual.getBoundingClientRect().height;
+        // Un párrafo gigante comienza en esta misma hoja si hay espacio suficiente;
+        // nunca se traslada íntegro dejando la primera página vacía.
+        if(espacioRestante<65){
+          if(seccionActual.children.length<=1 && seccionActual.querySelector('h3')){
+            seccionActual.remove();moverPagina();nuevaSeccion(seccionPlantilla,false);
+          }else{moverPagina();nuevaSeccion(seccionPlantilla,true);}
+          if(intentar(node.cloneNode(true),seccionActual)) return;
+        }
+        let restante=textoElemento(node),n=0;
+        while(restante){
+          if(++n>300) throw new Error('Contenido excesivo para impresión');
+          const p=node.cloneNode(false);p.textContent=restante;
+          if(intentar(p,seccionActual)) break;
+          const nuevo=dividirTexto(p,seccionActual);
+          if(nuevo===restante){moverPagina();nuevaSeccion(seccionPlantilla,true);continue;}
+          restante=nuevo;
+          if(restante){moverPagina();nuevaSeccion(seccionPlantilla,true);}
+        }
+      }
+      function agregarLista(lista,template){
+        let grupo=null;
+        const abrir=()=>{grupo=lista.cloneNode(false);seccionActual.appendChild(grupo);};
+        abrir();
+        Array.from(lista.children).forEach(item=>{
+          if(intentar(item.cloneNode(true),grupo)) return;
+          if(!grupo.children.length) grupo.remove();
+          const encabezadoHuerfano=seccionActual.children.length===1 && seccionActual.firstElementChild.tagName==='H3';
+          if(encabezadoHuerfano) seccionActual.remove();
+          moverPagina();nuevaSeccion(template,encabezadoHuerfano?false:true);abrir();
+          if(intentar(item.cloneNode(true),grupo)) return;
+          // Una viñeta excepcionalmente extensa se divide conservando la numeración.
+          let resto=textoElemento(item),n=0;
+          while(resto){
+            if(++n>300) throw new Error('Lista excesiva para impresión');
+            const p=item.cloneNode(false);p.textContent=resto;
+            if(intentar(p,grupo)) break;
+            const nuevo=dividirTexto(p,grupo);
+            if(nuevo===resto){moverPagina();nuevaSeccion(template,true);abrir();continue;}
+            resto=nuevo;
+            if(resto){moverPagina();nuevaSeccion(template,true);abrir();}
+          }
+        });
+      }
+      Array.from(origen.children).forEach(node=>{
+        if(node===footerOriginal) return;
+        if(!node.classList.contains('ar-section')){agregarNormal(node);return;}
+        const plantillaSeccion=node;
+        plantillaSeccion.dataset.iasynSeccion=String(Array.from(origen.children).indexOf(node));
+        nuevaSeccion(plantillaSeccion,false);
+        // Probar el título y su primer elemento como unidad para evitar títulos huérfanos.
+        const hijos=Array.from(node.children).filter(x=>x.tagName!=='H3');
+        if(!hijos.length) return;
+        hijos.forEach(sub=>{
+          if(sub.tagName==='UL' || sub.tagName==='OL') agregarLista(sub,plantillaSeccion);
+          else agregarParrafoSeccion(sub,plantillaSeccion);
+        });
+      });
+      // Reserva del pie SOLO en la última página. El resto conserva máxima capacidad.
+      // Si queda un espacio insuficiente, trasladar los últimos párrafos completos
+      // a una nueva última página, manteniendo el orden y la identidad de los bloques.
+      const maximaFinal=(273*pxmm)-(3*pxmm);
+      if(cuerpoActual.getBoundingClientRect().height + altoFooter > maximaFinal){
+        const anterior=cuerpoActual;
+        moverPagina();
+        const destino=cuerpoActual;
+        let movimientos=0;
+        while(anterior.getBoundingClientRect().height+altoFooter > maximaFinal){
+          if(++movimientos>80) throw new Error('No fue posible reservar el pie final sin recortar texto');
+          const ultimo=anterior.lastElementChild;
+          if(!ultimo) break;
+          if(ultimo.classList.contains('ar-section') && ultimo.children.length>1){
+            const hoja=ultimo.lastElementChild;
+            if(hoja.tagName==='UL'||hoja.tagName==='OL'){
+              const item=hoja.lastElementChild;
+              if(item){
+                item.remove();
+                let copia=destino.firstElementChild;
+                if(!copia || !copia.classList.contains('ar-section') || copia.dataset.iasynSeccion!==ultimo.dataset.iasynSeccion){copia=ultimo.cloneNode(false);destino.prepend(copia);}
+                let lista=copia.firstElementChild;
+                if(!lista || (lista.tagName!=='UL' && lista.tagName!=='OL')){lista=hoja.cloneNode(false);copia.prepend(lista);}
+                lista.prepend(item);
+                if(!hoja.children.length) hoja.remove();
+              }else hoja.remove();
+            }else{
+              hoja.remove();
+              let copia=destino.firstElementChild;
+              if(!copia || !copia.classList.contains('ar-section') || copia.dataset.iasynSeccion!==ultimo.dataset.iasynSeccion){copia=ultimo.cloneNode(false);destino.prepend(copia);}
+              copia.prepend(hoja);
+            }
+            if(ultimo.children.length===1 && ultimo.firstElementChild.tagName==='H3'){
+              let destinoSeccion=destino.firstElementChild;
+              if(destinoSeccion && destinoSeccion.dataset.iasynSeccion===ultimo.dataset.iasynSeccion) destinoSeccion.prepend(ultimo.firstElementChild);
+              ultimo.remove();
+            }
+          }else{
+            ultimo.remove();destino.prepend(ultimo);
+          }
+        }
+        if(destino.getBoundingClientRect().height+altoFooter>maximaFinal){
+          // Contenido individual inusualmente grande: conservar el flujo nativo.
+          throw new Error('El pie excede la última página después de reubicar contenido');
+        }
+      }
+      paginaActual.appendChild(footerOriginal.cloneNode(true));
+      // La vista previa y el documento remitido a firma utilizan exactamente el mismo HTML.
+      return raiz.innerHTML;
+    }catch(e){
+      console.warn(MODULO+': paginación A4 manual no disponible; se conserva fragmentación fluida.',e);
+      return html;
+    }finally{if(marco) marco.remove();}
   }
 
   function recDocumentoHTML(opciones){
@@ -1781,7 +2128,7 @@
       .map(([,l])=>l);
 
     const dx=diagnosticos.map(x=>({
-      codigo:txt(x.codigo_cie10||x.codigo||x.cie10),
+      codigo:recCie10Visual(x.codigo_cie10||x.codigo||x.cie10),
       nombre:txt(x.descripcion||x.nombre||x.diagnostico)
     })).filter(x=>x.codigo||x.nombre);
 
@@ -1827,18 +2174,18 @@
         <section class="ar-section">
           <h3>SIGNOS DE ALERTA</h3>
           ${recListaHTML(alertas)}
-          ${d.signos_alerta?.otros?`<p>${esc(d.signos_alerta.otros)}</p>`:''}
+          ${d.signos_alerta?.otros?recRecomendacionesHTML(d.signos_alerta.otros):''}
         </section>` : '',
       (infeccion.length||txt(d.signos_infeccion?.otros)) ? `
         <section class="ar-section">
           <h3>SIGNOS DE INFECCIÓN</h3>
           ${recListaHTML(infeccion)}
-          ${d.signos_infeccion?.otros?`<p>${esc(d.signos_infeccion.otros)}</p>`:''}
+          ${d.signos_infeccion?.otros?recRecomendacionesHTML(d.signos_infeccion.otros):''}
         </section>` : '',
       txt(d.dieta_cuidados) ? `
         <section class="ar-section">
           <h3>DIETA Y CUIDADOS</h3>
-          <p>${esc(d.dieta_cuidados)}</p>
+          ${recRecomendacionesHTML(d.dieta_cuidados)}
         </section>` : '',
       txt(d.recomendaciones_generales) ? `
         <section class="ar-section">
@@ -1847,12 +2194,12 @@
         </section>` : ''
     ].filter(Boolean).join('');
 
-    return `<article class="ar-paper" style="--ar-color:${esc(cfg.colorPrincipal)}">
-      <header class="ar-doc-head">
+    return recPaginarHTML(`<article class="ar-paper" style="--ar-color:${esc(cfg.colorPrincipal)}">
+      <header class="ar-doc-head${logo?'':' ar-doc-head-no-logo'}">
         ${logo}
         <div>
           <div class="ar-brand">${esc(cfg.nombre)}</div>
-          ${cfg.subtitulo?`<div class="ar-brand-sub">${esc(cfg.subtitulo)}</div>`:''}
+          ${(medico.especialidad||cfg.especialidad||cfg.subtitulo)?`<div class="ar-brand-sub">${esc(medico.especialidad||cfg.especialidad||cfg.subtitulo)}</div>`:''}
         </div>
         <div class="ar-doc-date">${esc([cfg.ciudad,fecha].map(txt).filter(Boolean).join(', '))}</div>
       </header>
@@ -1888,39 +2235,44 @@
           <br><span>Firma y sello</span>
         </div>
       </footer>
-    </article>`;
+    </article>`);
   }
 
+  /* V1.5.0 — A4 fluido. Los bloques clínicos no son indivisibles;
+     el encabezado de sección se mantiene con el primer renglón.
+     El pie se ancla al final de una página corta, y pasa al flujo en documentos largos. */
   function recEstilosImpresion(){
     return `
 @page{size:A4 portrait;margin:12mm 15mm}
 *{box-sizing:border-box}
 html,body{margin:0;padding:0;max-width:100%;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif}
 body{overflow-x:hidden}
-.ar-paper{width:100%;max-width:100%;min-width:0;min-height:270mm;margin:0;padding:0 0 30mm;background:#fff;position:relative}
+.ar-paper{width:100%;max-width:100%;min-width:0;min-height:273mm;display:flex;flex-direction:column;margin:0;padding:0;background:#fff;position:relative}
 .ar-paper,.ar-paper *{min-width:0}
 .ar-paper p,.ar-paper span,.ar-paper b,.ar-paper div{overflow-wrap:anywhere;word-break:normal}
 .ar-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--ar-color,#8b1e5a);padding-bottom:9px}
+.ar-doc-head-no-logo{grid-template-columns:minmax(0,1fr) auto}
 .ar-logo-wrap{width:55px;height:55px;display:grid;place-items:center;border-radius:10px;overflow:hidden}
 .ar-logo{max-width:100%;max-height:100%;object-fit:contain}
 .ar-brand{font-size:18.5px;font-weight:950;color:var(--ar-color,#8b1e5a);letter-spacing:.035em}
 .ar-brand-sub{font-size:10.5px;color:#667085;margin-top:2px}
 .ar-doc-date{text-align:right;font-size:11px;font-weight:700;white-space:nowrap}
 .ar-paper h1{text-align:center;font-size:18px;margin:21px 0 23px;letter-spacing:.05em}
-.ar-paper p{font-size:12.1px;line-height:1.58;text-align:justify;margin:0 0 10px;white-space:pre-wrap}
+.ar-paper p{font-size:12.1px;line-height:1.58;text-align:justify;margin:0 0 10px;white-space:pre-wrap;orphans:3;widows:3}
 .ar-intro{margin-bottom:14px!important}
 .ar-lines{display:grid;gap:5px;margin:12px 0}
 .ar-line{font-size:12px;line-height:1.42}
 .ar-line b{display:inline-block;min-width:120px}
-.ar-section,.ar-dx{margin:14px 0;break-inside:avoid;page-break-inside:avoid}
-.ar-section h3,.ar-dx h3{font-size:12px;margin:0 0 6px;font-weight:900}
+.ar-section{margin:14px 0;break-inside:auto;page-break-inside:auto}
+.ar-dx{margin:14px 0;break-inside:avoid;page-break-inside:avoid}
+.ar-section h3,.ar-dx h3{font-size:12px;margin:0 0 6px;font-weight:900;break-after:avoid-page;page-break-after:avoid}
 .ar-dx-row{font-size:12px;line-height:1.45;margin:2px 0}
 .ar-doc-list{margin:4px 0 7px 18px;padding:0}
-.ar-doc-list li{font-size:12px;line-height:1.48;margin:2px 0}
+.ar-doc-list li{font-size:12px;line-height:1.58;text-align:justify;margin:3px 0;orphans:3;widows:3;break-inside:auto;page-break-inside:auto}
 .ar-rec-list{margin-top:6px}
 .ar-rec-list li{line-height:1.58;margin:4px 0;padding-left:2px}
-.ar-rec-text{line-height:1.62!important}
-.ar-firma-area{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;break-inside:avoid;page-break-inside:avoid}
+.ar-rec-text{line-height:1.62!important;text-align:justify}
+.ar-firma-area{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22mm;align-items:end;margin-top:auto;padding-top:12mm;break-inside:avoid;page-break-inside:avoid}
 .ar-centro-contacto{font-size:10.2px;color:#475569;line-height:1.45;overflow-wrap:anywhere;display:grid;gap:5px;align-content:end;min-width:0}
 .ar-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start;break-inside:avoid}
 .ar-contacto-icono{display:block;width:12px;height:12px;margin-top:2px;color:var(--ar-color,#8b1e5a)}
@@ -1928,10 +2280,18 @@ body{overflow-x:hidden}
 .ar-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere}
 .ar-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ar-sign b{font-size:12.4px}
+/* La medición opcional añade relleno únicamente cuando cabe en la última página. */
+.ar-firma-area.ar-firma-ajustada{margin-top:var(--ar-ajuste-pie,0px)!important}
+.ar-paginas{width:100%}
+.ar-paginas .ar-page{height:273mm!important;min-height:273mm!important;max-height:273mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}
+.ar-paginas .ar-page:last-child{break-after:auto;page-break-after:auto}
+.ar-paginas .ar-page-main{display:flow-root;width:100%;flex:0 0 auto}
+.ar-paginas .ar-page .ar-firma-area{padding-top:0!important;margin-top:auto!important}
 @media print{
   html,body{width:auto!important;max-width:none!important;min-width:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:visible!important;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-  .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:273mm!important;margin:0!important;padding:0 0 30mm!important;overflow:visible!important;position:relative!important;transform:none!important}
+  .ar-paper{width:100%!important;max-width:100%!important;min-width:0!important;min-height:273mm!important;margin:0!important;padding:0!important;overflow:visible!important;position:relative!important;transform:none!important;break-inside:auto!important;page-break-inside:auto!important}
   .ar-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
+  .ar-doc-head-no-logo{grid-template-columns:minmax(0,1fr) auto!important}
   .ar-firma-area{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important}
 }`;
   }
@@ -2728,7 +3088,7 @@ html,body{background:#dfe3e8}
         poll_token:Date.now()
       });
       auroRecFirmaActualizarUI();
-      setMsg('Solicitud enviada. En Adobe aplique 1 firma digital y guarde el PDF.','ok');
+      setMsg('Solicitud enviada al motor de firma. En Adobe aplique 1 firma digital y guarde el PDF.','info');
 
       return await auroRecFirmaEsperar(rid,solicitud,doc.id_atencion);
     }catch(error){
@@ -2949,6 +3309,10 @@ html,body{background:#dfe3e8}
     }
 
     const ventana=window.open('','_blank');
+    if(ventana){
+      ventana.document.title='Cargando recomendación firmada…';
+      ventana.document.body.innerHTML='<div style="font:15px/1.6 Arial,sans-serif;padding:24px;color:#334155"><strong>Cargando recomendación firmada…</strong><p>Se está recuperando el PDF certificado.</p></div>';
+    }
     try{
       const r=await auroRecFirmaPost('obtenerDocumentoFirmado',{
         tipo_documento:'RECOMENDACION',
@@ -3006,6 +3370,11 @@ html,body{background:#dfe3e8}
     const vistaBtn=document.getElementById('auroRecBtnVista');
     const agregarPlanBtn=document.getElementById('auroRecBtnAgregarPlan');
     const app=document.getElementById('auroRecomendacionesApp');
+    document.querySelectorAll('[data-auro-rec-expand]').forEach(btn=>{
+      if(btn.dataset.iasynRecExpandBound==='1') return;
+      btn.dataset.iasynRecExpandBound='1';
+      btn.addEventListener('click',()=>recAmpliarEditor(btn.dataset.auroRecExpand));
+    });
 
     if(nuevaBtn && nuevaBtn.dataset.auroRec!=='1'){
       nuevaBtn.dataset.auroRec='1';
@@ -3060,6 +3429,7 @@ html,body{background:#dfe3e8}
     pero nunca intenta revertir una escritura que ya llegó al backend.
   */
   function onAtencionLimpiada(){
+    recCerrarNotificaciones();
     state.tokenCarga++;
     state.tokenGuardado++;
     recomendacionFirmaSyncToken++;
@@ -3096,6 +3466,7 @@ html,body{background:#dfe3e8}
     const id=idAtencionActiva();
 
     if(id !== state.idAtencion){
+      recCerrarNotificaciones();
       state.tokenCarga++;
       state.tokenGuardado++;
       recomendacionFirmaSyncToken++;
