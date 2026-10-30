@@ -3950,136 +3950,203 @@
     }));
   }catch(_e){}
 })();
+
 /* =====================================================================
-   IASYN2 — VINCULACIÓN LOCAL DE FIRMA | FASE 1 | CANDIDATA NO INSTALAR
-   Alcance: ÚNICAMENTE firma_electronica.js; conserva baseline sin cambios.
-   Protección por defecto: DESACTIVADA (equivalencia funcional).
-
-   NO confundir este frontend con una validación de seguridad completa:
-   - El navegador no puede probar por sí solo que un EXE está instalado.
-   - El puente IASYN_FIRMA_PUENTE_LOCAL aún no está implementado en el motor.
-   - Apps Script AÚN DEBE validar el comprobante criptográficamente,
-     vinculado a equipo, médico, documento y sesión, ANTES de encolar.
-   - No activar REQUIRE_LOCAL hasta certificar puente + backend + A/B.
-   - REABRIR queda bloqueado bajo REQUIRE_LOCAL: el contrato actual
-     descarta el comprobante; solo se habilitará tras adaptar el backend.
-   - CANCELAR y VER/DESCARGAR se mantienen intactos (sin motor local).
-
-   ACTIVACIÓN FUTURA EXPLÍCITA (solo tras certificación):
-     window.IASYN_FIRMA_VINCULO_LOCAL_FASE1 = 'REQUIRE_LOCAL';
-   El puente futuro debe exponer:
-     window.IASYN_FIRMA_PUENTE_LOCAL.prepararVinculacionFirma(contexto)
-   y devolver: {id_equipo, comprobante_vinculo_local, identidad_sha256,
-                expira_en, medico_autorizado}
-   Nunca entregar certificados, claves P12, contraseña o HTML al puente.
-===================================================================== */
-(function iasynFirmaVinculoLocalFase1NoInstalar(){
+ * IASYN2 — FIRMA ELECTRÓNICA / AISLAMIENTO LOCAL V2 (2026-10-30)
+ * ALCANCE: SOLO nuevas firmas y REABRIR. Baseline previo intacto.
+ * Contrato: IASYN_LOCAL_V2 — motor Windows 127.0.0.1:48761 + scrib V2.
+ * NO modifica PDF, certificados P12/PFX, VER/DESCARGAR ni CANCELAR.
+ * IMPORTANTE: el servidor DEBE validar HMAC, sesión y nonce con modo
+ * IASYN_FIRMA_VINCULO_LOCAL_ESTRICTO_V2_=true en entorno controlado.
+ * Este bloque no suplanta las verificaciones del backend.
+ * ===================================================================== */
+(function iasynFirmaVinculoLocalV2Integrado(){
   'use strict';
-  const anterior = window.auroFirmaElectronica;
-  if (!anterior || typeof anterior.firmarDocumento !== 'function') return;
-  const VERSION_CANDIDATA = 'IASYN2-FIRMA-LOCAL-FASE1-CANDIDATA-NO-INSTALAR';
-  const MAX_ESPERA_PREVIA_MS = 5000;
-
-  function texto(v){ return String(v === null || v === undefined ? '' : v).trim(); }
-  function habilitado(){ return window.IASYN_FIRMA_VINCULO_LOCAL_FASE1 === 'REQUIRE_LOCAL'; }
-  function identidadDocumento(d, operacion){
-    const x = d || {};
-    const tipo = texto(x.tipo_documento || (x.id_certificado ? 'CERTIFICADO' : (x.id_receta ? 'RECETA' : ''))).toUpperCase();
-    const idOrigen = texto(x.id_documento_origen || x.id_receta || x.id_certificado || x.id_recomendacion || x.id_orden_medica || x.id_documento_clinico);
-    return {
-      operacion: operacion,
-      tipo_documento: tipo,
-      id_documento_origen: idOrigen,
-      id_atencion: texto(x.id_atencion),
-      id_medico: texto(x.id_medico),
-      id_solicitud: texto(x.id_solicitud),
-      // La huella del HTML se calcula en la fase siguiente sin enviar el HTML al puente.
-      contenido_original: texto(x.html_documento)
+  const anterior=window.auroFirmaElectronica;
+  if(!anterior || typeof anterior.firmarDocumento!=='function'){
+    console.error('IASYN LOCAL V2: no existe API de firma anterior.');
+    return;
+  }
+  const LOCAL_URL='http://127.0.0.1:48761/iasyn/v1/proof';
+  const VERSION='IASYN_LOCAL_V2';
+  const MAX_MS=5000;
+  const enCurso=new Map();
+  function txt(v){return String(v===null||v===undefined?'':v).trim();}
+  function tipo(d){return txt(d&&d.tipo_documento).toUpperCase();}
+  function esReceta(d){
+    return tipo(d)==='RECETA'||(!tipo(d)&&!!txt(d&&(d.id_receta||d.id_documento_origen))&&!txt(d&&d.id_certificado));
+  }
+  function tokenSesion(){
+    try{
+      const seg=window.IASYN_SEGURIDAD||window.AUROSANAX_SEGURIDAD;
+      if(seg){
+        if(typeof seg.obtenerToken==='function'){
+          const t=txt(seg.obtenerToken()); if(t)return t;
+        }
+        if(typeof seg.obtenerTokenSesion==='function'){
+          const t=txt(seg.obtenerTokenSesion()); if(t)return t;
+        }
+      }
+    }catch(_e){}
+    try{return txt(sessionStorage.getItem('iasyn_seguridad_token')||sessionStorage.getItem('aurosanax_seguridad_token'));}
+    catch(_e){return '';}
+  }
+  function urlServidor(){
+    try{if(typeof API_URL!=='undefined'&&API_URL)return txt(API_URL);}catch(_e){}
+    if(window.API_URL)return txt(window.API_URL);
+    if(window.IASYN_CONFIG&&window.IASYN_CONFIG.apiUrl)return txt(window.IASYN_CONFIG.apiUrl);
+    const el=document.getElementById('appsScriptUrl');
+    return el?txt(el.value):'';
+  }
+  function identidad(data){
+    const d=Object.assign({},data||{});
+    const clase=tipo(d)||(txt(d.id_certificado)?'CERTIFICADO':(esReceta(d)?'RECETA':''));
+    if(!['RECETA','CERTIFICADO','RECOMENDACION','ORDEN_MEDICA'].includes(clase))
+      throw new Error('Tipo documental no habilitado para el aislamiento IASYN LOCAL V2.');
+    const origen=txt(d.id_documento_origen||d.id_orden||d.id_certificado||d.id_receta||d.id_recomendacion||d.id_documento_clinico);
+    const medico=txt(d.id_medico);
+    const atencion=txt(d.id_atencion);
+    const html=txt(d.html_documento);
+    if(!origen||!atencion||!medico||!html){
+      throw new Error('Para firmar localmente se requieren médico, atención, ID y HTML del documento guardado.');
+    }
+    if(!window.crypto || !window.crypto.subtle || typeof TextEncoder!=='function')
+      throw new Error('El navegador no dispone de SHA-256 seguro para la firma local.');
+    return {data:d,tipo:clase,origen:origen,medico:medico,atencion:atencion,html:html};
+  }
+  async function sha256(str){
+    const bytes=new TextEncoder().encode(str);
+    const raw=await window.crypto.subtle.digest('SHA-256',bytes);
+    return Array.from(new Uint8Array(raw),x=>x.toString(16).padStart(2,'0')).join('');
+  }
+  function verificarRespuesta(r){
+    const p=r&&r.prueba_equipo_local;
+    const equipo=txt(r&&(r.id_equipo_destino||r.id_equipo));
+    const emitido=Number(p&&p.emitido_ms);
+    if(!r||r.success!==true||r.medico_autorizado!==true||
+       !/^[a-zA-Z0-9_.-]{4,120}$/.test(equipo)||
+       !p||p.version!==VERSION||txt(p.id_equipo)!==equipo||
+       !/^[a-zA-Z0-9-]{16,80}$/.test(txt(p.nonce))||
+       !/^[0-9a-fA-F]{64}$/.test(txt(p.firma_hmac_sha256))||
+       !Number.isSafeInteger(emitido)||emitido<Date.now()-60000||emitido>Date.now()+10000){
+      throw new Error('El motor local no devolvió un comprobante V2 válido.');
+    }
+    return {id_equipo_destino:equipo,prueba_equipo_local:{
+      version:VERSION,id_equipo:equipo,emitido_ms:emitido,
+      nonce:txt(p.nonce),firma_hmac_sha256:txt(p.firma_hmac_sha256)
+    }};
+  }
+  async function preparar(data){
+    const d=identidad(data);
+    const token=tokenSesion();
+    if(!token)throw new Error('No existe una sesión IASYN activa para firmar.');
+    // Los navegadores modernos requieren HTTPS y permiso de acceso al equipo local.
+    if(!window.location || window.location.protocol!=='https:')
+      throw new Error('IASYN debe abrirse desde HTTPS para comprobar el motor local.');
+    const [shaOrigen,shaSesion]=await Promise.all([sha256(d.html),sha256(token)]);
+    const request={
+      id_medico:d.medico,id_atencion:d.atencion,id_documento_origen:d.origen,
+      tipo_documento:d.tipo,sha256_origen:shaOrigen,sesion_sha256:shaSesion
     };
-  }
-  async function hashTexto(textoParaHash){
-    if(!window.crypto || !window.crypto.subtle) throw new Error('Hash SHA-256 no disponible.');
-    const digest=await window.crypto.subtle.digest('SHA-256',new TextEncoder().encode(textoParaHash));
-    return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  }
-  async function identidadSHA256(ctx){
-    if(!window.crypto || !window.crypto.subtle){
-      throw new Error('El navegador no dispone de la verificación segura necesaria para la firma local.');
-    }
-    const s = [ctx.operacion,ctx.tipo_documento,ctx.id_documento_origen,ctx.id_atencion,ctx.id_medico,ctx.id_solicitud,ctx.contenido_sha256].join('|');
-    const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
-    return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  }
-  async function validarVinculoLocal(datos, operacion){
-    // Nunca se realiza una consulta de red nueva cuando la fase está desactivada.
-    if(!habilitado()) return datos;
-    const puente = window.IASYN_FIRMA_PUENTE_LOCAL;
-    if(!puente || typeof puente.prepararVinculacionFirma !== 'function'){
-      throw new Error('No se detectó IASYN Firma en este equipo. Instale o inicie el motor local antes de firmar.');
-    }
-    const ctx = identidadDocumento(datos, operacion);
-    if(!ctx.id_atencion || !ctx.id_documento_origen || !ctx.tipo_documento){
-      throw new Error('No se puede comprobar el equipo: faltan datos de identidad del documento.');
-    }
-    // La identidad técnica incluye la versión exacta del contenido clínico.
-    ctx.contenido_sha256 = ctx.contenido_original ? await hashTexto(ctx.contenido_original) : '';
-    delete ctx.contenido_original;
-    ctx.identidad_sha256 = await identidadSHA256(ctx);
-    // Nunca se transfieren el HTML clínico, el certificado, ni las contraseñas.
-    let timeoutId;
+    const perfil=txt(d.data.profile_id||d.data.id_perfil_erp||
+      (window.IASYN_CONFIG&&window.IASYN_CONFIG.firmaProfileId));
+    if(perfil)request.profile_id=perfil;
+    const controlador=new AbortController();
+    const timer=setTimeout(()=>controlador.abort(),MAX_MS);
     let respuesta;
     try{
-      respuesta = await Promise.race([
-        Promise.resolve().then(()=>puente.prepararVinculacionFirma(Object.freeze({...ctx}))),
-        new Promise((_,rechazar)=>{timeoutId=setTimeout(()=>rechazar(new Error('El motor local no respondió. Compruebe que IASYN Firma está iniciado.')),MAX_ESPERA_PREVIA_MS);})
-      ]);
-    } finally {
-      if(timeoutId !== undefined) clearTimeout(timeoutId);
+      respuesta=await fetch(LOCAL_URL,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(request),mode:'cors',credentials:'omit',
+        redirect:'error',cache:'no-store',signal:controlador.signal
+      });
+    }catch(_e){
+      throw new Error('No se pudo contactar IASYN Firma en ESTA computadora. Inicie el motor y autorice el acceso local en el navegador.');
+    }finally{clearTimeout(timer);}
+    if(!respuesta.ok){
+      if(respuesta.status===403)
+        throw new Error('El motor local rechazó al médico, perfil ERP o credencial individual del equipo.');
+      throw new Error('El puente IASYN Firma local respondió HTTP '+respuesta.status+'.');
     }
-    if(!respuesta || typeof respuesta !== 'object'){
-      throw new Error('No se detectó un motor de firma válido en esta computadora.');
-    }
-    if(respuesta.medico_autorizado !== true){
-      throw new Error('Este médico no tiene un certificado autorizado en el motor de esta computadora.');
-    }
-    const idEquipo=texto(respuesta.id_equipo);
-    const prueba=texto(respuesta.comprobante_vinculo_local);
-    const hash=texto(respuesta.identidad_sha256).toLowerCase();
-    const expira=Date.parse(texto(respuesta.expira_en));
-    if(!/^[a-zA-Z0-9_.-]{4,120}$/.test(idEquipo) || prueba.length<16 || hash!==ctx.identidad_sha256 ||
-       !Number.isFinite(expira) || expira<=Date.now() || expira>Date.now()+120000){
-      throw new Error('El comprobante del motor local está incompleto, vencido o no corresponde al documento.');
-    }
-    // IMPORTANTE: esto no autentica la prueba; Apps Script deberá comprobarla
-    // antes de crear/reutilizar/reabrir la solicitud. Hasta entonces NO ACTIVAR.
-    return Object.assign({},datos||{}, {
-      id_equipo_origen:idEquipo,
-      comprobante_vinculo_local:prueba,
-      identidad_vinculo_local_sha256:hash,
-      version_vinculo_local:'IASYN2-V1'
-    });
+    let json;
+    try{json=await respuesta.json();}catch(_e){throw new Error('El puente local respondió con datos inválidos.');}
+    const proof=verificarRespuesta(json);
+    // NUNCA transmitir el token ERP, HTML ni P12 al puente local.
+    // El backend reconstruye la huella clínica y verifica HMAC+nonce.
+    return {data:Object.assign({},d.data,proof),clave:[d.tipo,d.atencion,d.origen,shaOrigen].join('|')};
   }
   async function firmarDocumento(data){
-    return anterior.firmarDocumento(await validarVinculoLocal(data,'FIRMAR'));
+    const d=identidad(data);
+    // Rutas de RECOMENDACION/ORDEN_MEDICA son propiedad de sus propios módulos.
+    // Evitamos que el puente legacy de Certificados confunda esos documentos.
+    if(!['RECETA','CERTIFICADO'].includes(d.tipo))
+      throw new Error('La firma de '+d.tipo+' requiere su módulo documental específico; no se permite tratarla como CERTIFICADO.');
+    const key=[d.tipo,d.atencion,d.origen,await sha256(d.html)].join('|');
+    if(enCurso.has(key))return enCurso.get(key);
+    const tarea=(async()=>{
+      const verificado=await preparar(data);
+      return anterior.firmarDocumento(verificado.data);
+    })();
+    enCurso.set(key,tarea);
+    try{return await tarea;}finally{if(enCurso.get(key)===tarea)enCurso.delete(key);}
   }
   async function firmarCertificado(data){
-    if(typeof anterior.firmarCertificado!=='function') throw new Error('Firma de certificado no disponible.');
-    return anterior.firmarCertificado(await validarVinculoLocal(data,'FIRMAR'));
+    if(typeof anterior.firmarCertificado!=='function')
+      return firmarDocumento(Object.assign({},data||{},{tipo_documento:'CERTIFICADO'}));
+    const d=Object.assign({},data||{},{tipo_documento:'CERTIFICADO'});
+    const verificado=await preparar(d);
+    return anterior.firmarCertificado(verificado.data);
+  }
+  async function postERP(accion,data){
+    const url=urlServidor();const token=tokenSesion();
+    if(!url||!token)throw new Error('No existe conexión o sesión IASYN para reabrir la firma.');
+    const response=await fetch(url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({accion:accion,data:Object.assign({},data,{token:token})}),cache:'no-store'});
+    if(!response.ok)throw new Error('El servidor IASYN respondió HTTP '+response.status+'.');
+    const json=await response.json();
+    if(!json||json.success!==true)throw new Error(txt(json&&json.message)||'IASYN no confirmó la reapertura.');
+    return json;
   }
   async function reabrirFirmaDocumento(data){
-    if(typeof anterior.reabrirFirmaDocumento!=='function') throw new Error('Reapertura no disponible.');
-    // El REABRIR V4.0 crea un payload explícito y descarta cualquier
-    // comprobante adjunto. Hasta modificar ese contrato, FALLAR CERRADO.
-    if(habilitado()) throw new Error('Reabrir firma requiere habilitar la validación de equipo en el servidor. Operación bloqueada en esta fase.');
-    return anterior.reabrirFirmaDocumento(data);
+    if(!esReceta(data)){
+      if(typeof anterior.reabrirFirmaDocumento==='function')
+        throw new Error('La reapertura V2 de este tipo documental requiere integración específica.');
+      throw new Error('Reabrir no está disponible para este documento.');
+    }
+    const idSolicitud=txt(data&&data.id_solicitud);
+    if(!idSolicitud)throw new Error('No existe una solicitud pendiente para reabrir.');
+    // La antigua reapertura enviaba SOLO IDs, perdiendo prueba_equipo_local.
+    // Construimos una prueba NUEVA vinculada al documento original exacto.
+    const verificado=await preparar(data);
+    const d=verificado.data;
+    const respuesta=await postERP('firmarDocumento',{
+      operacion_frontend:'REABRIR',id_solicitud:idSolicitud,
+      tipo_documento:'RECETA',id_documento_origen:txt(d.id_documento_origen||d.id_receta),
+      id_receta:txt(d.id_receta||d.id_documento_origen),id_atencion:txt(d.id_atencion),
+      id_equipo_destino:d.id_equipo_destino,prueba_equipo_local:d.prueba_equipo_local
+    });
+    const estado=txt(respuesta.estado_firma||respuesta.estado).toUpperCase();
+    if(estado==='FIRMADO'||estado==='CANCELADA')return respuesta;
+    if(estado!=='PENDIENTE')throw new Error('IASYN no confirmó la reapertura de la solicitud.');
+    if(typeof anterior.esperarSolicitud!=='function')
+      throw new Error('IASYN no encontró el seguimiento original de la solicitud.');
+    return anterior.esperarSolicitud(Object.assign({},d,{id_solicitud:idSolicitud}));
   }
+  // Para los módulos que ya hacen POST directo: llamar esta función ANTES
+  // de su POST firmado, con el payload completo; jamás usar fallback remoto.
+  async function prepararSolicitudFirmaLocalV2(data){
+    const v=await preparar(data);
+    return v.data;
+  }
+  // El modo de protección de esta CANDIDATA es cerrado: sin puente NO se firma.
+  // El servidor también debe tener activo su interruptor estricto para impedir
+  // saltarse esta comprobación desde otros módulos o navegadores antiguos.
   const api=Object.assign({},anterior,{
-    // Se conserva la versión pública estable para no alterar consumidores.
-    version:anterior.version,
-    versionVinculoLocalCandidato:VERSION_CANDIDATA,
-    firmarDocumento,
-    reabrirFirmaDocumento
+    firmarDocumento:firmarDocumento,
+    firmarCertificado:firmarCertificado,
+    reabrirFirmaDocumento:reabrirFirmaDocumento,
+    prepararSolicitudFirmaLocalV2:prepararSolicitudFirmaLocalV2,
+    contratoVinculoLocal:'IASYN_LOCAL_V2'
   });
-  if(typeof anterior.firmarCertificado==='function') api.firmarCertificado=firmarCertificado;
   window.auroFirmaElectronica=Object.freeze(api);
 })();
