@@ -3994,22 +3994,66 @@
         sessionStorage.getItem('aurosanax_seguridad_token')||'');
     }catch(_e){return '';}
   }
-  async function vincular(){
+  /* Recuperación controlada: SOLO en el pre-vínculo. No reenvía CREAR/REABRIR.
+   * Dos intentos máximo (inicial + 1), con un nonce NUEVO en cada intento.
+   * Si no se confirma ESTE equipo, no se genera solicitud de firma.
+   * Diagnóstico en memoria: solo etapa, duración, intento y resultado; sin IDs,
+   * token, nonce, P12, contraseñas ni datos de pacientes.
+   */
+  const MAX_INTENTOS_VINCULO=2;
+  const PAUSA_REINTENTO_MS=300;
+  let ultimoDiagnosticoV3=Object.freeze({etapa:'SIN_PRUEBAS',duracion_ms:0,intento:0,resultado:'SIN_PRUEBAS'});
+  function registrarV3(etapa,inicio,intento,resultado){
+    ultimoDiagnosticoV3=Object.freeze({
+      etapa:etapa,duracion_ms:Math.max(0,Date.now()-inicio),
+      intento:intento,resultado:resultado
+    });
+  }
+  function diagnosticoV3(){return Object.assign({},ultimoDiagnosticoV3);}
+  function errorTransitorioV3(mensaje){
+    const error=new Error(mensaje);
+    error.iasynV3Transitorio=true;
+    return error;
+  }
+  async function vincularUnaVezV3(intento){
     const url=apiUrl(),token=tokenSesion();
     if(!url||!token)throw new Error('No hay conexión o sesión IASYN activa para firmar.');
-    const c=await fetch(url,{
-      method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},cache:'no-store',
-      body:JSON.stringify({accion:'obtenerEstadoFirmaElectronica',data:{
-        operacion_frontend:'INICIAR_VINCULO_LOCAL_V3',token:token
-      }})
-    });
-    if(!c.ok)throw new Error('El ERP no pudo iniciar la vinculación de la firma local.');
-    const challenge=await c.json();
+
+    // Fase 1: crear un reto NUEVO en el mismo servidor ERP configurado.
+    const inicioReto=Date.now();
+    let c;
+    try{
+      c=await fetch(url,{
+        method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},cache:'no-store',
+        body:JSON.stringify({accion:'obtenerEstadoFirmaElectronica',data:{
+          operacion_frontend:'INICIAR_VINCULO_LOCAL_V3',token:token
+        }})
+      });
+    }catch(_e){
+      registrarV3('RETO_ERP',inicioReto,intento,'RED');
+      throw errorTransitorioV3('No se pudo comunicar con IASYN ERP para iniciar la vinculación local.');
+    }
+    if(!c.ok){
+      registrarV3('RETO_ERP',inicioReto,intento,'HTTP_'+c.status);
+      const mensaje='El ERP no pudo iniciar la vinculación local (HTTP '+c.status+').';
+      if(c.status===429 || c.status>=500) throw errorTransitorioV3(mensaje);
+      throw new Error(mensaje);
+    }
+    let challenge;
+    try{challenge=await c.json();}catch(_e){
+      registrarV3('RETO_ERP',inicioReto,intento,'RESPUESTA_INVALIDA');
+      throw errorTransitorioV3('El ERP devolvió una respuesta ilegible al iniciar la vinculación.');
+    }
     if(!challenge||challenge.success!==true||!/^[a-f0-9]{64}$/i.test(texto(challenge.nonce_vinculo_local_v3))){
+      registrarV3('RETO_ERP',inicioReto,intento,'RECHAZADO');
       throw new Error(texto(challenge&&challenge.message)||'ERP sin contrato de firma local V3.');
     }
+    registrarV3('RETO_ERP',inicioReto,intento,'OK');
+
+    // Fase 2: solo localhost. El motor confirma ESTE nonce al servidor ERP.
     const controller=new AbortController();
     const timer=setTimeout(()=>controller.abort(),13000);
+    const inicioLocal=Date.now();
     let respuesta;
     try{
       respuesta=await fetch('http://127.0.0.1:48761/iasyn/v3/vincular',{
@@ -4019,16 +4063,45 @@
         signal:controller.signal
       });
     }catch(_e){
-      throw new Error('No se pudo conectar con IASYN Firma en ESTA computadora. La firma no será enviada a otra.');
+      registrarV3('PUENTE_LOCAL',inicioLocal,intento,'RED_O_TIMEOUT');
+      throw errorTransitorioV3('No se pudo comunicar con el puente IASYN Firma de ESTA computadora.');
     }finally{clearTimeout(timer);}
-    if(!respuesta.ok)throw new Error('El motor local no confirmó la vinculación. Revise que IASYN Firma esté iniciado en este equipo.');
-    const ok=await respuesta.json();
-    if(!ok||ok.success!==true||!ok.vinculado_local_v3||!texto(ok.id_equipo)){
-      throw new Error('La identificación del motor local fue rechazada.');
+    if(!respuesta.ok){
+      registrarV3('PUENTE_LOCAL',inicioLocal,intento,'HTTP_'+respuesta.status);
+      if(respuesta.status===409 || respuesta.status===429 || respuesta.status>=500){
+        throw errorTransitorioV3('El motor local no confirmó el vínculo con el ERP (HTTP '+respuesta.status+').');
+      }
+      if(respuesta.status===403){
+        throw new Error('El motor local rechazó el origen del navegador. Verifique el enlace oficial del ERP.');
+      }
+      throw new Error('El puente local rechazó la vinculación (HTTP '+respuesta.status+').');
     }
-    // La identidad NO sale del navegador: el backend ya la conoce porque el agente
-    // la registró usando su token protegido. Solo devolvemos el nonce de un solo uso.
+    let ok;
+    try{ok=await respuesta.json();}catch(_e){
+      registrarV3('PUENTE_LOCAL',inicioLocal,intento,'RESPUESTA_INVALIDA');
+      throw new Error('El puente local devolvió una respuesta inválida; no se enviará la firma.');
+    }
+    if(!ok||ok.success!==true||!ok.vinculado_local_v3||!texto(ok.id_equipo)){
+      registrarV3('PUENTE_LOCAL',inicioLocal,intento,'IDENTIDAD_RECHAZADA');
+      throw new Error('La identificación del motor local fue rechazada. No se enviará la firma a otro equipo.');
+    }
+    registrarV3('VINCULO_CONFIRMADO',inicioLocal,intento,'OK');
+    // La identidad NO sale del navegador: el backend ya la verificó usando
+    // el agente. Solo retornamos el nonce nuevo confirmado y de UN SOLO USO.
     return {nonce_vinculo_local_v3:challenge.nonce_vinculo_local_v3};
+  }
+  async function vincular(){
+    for(let intento=1;intento<=MAX_INTENTOS_VINCULO;intento++){
+      try{
+        return await vincularUnaVezV3(intento);
+      }catch(error){
+        // Reintentar únicamente errores de transporte/temporales y ANTES
+        // de crear la solicitud. No insistir ante autenticación o identidad.
+        if(!error||error.iasynV3Transitorio!==true||intento===MAX_INTENTOS_VINCULO) throw error;
+        await new Promise(resolve=>setTimeout(resolve,PAUSA_REINTENTO_MS));
+      }
+    }
+    throw new Error('No se confirmó el motor local.');
   }
   async function preparar(accion,data){
     if(texto(accion)!=='firmarDocumento')return data;
@@ -4038,5 +4111,5 @@
     if(!data||(!data.tipo_documento&&!data.id_solicitud))return data;
     return Object.assign({},data||{},await vincular());
   }
-  window.iasynFirmaLocalV3=Object.freeze({vincular,preparar});
+  window.iasynFirmaLocalV3=Object.freeze({vincular,preparar,diagnostico:diagnosticoV3});
 })();
