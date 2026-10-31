@@ -67,6 +67,8 @@
   }
 
   async function post(accion, data){
+    if(!window.iasynFirmaLocalV3) throw new Error('Falta el módulo de vinculación local de IASYN.');
+    data=await window.iasynFirmaLocalV3.preparar(accion,data);
     const url = apiUrl();
     if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
 
@@ -404,6 +406,8 @@
   }
 
   async function post(accion, data){
+    if(!window.iasynFirmaLocalV3) throw new Error('Falta el módulo de vinculación local de IASYN.');
+    data=await window.iasynFirmaLocalV3.preparar(accion,data);
     const url = apiUrl();
     if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
 
@@ -724,6 +728,8 @@
   }
 
   async function post(accion, data){
+    if(!window.iasynFirmaLocalV3) throw new Error('Falta el módulo de vinculación local de IASYN.');
+    data=await window.iasynFirmaLocalV3.preparar(accion,data);
     const url = apiUrl();
     if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
 
@@ -1060,6 +1066,8 @@
   }
 
   async function post(accion, data){
+    if(!window.iasynFirmaLocalV3) throw new Error('Falta el módulo de vinculación local de IASYN.');
+    data=await window.iasynFirmaLocalV3.preparar(accion,data);
     const url = apiUrl();
     if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
 
@@ -1596,6 +1604,8 @@
   }
 
   async function post(accion, data){
+    if(!window.iasynFirmaLocalV3) throw new Error('Falta el módulo de vinculación local de IASYN.');
+    data=await window.iasynFirmaLocalV3.preparar(accion,data);
     const url = apiUrl();
     if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
 
@@ -2600,6 +2610,8 @@
   }
 
   async function post(accion, data){
+    if(!window.iasynFirmaLocalV3) throw new Error('Falta el módulo de vinculación local de IASYN.');
+    data=await window.iasynFirmaLocalV3.preparar(accion,data);
     const url = apiUrl();
     if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
 
@@ -2819,6 +2831,8 @@
   }
 
   async function post(accion, data){
+    if(!window.iasynFirmaLocalV3) throw new Error('Falta el módulo de vinculación local de IASYN.');
+    data=await window.iasynFirmaLocalV3.preparar(accion,data);
     const url = apiUrl();
     if(!url) throw new Error('No se encontró la conexión segura con el servidor del ERP.');
 
@@ -3446,6 +3460,8 @@
   }
 
   async function post(accion,data){
+    if(!window.iasynFirmaLocalV3) throw new Error('Falta el módulo de vinculación local de IASYN.');
+    data=await window.iasynFirmaLocalV3.preparar(accion,data);
     const url=apiUrl();
     if(!url) throw new Error('IASYN no encontró la conexión del ERP.');
     const token=tokenSesion();
@@ -3949,4 +3965,78 @@
       detail:{version:VERSION,accion_backend:'obtenerDocumentoFirmado'}
     }));
   }catch(_e){}
+})();
+
+/* IASYN 2 MULTIEQUIPO V3: SOLO identidad del motor LOCAL en el clic Firmar.
+ * No modifica la firma P12, el PDF ni la lógica de los documentos.
+ * Cada operación CREAR/REABRIR recibe una prueba nueva de un solo uso.
+ */
+(function iasynFirmaV3MotorLocal(){
+  'use strict';
+  function texto(x){return String(x==null?'':x).trim();}
+  function apiUrl(){
+    try{if(typeof API_URL!=='undefined'&&API_URL)return texto(API_URL);}catch(_e){}
+    if(window.API_URL)return texto(window.API_URL);
+    if(window.IASYN_CONFIG&&window.IASYN_CONFIG.apiUrl)return texto(window.IASYN_CONFIG.apiUrl);
+    const input=document.getElementById('appsScriptUrl');
+    return input?texto(input.value):'';
+  }
+  function tokenSesion(){
+    try{
+      const s=window.IASYN_SEGURIDAD||window.AUROSANAX_SEGURIDAD;
+      if(s){
+        if(typeof s.obtenerToken==='function'){const t=texto(s.obtenerToken());if(t)return t;}
+        if(typeof s.obtenerTokenSesion==='function'){const t=texto(s.obtenerTokenSesion());if(t)return t;}
+      }
+    }catch(_e){}
+    try{
+      return texto(sessionStorage.getItem('iasyn_seguridad_token')||
+        sessionStorage.getItem('aurosanax_seguridad_token')||'');
+    }catch(_e){return '';}
+  }
+  async function vincular(){
+    const url=apiUrl(),token=tokenSesion();
+    if(!url||!token)throw new Error('No hay conexión o sesión IASYN activa para firmar.');
+    const c=await fetch(url,{
+      method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},cache:'no-store',
+      body:JSON.stringify({accion:'obtenerEstadoFirmaElectronica',data:{
+        operacion_frontend:'INICIAR_VINCULO_LOCAL_V3',token:token
+      }})
+    });
+    if(!c.ok)throw new Error('El ERP no pudo iniciar la vinculación de la firma local.');
+    const challenge=await c.json();
+    if(!challenge||challenge.success!==true||!/^[a-f0-9]{64}$/i.test(texto(challenge.nonce_vinculo_local_v3))){
+      throw new Error(texto(challenge&&challenge.message)||'ERP sin contrato de firma local V3.');
+    }
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),13000);
+    let respuesta;
+    try{
+      respuesta=await fetch('http://127.0.0.1:48761/iasyn/v3/vincular',{
+        method:'POST',mode:'cors',cache:'no-store',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({nonce:challenge.nonce_vinculo_local_v3}),
+        signal:controller.signal
+      });
+    }catch(_e){
+      throw new Error('No se pudo conectar con IASYN Firma en ESTA computadora. La firma no será enviada a otra.');
+    }finally{clearTimeout(timer);}
+    if(!respuesta.ok)throw new Error('El motor local no confirmó la vinculación. Revise que IASYN Firma esté iniciado en este equipo.');
+    const ok=await respuesta.json();
+    if(!ok||ok.success!==true||!ok.vinculado_local_v3||!texto(ok.id_equipo)){
+      throw new Error('La identificación del motor local fue rechazada.');
+    }
+    // La identidad NO sale del navegador: el backend ya la conoce porque el agente
+    // la registró usando su token protegido. Solo devolvemos el nonce de un solo uso.
+    return {nonce_vinculo_local_v3:challenge.nonce_vinculo_local_v3};
+  }
+  async function preparar(accion,data){
+    if(texto(accion)!=='firmarDocumento')return data;
+    const op=texto(data&&data.operacion_frontend).toUpperCase();
+    if(data&&data.operacion_agente)return data;
+    if(op&&op!=='REABRIR')return data;
+    if(!data||(!data.tipo_documento&&!data.id_solicitud))return data;
+    return Object.assign({},data||{},await vincular());
+  }
+  window.iasynFirmaLocalV3=Object.freeze({vincular,preparar});
 })();
