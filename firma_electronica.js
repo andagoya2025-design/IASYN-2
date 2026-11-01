@@ -3414,6 +3414,23 @@
   const INTERVALO_CONSULTA_MS = 1000;
   const operaciones = new Map();
 
+  /* IASYN2 DIAGNÓSTICO DE LATENCIA (solo metadatos técnicos).
+     No guardar ni emitir ID, paciente, token, nonce, contraseñas ni contenido PDF. */
+  const tiemposFirma = [];
+  function registrarTiempoFirma(etapa,inicio,resultado){
+    const dato=Object.freeze({
+      etapa:etapa,
+      duracion_ms:Math.max(0,Date.now()-inicio),
+      resultado:resultado
+    });
+    tiemposFirma.push(dato);
+    if(tiemposFirma.length>20) tiemposFirma.shift();
+    try{ console.info('[IASYN2 tiempos firma]',dato); }catch(_e){}
+  }
+  function diagnosticoRendimiento(){
+    return tiemposFirma.map(d=>Object.assign({},d));
+  }
+
   function texto(v){
     return String(v === null || v === undefined ? '' : v).trim();
   }
@@ -3461,23 +3478,48 @@
 
   async function post(accion,data){
     if(!window.iasynFirmaLocalV3) throw new Error('Falta el módulo de vinculación local de IASYN.');
-    data=await window.iasynFirmaLocalV3.preparar(accion,data);
+    const medirCreacion=accion==='firmarDocumento' && tipo(data)==='RECETA' &&
+      !texto(data&&data.operacion_frontend);
+    const inicioVinculo=Date.now();
+    try{
+      data=await window.iasynFirmaLocalV3.preparar(accion,data);
+    }catch(error){
+      if(medirCreacion) registrarTiempoFirma('VINCULO_LOCAL_TOTAL',inicioVinculo,'ERROR');
+      throw error;
+    }
+    if(medirCreacion) registrarTiempoFirma('VINCULO_LOCAL_TOTAL',inicioVinculo,'OK');
     const url=apiUrl();
     if(!url) throw new Error('IASYN no encontró la conexión del ERP.');
     const token=tokenSesion();
     if(!token) throw new Error('No existe una sesión IASYN activa para firmar.');
 
-    const res=await fetch(url,{
-      method:'POST',
-      headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({accion:accion,data:Object.assign({},data||{},{token:token})}),
-      cache:'no-store'
-    });
-    if(!res.ok) throw new Error('El servidor de firma respondió HTTP '+res.status+'.');
-    const json=await res.json();
+    const inicioServidor=Date.now();
+    let res;
+    try{
+      res=await fetch(url,{
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body:JSON.stringify({accion:accion,data:Object.assign({},data||{},{token:token})}),
+        cache:'no-store'
+      });
+    }catch(error){
+      if(medirCreacion) registrarTiempoFirma('CREAR_SOLICITUD_ERP',inicioServidor,'ERROR_RED');
+      throw error;
+    }
+    if(!res.ok){
+      if(medirCreacion) registrarTiempoFirma('CREAR_SOLICITUD_ERP',inicioServidor,'HTTP_ERROR');
+      throw new Error('El servidor de firma respondió HTTP '+res.status+'.');
+    }
+    let json;
+    try{json=await res.json();}catch(error){
+      if(medirCreacion) registrarTiempoFirma('CREAR_SOLICITUD_ERP',inicioServidor,'RESPUESTA_INVALIDA');
+      throw error;
+    }
     if(!json || json.success===false){
+      if(medirCreacion) registrarTiempoFirma('CREAR_SOLICITUD_ERP',inicioServidor,'RECHAZADA');
       throw new Error(texto(json && json.message) || 'IASYN no confirmó la operación de firma.');
     }
+    if(medirCreacion) registrarTiempoFirma('CREAR_SOLICITUD_ERP',inicioServidor,'OK');
     return json;
   }
 
@@ -3565,8 +3607,9 @@
 
   function esperar(ms){ return new Promise(resolve=>setTimeout(resolve,ms)); }
 
-  async function esperarSolicitudInterna(solicitud,idSolicitud){
+  async function esperarSolicitudInterna(solicitud,idSolicitud,inicioCola){
     let ultimo='';
+    let tomaRegistrada=false;
     while(true){
       let r;
       try{
@@ -3582,6 +3625,10 @@
       }
 
       const estado=texto(r.estado_firma||r.estado).toUpperCase();
+      if(estado==='TOMADA' && !tomaRegistrada && inicioCola){
+        registrarTiempoFirma('COLA_HASTA_TOMADA',inicioCola,'OK');
+        tomaRegistrada=true;
+      }
       if(estado && estado!==ultimo){
         ultimo=estado;
         emitirEstado(estado,solicitud,idSolicitud,{error:texto(r.error)});
@@ -3626,6 +3673,7 @@
       if(!['PENDIENTE','TOMADA'].includes(estadoInicial)){
         throw new Error('IASYN no creó correctamente la solicitud de firma.');
       }
+      if(estadoInicial==='TOMADA') registrarTiempoFirma('COLA_HASTA_TOMADA',Date.now(),'YA_TOMADA');
 
       const idSolicitud=texto(creada.id_solicitud);
       if(!idSolicitud) throw new Error('IASYN no devolvió id_solicitud.');
@@ -3635,7 +3683,7 @@
         id_equipo_destino:texto(creada.id_equipo_destino),
         agente_online:creada.agente_online
       });
-      return esperarSolicitudInterna(solicitud,idSolicitud);
+      return esperarSolicitudInterna(solicitud,idSolicitud,estadoInicial==='PENDIENTE'?Date.now():0);
     })();
 
     op.promesa=promesa;
@@ -3753,7 +3801,8 @@
     cancelarFirma:cancelarFirma,
     cancelarDocumento:cancelarDocumento,
     obtenerEstado:obtenerEstado,
-    consultarDocumentosFirmados:consultarDocumentosFirmados
+    consultarDocumentosFirmados:consultarDocumentosFirmados,
+    diagnosticoRendimiento:diagnosticoRendimiento
   });
 
   window.auroFirmaElectronica=Object.freeze(api);
@@ -4003,13 +4052,21 @@
   const MAX_INTENTOS_VINCULO=2;
   const PAUSA_REINTENTO_MS=300;
   let ultimoDiagnosticoV3=Object.freeze({etapa:'SIN_PRUEBAS',duracion_ms:0,intento:0,resultado:'SIN_PRUEBAS'});
+  let etapasDiagnosticoV3=[];
   function registrarV3(etapa,inicio,intento,resultado){
     ultimoDiagnosticoV3=Object.freeze({
       etapa:etapa,duracion_ms:Math.max(0,Date.now()-inicio),
       intento:intento,resultado:resultado
     });
+    etapasDiagnosticoV3.push(ultimoDiagnosticoV3);
+    if(etapasDiagnosticoV3.length>12) etapasDiagnosticoV3.shift();
+    try{console.info('[IASYN2 tiempos vinculo]',ultimoDiagnosticoV3);}catch(_e){}
   }
-  function diagnosticoV3(){return Object.assign({},ultimoDiagnosticoV3);}
+  function diagnosticoV3(){
+    return Object.assign({},ultimoDiagnosticoV3,{
+      etapas:etapasDiagnosticoV3.map(d=>Object.assign({},d))
+    });
+  }
   function errorTransitorioV3(mensaje){
     const error=new Error(mensaje);
     error.iasynV3Transitorio=true;
@@ -4091,6 +4148,7 @@
     return {nonce_vinculo_local_v3:challenge.nonce_vinculo_local_v3};
   }
   async function vincular(){
+    etapasDiagnosticoV3=[];
     for(let intento=1;intento<=MAX_INTENTOS_VINCULO;intento++){
       try{
         return await vincularUnaVezV3(intento);
