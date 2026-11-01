@@ -6469,10 +6469,12 @@ function auroRecetaFirmaInstalarEventosMotor(){
       }
 
       if(previo!==estado){
-        if(estado==='TOMADA'){
-          mostrarMensajeReceta('<i class="bi bi-shield-lock me-1"></i> IASYN recibió la solicitud. Preparando el PDF y la clave de firma…','');
+        if(estado==='PREPARANDO'){
+          mostrarMensajeReceta('<i class="bi bi-shield-lock me-1"></i> Verificando conexión segura con el motor local. La solicitud aún se está preparando…','');
+        }else if(estado==='TOMADA'){
+          mostrarMensajeReceta('<i class="bi bi-shield-lock me-1"></i> El motor local tomó la solicitud. Preparando la ventana de firma…','');
         }else if(estado==='PENDIENTE'){
-          mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Solicitud enviada al motor IASYN…','');
+          mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Solicitud creada en IASYN. Esperando que el motor local la tome…','');
         }
       }
       renderHistorialRecetas();
@@ -6915,7 +6917,7 @@ function auroRecetaFirmaInstalarEventosMotor(){
     recetaFirmaProcesos.set(rid,{estado:'PREPARANDO',id_solicitud:'',id_atencion:doc.id_atencion});
     renderHistorialRecetas();
     mostrarMensajeReceta('<i class="bi bi-hourglass-split me-1"></i> Preparando receta para firma electrónica con IASYN…','');
-    auroRecetaToastPremium('info','Receta enviada al motor IASYN. Preparando firma…');
+    auroRecetaToastPremium('info','Preparando solicitud. Verificando conexión segura con el motor local…');
 
     try{
       const r=await motor.firmarDocumento({
