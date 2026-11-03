@@ -3549,7 +3549,11 @@
     if(!window.crypto || !window.crypto.subtle) return '';
     const datos=new TextEncoder().encode(texto(valor));
     const hash=await crypto.subtle.digest('SHA-256',datos);
-    return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    let hex='';
+    for(const byte of new Uint8Array(hash)){
+      hex+=byte.toString(16).padStart(2,'0');
+    }
+    return hex;
   }
 
   async function claveReceta(d){
