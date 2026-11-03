@@ -6851,6 +6851,17 @@ function auroRecetaFirmaInstalarEventosMotor(){
   }
 
   async function auroRecetaFirmaFirmarActual(){
+    /* IASYN2 / candidato conservador, exclusivo de firma desde Plan.
+       Para firma nueva sin proceso previo, el flujo firmar(id) ejecuta
+       una sola preparacion COMPLETA: receta persistida, atencion, CIE-10,
+       HTML canonico, SHA-256, firma previa y motor local.
+       Si hay proceso previo, conserva exactamente la prevalidacion antigua.
+       NO modifica firma_electronica.js, motor EXE, A4, paginacion ni PDF. */
+    const id=String(recetaEditandoId||'').trim() ||
+      String(buscarRecetaActivaPorAtencion(auroRecetaFirmaAtencionActual())?.id_receta||'').trim();
+    if(id && !auroRecetaFirmaProceso(id)){
+      return auroRecetaFirmaFirmar(id);
+    }
     const doc=await auroRecetaFirmaObtenerDocumentoActual();
     if(!doc.success){
       mostrarMensajeReceta('<i class="bi bi-exclamation-triangle me-1"></i> '+safe(doc.message||'La receta no está lista para firmar.'), '');
