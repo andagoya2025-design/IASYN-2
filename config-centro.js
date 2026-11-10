@@ -329,6 +329,7 @@
     const msg = document.getElementById('centroMsg');
     const requeridos = [
       'cfgNombreClinica','cfgWhatsappClinica','cfgEmailClinica','cfgDireccionClinica',
+      'cfgCiudadClinica',
       'cfgLogoUrl','cfgColorPrincipal','cfgColorSecundario','cfgModoSistema'
     ];
     const faltantes = requeridos.filter(id => !document.getElementById(id));
@@ -347,6 +348,8 @@
       document.getElementById('cfgWhatsappClinica').value = valorConfigCentro('whatsapp_clinica', '');
       document.getElementById('cfgEmailClinica').value = valorConfigCentro('email_clinica', '');
       document.getElementById('cfgDireccionClinica').value = valorConfigCentro('direccion_clinica', '');
+      document.getElementById('cfgCiudadClinica').value = valorConfigCentro('ciudad_clinica', '');
+      document.getElementById('cfgCiudadClinica').disabled = false;
       const logoUrlGuardado = valorConfigCentro('logo_url', '');
       const logoFileIdGuardado = valorConfigCentro('logo_file_id', '');
       document.getElementById('cfgLogoUrl').value = logoUrlGuardado || (logoFileIdGuardado ? 'https://drive.google.com/thumbnail?id=' + encodeURIComponent(logoFileIdGuardado) + '&sz=w400' : '');
@@ -392,6 +395,7 @@
         whatsapp_clinica: document.getElementById('cfgWhatsappClinica').value.trim(),
         email_clinica: document.getElementById('cfgEmailClinica').value.trim(),
         direccion_clinica: document.getElementById('cfgDireccionClinica').value.trim(),
+        ciudad_clinica: document.getElementById('cfgCiudadClinica').value.trim(),
         logo_url: document.getElementById('cfgLogoUrl').value.trim()
       };
 
