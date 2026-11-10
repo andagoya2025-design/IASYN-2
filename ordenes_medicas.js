@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.3-INTEGRAL-A4-CIE10-CANDIDATA';
+const VERSION='1.4.4-A4-CIE10-ANTIRREGRESIVA-CANDIDATA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -378,7 +378,7 @@ function diagnosticosUnicosOrden(lista){
   if(salida.length&&!salida.some(x=>x.principal)) salida[0].principal=true;
   return salida.sort((a,b)=>Number(b.principal)-Number(a.principal));
 }
-function claveDxOrden(x){return norm(x.codigo_cie10)+'|'+norm(x.descripcion);}
+function claveDxOrden(x){return norm(x.codigo_cie10||x.codigo)+'|'+norm(x.descripcion||x.diagnostico);}
 function sincronizarDxOrden(lista,id){
   const claves=new Set(diagnosticosUnicosOrden(lista).map(claveDxOrden));
   if(state.diagnosticosSeleccionAtencion!==id){
@@ -1186,52 +1186,102 @@ function docHTMLBase(data){
   </article>`;
 }
 
-/* Paginación A4 estática. No se inyectan scripts en el HTML de firma. */
+/* A4: distribución por alturas reales. No toca motor, QR ni contrato de firma. */
 function docHTML(data){
   const original=docHTMLBase(data);
   if(typeof document==='undefined'||!document.body) return original;
   const host=document.createElement('div');
-  host.style.cssText='position:fixed;left:-100000px;top:0;width:180mm;visibility:hidden;pointer-events:none';
-  const style=document.createElement('style');style.textContent=estilosImpresion();host.appendChild(style);
-  const shell=document.createElement('div');shell.innerHTML=original;host.appendChild(shell);document.body.appendChild(host);
+  host.style.cssText='position:fixed;left:-100000px;top:0;width:180mm;visibility:hidden;pointer-events:none;z-index:-1';
+  const style=document.createElement('style');
+  style.textContent=estilosImpresion();host.appendChild(style);
+  const shell=document.createElement('div');shell.innerHTML=original;host.appendChild(shell);
+  document.body.appendChild(host);
   try{
     const root=shell.querySelector('.aom-paper');
-    const header=root.querySelector('.aom-doc-head'),title=root.querySelector('.aom-doc-title');
-    const grid=root.querySelector('.aom-doc-grid'),dx=root.querySelector('.aom-diagnosticos');
-    const table=root.querySelector('.aom-doc-table'),footer=root.querySelector('.aom-doc-bottom');
-    const notes=table.nextElementSibling!==footer?table.nextElementSibling:null;
-    const rows=Array.from(table.querySelectorAll('tbody tr'));
-    root.style.minHeight='0';footer.style.marginTop='0';
-    const pxmm=96/25.4, capacity=273*pxmm-12;
-    const h=el=>{if(!el)return 0;const cs=getComputedStyle(el);return el.getBoundingClientRect().height+(parseFloat(cs.marginTop)||0)+(parseFloat(cs.marginBottom)||0);};
-    const topH=h(header)+h(title)+h(grid)+h(dx), th=h(table.querySelector('thead'));
-    const footH=h(footer)+6*pxmm,notesH=h(notes);
-    const rowH=rows.map(h);
-    const pages=[];let group=[],used=topH+th;
-    for(let i=0;i<rows.length;i++){
-      const rh=rowH[i];
-      if(group.length&&used+rh>capacity){pages.push(group);group=[];used=th;}
-      group.push(rows[i].outerHTML);used+=rh;
+    const table=root?.querySelector('.aom-doc-table');
+    const footer=root?.querySelector('.aom-doc-bottom');
+    if(!root||!table||!footer) throw Error('Estructura de documento incompleta');
+    root.style.cssText+=';min-height:0!important;height:auto!important;display:block!important';
+    footer.style.cssText+=';margin-top:0!important';
+    const head=Array.from(root.children).filter(el=>el!==table&&el!==footer&&el.compareDocumentPosition(table)&Node.DOCUMENT_POSITION_FOLLOWING);
+    const notes=Array.from(root.children).filter(el=>el!==table&&el!==footer&&el.compareDocumentPosition(table)&Node.DOCUMENT_POSITION_PRECEDING);
+    const rows=Array.from(table.tBodies[0]?.rows||[]);
+    const mm=document.createElement('div');mm.style.cssText='height:100mm;width:1px;position:absolute';host.appendChild(mm);
+    const pxmm=mm.getBoundingClientRect().height/100;
+    if(!(pxmm>0)) throw Error('No se pudo medir la escala A4');
+    const capacity=273*pxmm-3; // 297mm menos 12mm superior e inferior, tolerancia de impresión
+    const height=el=>{
+      if(!el)return 0;
+      const cs=getComputedStyle(el);
+      return el.getBoundingClientRect().height+(parseFloat(cs.marginTop)||0)+(parseFloat(cs.marginBottom)||0);
+    };
+    const headH=head.reduce((n,el)=>n+height(el),0);
+    const notesH=notes.reduce((n,el)=>n+height(el),0);
+    const footerH=height(footer)+2*pxmm;
+    const tableH=height(table.querySelector('thead'))+height(table)*0; // encabezado repetido
+    const rowH=rows.map(height);
+    const pageRows=[];
+    let idx=0;
+    while(idx<rows.length){
+      const first=pageRows.length===0;
+      const base=(first?headH:0)+tableH+9; // tolerancia de borde de tabla
+      let used=base, group=[];
+      while(idx<rows.length){
+        const candidate=rowH[idx];
+        const remainingAfter=rows.length-(idx+1);
+        const lastContent=remainingAfter===0;
+        const reserve=lastContent?notesH+footerH:0;
+        if(group.length&&used+candidate+reserve>capacity) break;
+        if(!group.length&&used+candidate+reserve>capacity&&used+candidate>capacity)
+          throw Error('Una fila excede la altura imprimible A4');
+        if(!group.length&&lastContent&&used+candidate+reserve>capacity&&pageRows.length===0&&used+candidate<=capacity){
+          // Se traslada la fila al siguiente folio únicamente si el contenido no cabe con firma.
+          break;
+        }
+        group.push(rows[idx].outerHTML);used+=candidate;idx++;
+      }
+      if(!group.length){
+        // La última fila cabe, pero no junto con el pie: reservarla para una hoja final.
+        if(pageRows.length&&idx<rows.length){
+          group.push(rows[idx].outerHTML);idx++;
+        }else if(idx<rows.length){
+          group.push(rows[idx].outerHTML);idx++;
+        }
+      }
+      pageRows.push(group);
+      if(pageRows.length>rows.length+2) throw Error('Distribución A4 no converge');
     }
-    if(group.length||!pages.length) pages.push(group);
-    // Mantener firma en última hoja: si no cabe, trasladar filas anteriores
-    // a la hoja previa antes de crear una hoja vacía de contenido.
-    while(used+notesH+footH>capacity&&pages[pages.length-1].length>1){
-      const last=pages[pages.length-1];const moved=last.pop();
-      if(pages.length===1){pages.push([moved]);}
-      else {pages.push([moved]);}
-      used=th+h(notes)+h(footer); // recalcular abajo usando alturas reales de filas
-      const idx=rows.findIndex(r=>r.outerHTML===moved);
-      used=th+(idx>=0?rowH[idx]:0);
-      break;
+    if(!pageRows.length) pageRows.push([]);
+    // Reequilibrar: la firma debe caber en la última hoja; mover filas hacia delante
+    // cuando haya espacio, sin crear hojas vacías para el pie.
+    const rowHeightByHTML=new Map(rows.map((r,i)=>[r.outerHTML,rowH[i]]));
+    const usedOn=(group,first)=> (first?headH:0)+tableH+9+group.reduce((n,html)=>n+(rowHeightByHTML.get(html)||0),0);
+    let guard=0;
+    while(usedOn(pageRows[pageRows.length-1],pageRows.length===1)+notesH+footerH>capacity){
+      if(++guard>rows.length+3) throw Error('El pie institucional no cabe en A4');
+      const last=pageRows[pageRows.length-1];
+      if(last.length>1){
+        const moved=last.shift();
+        const previous=pageRows[pageRows.length-2];
+        if(previous&&usedOn(previous,pageRows.length===2)+(rowHeightByHTML.get(moved)||0)<=capacity){previous.push(moved);continue;}
+        // Crear folio intermedio con las filas restantes y mantener firma con la última.
+        pageRows.splice(pageRows.length-1,0,[moved]);
+      }else if(last.length===1){
+        if(usedOn(last,false)+notesH+footerH<=capacity) break;
+        throw Error('El contenido de una fila más la firma excede una página A4');
+      }else throw Error('Pie institucional excede el área imprimible');
     }
-    if(used+notesH+footH>capacity&&pages[pages.length-1].length){pages.push([]);}
-    const open='<article class="aom-paper" style="'+esc(root.getAttribute('style')||'')+'">';
-    const top=header.outerHTML+title.outerHTML+grid.outerHTML+dx.outerHTML;
-    const tableStart='<table class="aom-doc-table">'+table.querySelector('thead').outerHTML+'<tbody>';
-    return pages.map((part,i)=>open+(i===0?top:'')+(part.length?tableStart+part.join('')+'</tbody></table>':'')+(i===pages.length-1?(notes?notes.outerHTML:'')+footer.outerHTML:'')+'</article>').join('');
-  }catch(error){console.warn('IASYN: medición A4 no disponible',error);return original;}
-  finally{host.remove();}
+    const top=head.map(el=>el.outerHTML).join('');
+    const tail=notes.map(el=>el.outerHTML).join('');
+    const tableOpen='<table class="aom-doc-table">'+table.tHead.outerHTML+'<tbody>';
+    const paperStyle=root.getAttribute('style')||'';
+    return pageRows.map((group,i)=>'<article class="aom-paper aom-a4-page" style="'+esc(paperStyle)+'">'+
+      (i===0?top:'')+(group.length?tableOpen+group.join('')+'</tbody></table>':'')+
+      (i===pageRows.length-1?tail+footer.outerHTML:'')+'</article>').join('');
+  }catch(error){
+    console.warn('IASYN: medición A4 no disponible; se conserva HTML sin alterar',error);
+    return original;
+  }finally{host.remove();}
 }
 
 function estilosImpresion(){
@@ -1255,12 +1305,12 @@ function estilosImpresion(){
   .aom-diagnosticos-title{font-size:9.5px;font-weight:800;color:#8b1e5a;margin-bottom:4px}
   .aom-diagnosticos ol{margin:0;padding-left:17px}
   .aom-diagnosticos li{font-size:9.5px;line-height:1.4;margin:2px 0}
-  .aom-doc-table{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
-  .aom-doc-table th,.aom-doc-table td{border:1px solid #d1d5db;padding:7px 8px;vertical-align:top;overflow-wrap:anywhere}
+  .aom-doc-table{flex:0 0 auto;align-self:stretch;width:100%;border-collapse:collapse;font-size:11.5px;margin-top:9px}
+  .aom-doc-table th,.aom-doc-table td{height:auto!important;border:1px solid #d1d5db;padding:7px 8px;vertical-align:top;overflow-wrap:anywhere}
   .aom-doc-table th{background:#f8fafc;text-align:left}
   .aom-doc-table thead{display:table-header-group}
   .aom-doc-table tr{break-inside:avoid;page-break-inside:avoid}
-  .aom-doc-bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:18mm;break-inside:avoid;page-break-inside:avoid}
+  .aom-doc-bottom{flex-shrink:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:18mm;break-inside:avoid;page-break-inside:avoid}
   .aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.55;overflow-wrap:anywhere}
   .aom-doc-center-contact>div{margin-top:3px}
   .aom-doc-sign{text-align:center;font-size:11.2px;line-height:1.3;break-inside:avoid}
@@ -1273,7 +1323,7 @@ function estilosImpresion(){
   .aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto;background:#eef2f7;min-height:calc(100vh - 60px)}
   .aom-stage{margin:0 auto;width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 6px 24px #0002}
-  .aom-stage .aom-paper{width:100%;min-height:273mm;break-after:page}
+  .aom-stage .aom-paper{width:100%;min-height:273mm;break-after:page}.aom-stage .aom-paper:last-child{break-after:auto}
   @media print{
     html,body{background:#fff!important;overflow:visible!important}
     .aom-print-toolbar{display:none!important}
@@ -1281,7 +1331,7 @@ function estilosImpresion(){
     .aom-stage{zoom:1!important;transform:none!important;width:auto!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;box-shadow:none!important}
     .aom-paper{min-height:273mm!important;width:100%!important;padding:0!important;display:flex!important;flex-direction:column!important;break-after:page!important;page-break-after:always!important}
     .aom-paper:last-child{break-after:auto!important;page-break-after:auto!important}
-    .aom-doc-bottom{margin-top:auto!important;break-inside:avoid!important}
+    .aom-doc-bottom{margin-top:auto!important;break-inside:avoid!important}.aom-doc-table{flex:none!important}
   }`;
 }
 
