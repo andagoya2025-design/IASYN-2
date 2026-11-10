@@ -409,7 +409,13 @@ function reconciliarSeleccionDiagnosticos(lista,id){
   const vigentes=new Set(lista.map(claveDiagnosticoOrden));
   for(const k of Array.from(state.diagnosticosSeleccionados)) if(!vigentes.has(k)) state.diagnosticosSeleccionados.delete(k);
   for(const k of Array.from(state.diagnosticosExcluidos)) if(!vigentes.has(k)) state.diagnosticosExcluidos.delete(k);
-  for(const d of lista){const k=claveDiagnosticoOrden(d);if(!state.diagnosticosExcluidos.has(k)) state.diagnosticosSeleccionados.add(k);}
+  // Solo seleccionar automáticamente diagnósticos nuevos; respetar siempre las exclusiones manuales.
+  for(const d of lista){
+    const k=claveDiagnosticoOrden(d);
+    if(!state.diagnosticosSeleccionados.has(k)&&!state.diagnosticosExcluidos.has(k)){
+      state.diagnosticosSeleccionados.add(k);
+    }
+  }
 }
 function diagnosticosElegidosOrden(lista){
   return diagnosticosUnicosOrden(lista).filter(d=>state.diagnosticosSeleccionados.has(claveDiagnosticoOrden(d))&&!state.diagnosticosExcluidos.has(claveDiagnosticoOrden(d)));
@@ -828,8 +834,12 @@ function render(){
     </div>`;
 
   app.querySelectorAll('[data-aom-dx-key]').forEach(input=>input.addEventListener('change',()=>{
-    if(!state.diagnosticosVerificados||state.diagnosticosSeleccionAtencion!==txt(contexto().id)) return;
     const k=input.getAttribute('data-aom-dx-key');
+    // No bloquear silenciosamente el clic: revertir la casilla si la atención cambió.
+    if(!state.diagnosticosVerificados||state.diagnosticosSeleccionAtencion!==txt(contexto().id)){
+      input.checked=state.diagnosticosSeleccionados.has(k)&&!state.diagnosticosExcluidos.has(k);
+      return;
+    }
     if(input.checked){state.diagnosticosExcluidos.delete(k);state.diagnosticosSeleccionados.add(k);}
     else{state.diagnosticosSeleccionados.delete(k);state.diagnosticosExcluidos.add(k);}
     input.checked=state.diagnosticosSeleccionados.has(k)&&!state.diagnosticosExcluidos.has(k);
@@ -1192,7 +1202,7 @@ function docHTMLBase06(data){
   const logoSeguro=/^https?:\/\//i.test(logo)||/^data:image\/(?:png|jpeg|jpg|gif|webp|svg\+xml);base64,/i.test(logo);
   const logoHtml=logoSeguro?`<div class="aom-logo-wrap"><img class="aom-logo" src="${esc(logo)}" alt=""></div>`:'';
   return `<article class="aom-paper" style="--aom-color:${esc(color)}">
-    <header class="aom-doc-head${logoSeguro?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'Centro médico')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ' · ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
+    <header class="aom-doc-head${logoSeguro?'':' no-logo'}">${logoHtml}<div><div class="aom-doc-brand">${esc(centro.nombre||'Centro médico')}</div>${(medico.especialidad||centro.subtitulo)?`<div class="aom-doc-sub">${esc(medico.especialidad||centro.subtitulo)}</div>`:''}</div><div class="aom-doc-date">${ciudad ? esc(ciudad) + ', ' : ''}${esc(fechaVisual(data.fecha_emision||d.fecha_emision))}</div></header>
     <div class="aom-doc-title">ORDEN MÉDICA</div>
     <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
     ${bloqueDiagnosticosOrden(d.diagnosticos||[])}
