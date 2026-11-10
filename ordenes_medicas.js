@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.4-BASE07-CIE10-CIUDAD-MARGEN';
+const VERSION='1.4.5-BASE07-CIE10-CASILLAS-ANTIRREGRESION';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -833,7 +833,11 @@ function render(){
       </div>
     </div>`;
 
-  app.querySelectorAll('[data-aom-dx-key]').forEach(input=>input.addEventListener('change',()=>{
+  app.querySelectorAll('[data-aom-dx-key]').forEach(input=>{
+    // Impedir que un manejador externo de Plan reconstruya este bloque
+    // mientras se procesa el clic sobre el diagnóstico.
+    input.addEventListener('click',e=>e.stopPropagation());
+    input.addEventListener('change',()=>{
     const k=input.getAttribute('data-aom-dx-key');
     // No bloquear silenciosamente el clic: revertir la casilla si la atención cambió.
     if(!state.diagnosticosVerificados||state.diagnosticosSeleccionAtencion!==txt(contexto().id)){
@@ -843,7 +847,8 @@ function render(){
     if(input.checked){state.diagnosticosExcluidos.delete(k);state.diagnosticosSeleccionados.add(k);}
     else{state.diagnosticosSeleccionados.delete(k);state.diagnosticosExcluidos.add(k);}
     input.checked=state.diagnosticosSeleccionados.has(k)&&!state.diagnosticosExcluidos.has(k);
-  }));
+    });
+  });
   document.getElementById('iasynOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
   if(state.ultimoAviso){
     const a=document.getElementById('iasynOrdenMedicaAviso');
@@ -1451,6 +1456,9 @@ function instalarEventos(){
   window.addEventListener('aurosanax:consulta-seleccionada',cargar);
 
   document.addEventListener('click',e=>{
+    // Las casillas y botones de Órdenes viven dentro de Plan: no destruir
+    // sus nodos mediante render() durante el mismo clic del usuario.
+    if(e.target?.closest?.('#iasynOrdenMedicaFormalApp')) return;
     if(e.target?.closest?.('#hc_plan')){
       queueMicrotask(refrescarEstadoLocal);
     }
