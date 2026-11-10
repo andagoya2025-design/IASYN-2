@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.4-IASYN-ORDENES-PAGINACION-CIE10-REVISION';
+const VERSION='1.4.3-INTEGRAL-A4-CIE10-CANDIDATA';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -54,9 +54,8 @@ const state={
   diagnosticosError:'',
   diagnosticosToken:0,
   diagnosticosSeleccionados:new Set(),
-  diagnosticosSeleccionAtencion:'',
-  diagnosticosConocidos:new Set(),
-  diagnosticosExcluidos:new Set()
+  diagnosticosExcluidos:new Set(),
+  diagnosticosSeleccionAtencion:''
 };
 
 const txt=v=>String(v??'').trim();
@@ -379,38 +378,23 @@ function diagnosticosUnicosOrden(lista){
   if(salida.length&&!salida.some(x=>x.principal)) salida[0].principal=true;
   return salida.sort((a,b)=>Number(b.principal)-Number(a.principal));
 }
-/* Selección visual de diagnósticos: no modifica el historial clínico. */
-function claveDiagnosticoOrden(dx){
-  return norm(dx.codigo_cie10)+'|'+norm(dx.descripcion);
-}
-function sincronizarSeleccionDiagnosticosOrden(lista,id,reiniciar=false){
-  const claves=new Set(diagnosticosUnicosOrden(lista).map(claveDiagnosticoOrden));
-  if(reiniciar||state.diagnosticosSeleccionAtencion!==id){
-    state.diagnosticosSeleccionados=new Set(claves);
-    state.diagnosticosConocidos=new Set(claves);
-    state.diagnosticosExcluidos=new Set();
-  }else{
-    // Nuevos CIE-10 seleccionados por defecto; exclusiones manuales se respetan.
-    for(const k of claves){
-      if(!state.diagnosticosConocidos.has(k)&&!state.diagnosticosExcluidos.has(k)) state.diagnosticosSeleccionados.add(k);
-    }
-    state.diagnosticosSeleccionados=new Set([...state.diagnosticosSeleccionados].filter(k=>claves.has(k)));
-    state.diagnosticosConocidos=claves;
+function claveDxOrden(x){return norm(x.codigo_cie10)+'|'+norm(x.descripcion);}
+function sincronizarDxOrden(lista,id){
+  const claves=new Set(diagnosticosUnicosOrden(lista).map(claveDxOrden));
+  if(state.diagnosticosSeleccionAtencion!==id){
+    state.diagnosticosExcluidos=new Set();state.diagnosticosSeleccionAtencion=id;
   }
-  state.diagnosticosSeleccionAtencion=id;
+  state.diagnosticosExcluidos=new Set([...state.diagnosticosExcluidos].filter(k=>claves.has(k)));
+  state.diagnosticosSeleccionados=new Set([...claves].filter(k=>!state.diagnosticosExcluidos.has(k)));
 }
-function diagnosticosElegidosOrden(lista,id){
-  if(!id||state.diagnosticosSeleccionAtencion!==id) throw Error('La selección CIE-10 no corresponde a esta atención.');
-  return diagnosticosUnicosOrden(lista).filter(dx=>state.diagnosticosSeleccionados.has(claveDiagnosticoOrden(dx)));
+function dxElegidosOrden(lista,id){
+  if(id!==state.diagnosticosSeleccionAtencion) throw Error('La selección CIE-10 no corresponde a esta atención.');
+  return diagnosticosUnicosOrden(lista).filter(x=>state.diagnosticosSeleccionados.has(claveDxOrden(x)));
 }
-function selectorDiagnosticosOrden(lista){
+function selectorDxOrden(lista){
   const dx=diagnosticosUnicosOrden(lista);
-  if(!dx.length) return '<div>No hay diagnósticos CIE-10 guardados en esta atención. Actualice después de registrarlos.</div>';
-  return '<div class="aom-dx-selector"><div>Marque los diagnósticos que aparecerán en la nueva orden médica:</div>'+
-    dx.map(x=>{const k=claveDiagnosticoOrden(x);return '<label class="aom-dx-choice" style="display:flex;align-items:start;gap:8px;margin:6px 0;cursor:pointer"><input type="checkbox" data-aom-dx-key="'+esc(k)+'" '+
-      (state.diagnosticosSeleccionados.has(k)?'checked':'')+
-      '> <span><strong>'+esc(x.codigo_cie10||'Sin código')+'</strong> — '+esc(x.descripcion)+'</span></label>';}).join('')+
-    '</div>';
+  if(!dx.length) return '<div>Sin diagnósticos registrados para esta atención.</div>';
+  return '<div class="aom-dx-selector">'+dx.map(x=>'<label class="aom-dx-choice"><input type="checkbox" data-aom-dx-key="'+esc(claveDxOrden(x))+'" '+(state.diagnosticosSeleccionados.has(claveDxOrden(x))?'checked':'')+'><span><strong>'+esc(x.codigo_cie10||'Sin código')+'</strong> — '+esc(x.descripcion)+(x.principal?' (Principal)':'')+'</span></label>').join('')+'</div>';
 }
 async function consultarDiagnosticosPersistidos(id){
   id=txt(id);
@@ -426,8 +410,8 @@ async function cargarDiagnosticosOrden(id){
   id=txt(id);
   const token=++state.diagnosticosToken;
   state.diagnosticos=[];
-  if(state.diagnosticosSeleccionAtencion!==id) sincronizarSeleccionDiagnosticosOrden([],id,true);
   state.diagnosticosAtencion=id;
+  if(state.diagnosticosSeleccionAtencion!==id) sincronizarDxOrden([],id);
   state.diagnosticosVerificados=false;
   state.diagnosticosCargando=!!id;
   state.diagnosticosError='';
@@ -437,7 +421,7 @@ async function cargarDiagnosticosOrden(id){
     const lista=await consultarDiagnosticosPersistidos(id);
     if(token!==state.diagnosticosToken||id!==txt(contexto().id)) return [];
     state.diagnosticos=lista;
-    sincronizarSeleccionDiagnosticosOrden(lista,id);
+    sincronizarDxOrden(lista,id);
     state.diagnosticosVerificados=true;
     return lista;
   }catch(e){
@@ -508,7 +492,6 @@ function datosDocumentoDesdePlan(diagnosticosAtencion=[]){
       numero_consulta:ctx.numeroConsulta,
       items:plan.items,
       diagnosticos:diagnosticosUnicosOrden(diagnosticosAtencion),
-      seleccion_cie10_orden:true,
       observaciones_generales:'',
       paciente:{
         id_paciente:txt(ctx.idPaciente||paciente?.id_paciente||paciente?.id),
@@ -667,7 +650,7 @@ function instalarCSS(){
 #iasynOrdenMedicaFormalApp{margin-top:14px;font-family:inherit;color:#1f2937}
 #iasynOrdenMedicaFormalApp *{box-sizing:border-box}
 .aom-dx-live{border:1px solid #ead7e2;border-radius:12px;background:#fffafd;padding:10px 12px;margin-bottom:12px;font-size:12px}
-.aom-dx-live>strong{color:#8b1e5a}
+.aom-dx-live>strong{color:#8b1e5a}.aom-dx-choice{display:flex;align-items:flex-start;gap:9px;margin:7px 0;cursor:pointer}.aom-dx-choice input{flex:none;margin-top:2px;width:16px;height:16px;accent-color:#8b1e5a}
 .aom-dx-error{color:#991b1b;margin-top:5px}
 .aom-diagnosticos{margin:8px 0 14px;padding:9px 12px;border:1px solid #ead7e2;border-radius:8px;font-size:11.5px;break-inside:avoid}
 .aom-diagnosticos-title{font-weight:800;color:#8b1e5a;margin-bottom:6px}
@@ -812,7 +795,7 @@ function render(){
   });
   app.innerHTML=`
     <div class="aom-shell">
-      <div class="aom-dx-live"><strong>Diagnósticos de esta atención</strong> <button type="button" id="aomRefrescarDx" class="aom-secondary" style="margin-left:8px;padding:4px 9px">Actualizar CIE-10</button>${state.diagnosticosCargando?'<div>Consultando diagnósticos CIE-10 guardados…</div>':state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?selectorDiagnosticosOrden(state.diagnosticos):`<div class="aom-dx-error">${esc(state.diagnosticosError||'Diagnósticos pendientes de verificación.')}</div>`}</div>
+      ${txt(contexto().id)?`<div class="aom-dx-live"><strong>Diagnósticos de esta atención</strong>${state.diagnosticosCargando?'<div>Consultando diagnósticos CIE-10 guardados…</div>':state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?selectorDxOrden(state.diagnosticos):`<div class="aom-dx-error">${esc(state.diagnosticosError||'No se pudieron consultar los diagnósticos.')}</div>`}</div>`:''}
       <div class="aom-head">
         <div>
           <div class="aom-title"><i class="bi bi-file-earmark-medical"></i> Documento formal de orden médica</div>
@@ -830,20 +813,16 @@ function render(){
     </div>`;
 
   document.getElementById('iasynOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
-  document.getElementById('aomRefrescarDx')?.addEventListener('click',()=>cargarDiagnosticosOrden(contexto().id));
+  app.querySelectorAll('[data-aom-dx-key]').forEach(input=>input.addEventListener('change',()=>{
+    const id=txt(contexto().id),key=input.getAttribute('data-aom-dx-key');
+    if(!state.diagnosticosVerificados||id!==state.diagnosticosSeleccionAtencion){input.checked=!input.checked;return;}
+    if(input.checked){state.diagnosticosExcluidos.delete(key);state.diagnosticosSeleccionados.add(key);}
+    else{state.diagnosticosExcluidos.add(key);state.diagnosticosSeleccionados.delete(key);}
+  }));
   if(state.ultimoAviso){
     const a=document.getElementById('iasynOrdenMedicaAviso');
     if(a){a.className='aom-notice '+state.ultimoAviso.tipo;a.textContent=state.ultimoAviso.mensaje;}
   }
-  app.querySelectorAll('[data-aom-dx-key]').forEach(input=>input.addEventListener('change',()=>{
-    const clave=input.getAttribute('data-aom-dx-key');
-    if(!state.diagnosticosVerificados||!diagnosticosUnicosOrden(state.diagnosticos).some(x=>claveDiagnosticoOrden(x)===clave)){
-      input.checked=state.diagnosticosSeleccionados.has(clave);
-      return;
-    }
-    if(input.checked){state.diagnosticosSeleccionados.add(clave);state.diagnosticosExcluidos.delete(clave);}
-    else {state.diagnosticosSeleccionados.delete(clave);state.diagnosticosExcluidos.add(clave);}
-  }));
   app.querySelectorAll('[data-aom-preview]').forEach(b=>b.addEventListener('click',()=>vistaPreviaPorId(b.dataset.aomPreview)));
   app.querySelectorAll('[data-aom-editar]').forEach(b=>b.addEventListener('click',()=>editarFormal(b.dataset.aomEditar)));
   app.querySelectorAll('[data-aom-imprimir]').forEach(b=>b.addEventListener('click',()=>imprimirPorId(b.dataset.aomImprimir)));
@@ -944,11 +923,11 @@ async function emitir(){
     const diagnosticos=await consultarDiagnosticosPersistidos(idEmision);
     if(txt(contexto().id)!==idEmision||txt(state.idAtencion)!==idEmision) throw Error('Cambió la atención durante la consulta de diagnósticos.');
     state.diagnosticos=diagnosticos;
-    sincronizarSeleccionDiagnosticosOrden(diagnosticos,idEmision);
+    sincronizarDxOrden(diagnosticos,idEmision);
     state.diagnosticosAtencion=idEmision;
     state.diagnosticosVerificados=true;
     state.diagnosticosError='';
-    data=datosDocumentoDesdePlan(diagnosticosElegidosOrden(diagnosticos,idEmision));
+    data=datosDocumentoDesdePlan(dxElegidosOrden(diagnosticos,idEmision));
   }catch(e){aviso('No se pudo verificar CIE-10: '+(e.message||e),'err');return;}
 
   if(!confirm(`Se emitirá una orden médica formal con ${data.detalle_json.items.length} ítem(s). ¿Continuar?`)) return;
@@ -1189,10 +1168,7 @@ function docHTMLBase(data){
   // Documento emitido: preservar la instantánea institucional original.
   // No sustituir datos históricos con cambios posteriores de Configuración del Centro.
   const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
-  if(!txt(centro.ciudad)) centro.ciudad=txt(state.configuracion?.ciudad||normalizarConfig(configGlobal()).ciudad);
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
-  const codigosCieElegidos=new Set(diagnosticosUnicosOrden(d.diagnosticos||[]).map(x=>norm(x.codigo_cie10)));
-  const mostrarCieItem=o=>!d.seleccion_cie10_orden||codigosCieElegidos.has(norm(o.codigo_cie10));
   const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
   const contactoInstitucional=filaContactoInstitucional('ubicacion',ubicacion)+filaContactoInstitucional('correo',centro.email)+filaContactoInstitucional('telefono',centro.telefono)+filaContactoInstitucional('web',centro.web);
@@ -1204,59 +1180,57 @@ function docHTMLBase(data){
     <div class="aom-doc-title">ORDEN MÉDICA</div>
     <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
     ${bloqueDiagnosticosOrden(d.diagnosticos||[])}
-    <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10&&mostrarCieItem(o)?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
+    <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong></td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
     ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
     <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${contactoInstitucional}${centro.razon_social?`<div class="aom-contact-legal">${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
   </article>`;
 }
 
-/* Paginación quirúrgica A4: medir la altura REAL del HTML antes de generar
-   páginas estáticas. El HTML firmado no lleva scripts ni depende del motor de firma. */
+/* Paginación A4 estática. No se inyectan scripts en el HTML de firma. */
 function docHTML(data){
   const original=docHTMLBase(data);
   if(typeof document==='undefined'||!document.body) return original;
   const host=document.createElement('div');
-  host.setAttribute('aria-hidden','true');
-  host.style.cssText='position:absolute;left:-100000px;top:0;width:180mm;visibility:hidden;pointer-events:none;z-index:-1';
-  const style=document.createElement('style');style.textContent=estilosImpresion();
-  host.appendChild(style);
-  const shell=document.createElement('div');shell.innerHTML=original;host.appendChild(shell);
-  document.body.appendChild(host);
+  host.style.cssText='position:fixed;left:-100000px;top:0;width:180mm;visibility:hidden;pointer-events:none';
+  const style=document.createElement('style');style.textContent=estilosImpresion();host.appendChild(style);
+  const shell=document.createElement('div');shell.innerHTML=original;host.appendChild(shell);document.body.appendChild(host);
   try{
     const root=shell.querySelector('.aom-paper');
-    const head=root.querySelector('.aom-doc-head');
-    const title=root.querySelector('.aom-doc-title');
-    const grid=root.querySelector('.aom-doc-grid');
-    const dx=root.querySelector('.aom-diagnosticos');
-    const table=root.querySelector('.aom-doc-table');
-    const foot=root.querySelector('.aom-doc-bottom');
-    const notes=table.nextElementSibling!==foot?table.nextElementSibling:null;
+    const header=root.querySelector('.aom-doc-head'),title=root.querySelector('.aom-doc-title');
+    const grid=root.querySelector('.aom-doc-grid'),dx=root.querySelector('.aom-diagnosticos');
+    const table=root.querySelector('.aom-doc-table'),footer=root.querySelector('.aom-doc-bottom');
+    const notes=table.nextElementSibling!==footer?table.nextElementSibling:null;
     const rows=Array.from(table.querySelectorAll('tbody tr'));
-    const pageHeight=273*96/25.4;
-    const measure=el=>{if(!el)return 0;const st=getComputedStyle(el);return el.getBoundingClientRect().height+(parseFloat(st.marginTop)||0)+(parseFloat(st.marginBottom)||0);};
-    const firstHeader=measure(head)+measure(title)+measure(grid)+measure(dx);
-    const th=measure(table.querySelector('thead'));
-    const footer=measure(foot)+Math.max(24,6*96/25.4);
-    const rowHeights=rows.map(measure);
-    const notesHeight=measure(notes);
-    const capacity=pageHeight-12; // holgura contra redondeos del motor PDF
-    const groups=[];let current=[],used=firstHeader+th;
-    rows.forEach((row,i)=>{
-      const h=rowHeights[i];
-      if(current.length&&used+h>capacity){groups.push(current);current=[];used=th;}
-      // Si una sola fila es más alta que la hoja, dejar que CSS la fragmente.
-      current.push(row.outerHTML);used+=h;
-    });
-    if(!groups.length||current.length)groups.push(current);
-    // Si el bloque de firma no cabe en la última página, crear una última página exclusiva.
-    if(used+notesHeight+footer>capacity)groups.push([]);
-    const start='<article class="aom-paper" style="'+root.getAttribute('style')+'">';
-    const top=head.outerHTML+title.outerHTML+grid.outerHTML+dx.outerHTML;
-    const tableOpen='<table class="aom-doc-table">'+table.querySelector('thead').outerHTML+'<tbody>';
-    return groups.map((group,i)=>start+(i===0?top:'')+
-      (group.length?tableOpen+group.join('')+'</tbody></table>':'')+
-      (i===groups.length-1?(notes?notes.outerHTML:'')+foot.outerHTML:'')+'</article>').join('');
-  }catch(e){console.warn('IASYN: paginación medida no disponible; se conserva documento original',e);return original;}
+    root.style.minHeight='0';footer.style.marginTop='0';
+    const pxmm=96/25.4, capacity=273*pxmm-12;
+    const h=el=>{if(!el)return 0;const cs=getComputedStyle(el);return el.getBoundingClientRect().height+(parseFloat(cs.marginTop)||0)+(parseFloat(cs.marginBottom)||0);};
+    const topH=h(header)+h(title)+h(grid)+h(dx), th=h(table.querySelector('thead'));
+    const footH=h(footer)+6*pxmm,notesH=h(notes);
+    const rowH=rows.map(h);
+    const pages=[];let group=[],used=topH+th;
+    for(let i=0;i<rows.length;i++){
+      const rh=rowH[i];
+      if(group.length&&used+rh>capacity){pages.push(group);group=[];used=th;}
+      group.push(rows[i].outerHTML);used+=rh;
+    }
+    if(group.length||!pages.length) pages.push(group);
+    // Mantener firma en última hoja: si no cabe, trasladar filas anteriores
+    // a la hoja previa antes de crear una hoja vacía de contenido.
+    while(used+notesH+footH>capacity&&pages[pages.length-1].length>1){
+      const last=pages[pages.length-1];const moved=last.pop();
+      if(pages.length===1){pages.push([moved]);}
+      else {pages.push([moved]);}
+      used=th+h(notes)+h(footer); // recalcular abajo usando alturas reales de filas
+      const idx=rows.findIndex(r=>r.outerHTML===moved);
+      used=th+(idx>=0?rowH[idx]:0);
+      break;
+    }
+    if(used+notesH+footH>capacity&&pages[pages.length-1].length){pages.push([]);}
+    const open='<article class="aom-paper" style="'+esc(root.getAttribute('style')||'')+'">';
+    const top=header.outerHTML+title.outerHTML+grid.outerHTML+dx.outerHTML;
+    const tableStart='<table class="aom-doc-table">'+table.querySelector('thead').outerHTML+'<tbody>';
+    return pages.map((part,i)=>open+(i===0?top:'')+(part.length?tableStart+part.join('')+'</tbody></table>':'')+(i===pages.length-1?(notes?notes.outerHTML:'')+footer.outerHTML:'')+'</article>').join('');
+  }catch(error){console.warn('IASYN: medición A4 no disponible',error);return original;}
   finally{host.remove();}
 }
 
@@ -1286,7 +1260,7 @@ function estilosImpresion(){
   .aom-doc-table th{background:#f8fafc;text-align:left}
   .aom-doc-table thead{display:table-header-group}
   .aom-doc-table tr{break-inside:avoid;page-break-inside:avoid}
-  .aom-doc-bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:6mm;break-inside:avoid;page-break-inside:avoid}
+  .aom-doc-bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:18mm;break-inside:avoid;page-break-inside:avoid}
   .aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.55;overflow-wrap:anywhere}
   .aom-doc-center-contact>div{margin-top:3px}
   .aom-doc-sign{text-align:center;font-size:11.2px;line-height:1.3;break-inside:avoid}
@@ -1299,7 +1273,7 @@ function estilosImpresion(){
   .aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto;background:#eef2f7;min-height:calc(100vh - 60px)}
   .aom-stage{margin:0 auto;width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 6px 24px #0002}
-  .aom-stage .aom-paper{width:100%;min-height:273mm}
+  .aom-stage .aom-paper{width:100%;min-height:273mm;break-after:page}
   @media print{
     html,body{background:#fff!important;overflow:visible!important}
     .aom-print-toolbar{display:none!important}
@@ -1307,7 +1281,7 @@ function estilosImpresion(){
     .aom-stage{zoom:1!important;transform:none!important;width:auto!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;box-shadow:none!important}
     .aom-paper{min-height:273mm!important;width:100%!important;padding:0!important;display:flex!important;flex-direction:column!important;break-after:page!important;page-break-after:always!important}
     .aom-paper:last-child{break-after:auto!important;page-break-after:auto!important}
-    .aom-doc-bottom{margin-top:auto!important;break-inside:avoid!important;page-break-inside:avoid!important}
+    .aom-doc-bottom{margin-top:auto!important;break-inside:avoid!important}
   }`;
 }
 
@@ -1709,9 +1683,9 @@ window.IASYN_ORDENES_MEDICAS={
     obtenerDiagnosticos:()=>state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?diagnosticosUnicosOrden(state.diagnosticos):[],
   obtenerContexto:contexto,
   obtenerItemsPlan:()=>itemsPlanActual(),
-  obtenerDatosEmision:()=>datosDocumentoDesdePlan(state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?diagnosticosElegidosOrden(state.diagnosticos,txt(contexto().id)):[]),
+  obtenerDatosEmision:()=>datosDocumentoDesdePlan(state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?dxElegidosOrden(state.diagnosticos,txt(contexto().id)):[]),
   construirDocumento:docHTML,
-  imprimir:data=>imprimirDocumento(data||datosDocumentoDesdePlan(state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?diagnosticosElegidosOrden(state.diagnosticos,txt(contexto().id)):[]),false)
+  imprimir:data=>imprimirDocumento(data||datosDocumentoDesdePlan(state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?dxElegidosOrden(state.diagnosticos,txt(contexto().id)):[]),false)
 };
 
 if(document.readyState==='loading'){
