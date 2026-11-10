@@ -733,6 +733,11 @@
             <label class="form-label fw-bold">Dirección</label>
             <input id="cfgDireccionClinica" class="form-control" placeholder="Dirección del consultorio">
           </div>
+          <div class="col-md-6">
+            <label class="form-label fw-bold" for="cfgCiudadClinica">Ciudad del centro</label>
+            <input id="cfgCiudadClinica" class="form-control" placeholder="Ej. Guayaquil" autocomplete="address-level2" disabled>
+            <div class="text-muted small mt-1">Campo preparado para conectar su carga y guardado en config-centro.js.</div>
+          </div>
           <div class="col-md-8">
             <label class="form-label fw-bold">Logo URL</label>
             <input id="cfgLogoUrl" class="form-control" placeholder="Pegue aquí el enlace público del logo propio del centro en Drive" oninput="actualizarPreviewLogoCentro()">
