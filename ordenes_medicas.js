@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.3-IASYN-ORDENES-A4-CIE10-CANDIDATO-PRUEBAS';
+const VERSION='1.4.4-IASYN-ORDENES-PAGINACION-CIE10-REVISION';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -54,7 +54,9 @@ const state={
   diagnosticosError:'',
   diagnosticosToken:0,
   diagnosticosSeleccionados:new Set(),
-  diagnosticosSeleccionAtencion:''
+  diagnosticosSeleccionAtencion:'',
+  diagnosticosConocidos:new Set(),
+  diagnosticosExcluidos:new Set()
 };
 
 const txt=v=>String(v??'').trim();
@@ -382,11 +384,19 @@ function claveDiagnosticoOrden(dx){
   return norm(dx.codigo_cie10)+'|'+norm(dx.descripcion);
 }
 function sincronizarSeleccionDiagnosticosOrden(lista,id,reiniciar=false){
-  const anterior=state.diagnosticosSeleccionAtencion===id?state.diagnosticosSeleccionados:null;
   const claves=new Set(diagnosticosUnicosOrden(lista).map(claveDiagnosticoOrden));
-  state.diagnosticosSeleccionados=new Set(
-    !reiniciar&&anterior ? [...anterior].filter(k=>claves.has(k)) : [...claves]
-  );
+  if(reiniciar||state.diagnosticosSeleccionAtencion!==id){
+    state.diagnosticosSeleccionados=new Set(claves);
+    state.diagnosticosConocidos=new Set(claves);
+    state.diagnosticosExcluidos=new Set();
+  }else{
+    // Nuevos CIE-10 seleccionados por defecto; exclusiones manuales se respetan.
+    for(const k of claves){
+      if(!state.diagnosticosConocidos.has(k)&&!state.diagnosticosExcluidos.has(k)) state.diagnosticosSeleccionados.add(k);
+    }
+    state.diagnosticosSeleccionados=new Set([...state.diagnosticosSeleccionados].filter(k=>claves.has(k)));
+    state.diagnosticosConocidos=claves;
+  }
   state.diagnosticosSeleccionAtencion=id;
 }
 function diagnosticosElegidosOrden(lista,id){
@@ -395,11 +405,11 @@ function diagnosticosElegidosOrden(lista,id){
 }
 function selectorDiagnosticosOrden(lista){
   const dx=diagnosticosUnicosOrden(lista);
-  if(!dx.length) return '<div>No hay diagnósticos CIE-10 registrados.</div>';
+  if(!dx.length) return '<div>No hay diagnósticos CIE-10 guardados en esta atención. Actualice después de registrarlos.</div>';
   return '<div class="aom-dx-selector"><div>Marque los diagnósticos que aparecerán en la nueva orden médica:</div>'+
-    dx.map((x,i)=>'<label class="aom-dx-choice" style="display:flex;align-items:start;gap:8px;margin:6px 0;cursor:pointer"><input type="checkbox" data-aom-dx-index="'+i+'" '+
-      (state.diagnosticosSeleccionados.has(claveDiagnosticoOrden(x))?'checked':'')+
-      '> <span><strong>'+esc(x.codigo_cie10||'Sin código')+'</strong> — '+esc(x.descripcion)+'</span></label>').join('')+
+    dx.map(x=>{const k=claveDiagnosticoOrden(x);return '<label class="aom-dx-choice" style="display:flex;align-items:start;gap:8px;margin:6px 0;cursor:pointer"><input type="checkbox" data-aom-dx-key="'+esc(k)+'" '+
+      (state.diagnosticosSeleccionados.has(k)?'checked':'')+
+      '> <span><strong>'+esc(x.codigo_cie10||'Sin código')+'</strong> — '+esc(x.descripcion)+'</span></label>';}).join('')+
     '</div>';
 }
 async function consultarDiagnosticosPersistidos(id){
@@ -802,7 +812,7 @@ function render(){
   });
   app.innerHTML=`
     <div class="aom-shell">
-      <div class="aom-dx-live"><strong>Diagnósticos de esta atención</strong>${state.diagnosticosCargando?'<div>Consultando diagnósticos CIE-10 guardados…</div>':state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?selectorDiagnosticosOrden(state.diagnosticos):`<div class="aom-dx-error">${esc(state.diagnosticosError||'Diagnósticos pendientes de verificación.')}</div>`}</div>
+      <div class="aom-dx-live"><strong>Diagnósticos de esta atención</strong> <button type="button" id="aomRefrescarDx" class="aom-secondary" style="margin-left:8px;padding:4px 9px">Actualizar CIE-10</button>${state.diagnosticosCargando?'<div>Consultando diagnósticos CIE-10 guardados…</div>':state.diagnosticosVerificados&&state.diagnosticosAtencion===txt(contexto().id)?selectorDiagnosticosOrden(state.diagnosticos):`<div class="aom-dx-error">${esc(state.diagnosticosError||'Diagnósticos pendientes de verificación.')}</div>`}</div>
       <div class="aom-head">
         <div>
           <div class="aom-title"><i class="bi bi-file-earmark-medical"></i> Documento formal de orden médica</div>
@@ -820,17 +830,17 @@ function render(){
     </div>`;
 
   document.getElementById('iasynOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
+  document.getElementById('aomRefrescarDx')?.addEventListener('click',()=>cargarDiagnosticosOrden(contexto().id));
   if(state.ultimoAviso){
     const a=document.getElementById('iasynOrdenMedicaAviso');
     if(a){a.className='aom-notice '+state.ultimoAviso.tipo;a.textContent=state.ultimoAviso.mensaje;}
   }
-  app.querySelectorAll('[data-aom-dx-index]').forEach(input=>input.addEventListener('change',()=>{
+  app.querySelectorAll('[data-aom-dx-key]').forEach(input=>input.addEventListener('change',()=>{
     if(!state.diagnosticosVerificados||state.diagnosticosSeleccionAtencion!==txt(contexto().id)) return;
-    const dx=state.diagnosticos[Number(input.dataset.aomDxIndex)];
-    if(!dx) return;
-    const clave=claveDiagnosticoOrden(dx);
-    if(input.checked) state.diagnosticosSeleccionados.add(clave);
-    else state.diagnosticosSeleccionados.delete(clave);
+    const clave=input.getAttribute('data-aom-dx-key');
+    if(!diagnosticosUnicosOrden(state.diagnosticos).some(x=>claveDiagnosticoOrden(x)===clave)) return;
+    if(input.checked){state.diagnosticosSeleccionados.add(clave);state.diagnosticosExcluidos.delete(clave);}
+    else {state.diagnosticosSeleccionados.delete(clave);state.diagnosticosExcluidos.add(clave);}
   }));
   app.querySelectorAll('[data-aom-preview]').forEach(b=>b.addEventListener('click',()=>vistaPreviaPorId(b.dataset.aomPreview)));
   app.querySelectorAll('[data-aom-editar]').forEach(b=>b.addEventListener('click',()=>editarFormal(b.dataset.aomEditar)));
@@ -1172,11 +1182,12 @@ function imprimirPorId(id){
    return txt(valor)?'<div class="aom-contact-row">'+iconoInstitucional(tipo)+'<span>'+esc(valor)+'</span></div>':'';
  }
 
-function docHTML(data){
+function docHTMLBase(data){
   const d=data.detalle_json||{};
   // Documento emitido: preservar la instantánea institucional original.
   // No sustituir datos históricos con cambios posteriores de Configuración del Centro.
   const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
+  if(!txt(centro.ciudad)) centro.ciudad=txt(state.configuracion?.ciudad||normalizarConfig(configGlobal()).ciudad);
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
   const codigosCieElegidos=new Set(diagnosticosUnicosOrden(d.diagnosticos||[]).map(x=>norm(x.codigo_cie10)));
   const mostrarCieItem=o=>!d.seleccion_cie10_orden||codigosCieElegidos.has(norm(o.codigo_cie10));
@@ -1197,13 +1208,63 @@ function docHTML(data){
   </article>`;
 }
 
+/* Paginación quirúrgica A4: medir la altura REAL del HTML antes de generar
+   páginas estáticas. El HTML firmado no lleva scripts ni depende del motor de firma. */
+function docHTML(data){
+  const original=docHTMLBase(data);
+  if(typeof document==='undefined'||!document.body) return original;
+  const host=document.createElement('div');
+  host.setAttribute('aria-hidden','true');
+  host.style.cssText='position:absolute;left:-100000px;top:0;width:180mm;visibility:hidden;pointer-events:none;z-index:-1';
+  const style=document.createElement('style');style.textContent=estilosImpresion();
+  host.appendChild(style);
+  const shell=document.createElement('div');shell.innerHTML=original;host.appendChild(shell);
+  document.body.appendChild(host);
+  try{
+    const root=shell.querySelector('.aom-paper');
+    const head=root.querySelector('.aom-doc-head');
+    const title=root.querySelector('.aom-doc-title');
+    const grid=root.querySelector('.aom-doc-grid');
+    const dx=root.querySelector('.aom-diagnosticos');
+    const table=root.querySelector('.aom-doc-table');
+    const foot=root.querySelector('.aom-doc-bottom');
+    const notes=table.nextElementSibling!==foot?table.nextElementSibling:null;
+    const rows=Array.from(table.querySelectorAll('tbody tr'));
+    const pageHeight=273*96/25.4;
+    const measure=el=>{if(!el)return 0;const st=getComputedStyle(el);return el.getBoundingClientRect().height+(parseFloat(st.marginTop)||0)+(parseFloat(st.marginBottom)||0);};
+    const firstHeader=measure(head)+measure(title)+measure(grid)+measure(dx);
+    const th=measure(table.querySelector('thead'));
+    const footer=measure(foot)+Math.max(24,6*96/25.4);
+    const rowHeights=rows.map(measure);
+    const notesHeight=measure(notes);
+    const capacity=pageHeight-12; // holgura contra redondeos del motor PDF
+    const groups=[];let current=[],used=firstHeader+th;
+    rows.forEach((row,i)=>{
+      const h=rowHeights[i];
+      if(current.length&&used+h+footer>capacity){groups.push(current);current=[];used=th;}
+      // Si una sola fila es más alta que la hoja, dejar que CSS la fragmente.
+      current.push(row.outerHTML);used+=h;
+    });
+    if(!groups.length||current.length)groups.push(current);
+    // Si el bloque de firma no cabe en la última página, crear una última página exclusiva.
+    if(used+notesHeight+footer>capacity)groups.push([]);
+    const start='<article class="aom-paper" style="'+root.getAttribute('style')+'">';
+    const top=head.outerHTML+title.outerHTML+grid.outerHTML+dx.outerHTML;
+    const tableOpen='<table class="aom-doc-table">'+table.querySelector('thead').outerHTML+'<tbody>';
+    return groups.map((group,i)=>start+(i===0?top:'')+
+      (group.length?tableOpen+group.join('')+'</tbody></table>':'')+
+      (i===groups.length-1?(notes?notes.outerHTML:'')+foot.outerHTML:'')+'</article>').join('');
+  }catch(e){console.warn('IASYN: paginación medida no disponible; se conserva documento original',e);return original;}
+  finally{host.remove();}
+}
+
 function estilosImpresion(){
   /* HTML autocontenido y estático: sin scripts, fuentes externas ni CSS de la interfaz ERP. */
   return `
   @page{size:A4 portrait;margin:12mm 15mm}
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111827}
-  .aom-paper{width:100%;min-height:0;margin:0;padding:0;position:relative;display:block;background:#fff;color:#111827;font-family:Arial,Helvetica,sans-serif}
+  .aom-paper{width:100%;min-height:273mm;margin:0;padding:0;position:relative;display:flex;flex-direction:column;background:#fff;color:#111827;font-family:Arial,Helvetica,sans-serif}
   .aom-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid #8b1e5a;padding-bottom:10px;margin-bottom:18px;break-inside:avoid}
   .aom-doc-head.no-logo{grid-template-columns:minmax(0,1fr) auto}
   .aom-logo-wrap{width:60px;height:60px;display:block;overflow:hidden}
@@ -1223,7 +1284,7 @@ function estilosImpresion(){
   .aom-doc-table th{background:#f8fafc;text-align:left}
   .aom-doc-table thead{display:table-header-group}
   .aom-doc-table tr{break-inside:avoid;page-break-inside:avoid}
-  .aom-doc-bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:9mm;padding-top:6mm;break-inside:avoid;page-break-inside:avoid}
+  .aom-doc-bottom{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15mm;align-items:end;margin-top:auto;padding-top:6mm;break-inside:avoid;page-break-inside:avoid}
   .aom-doc-center-contact{font-size:10.2px;color:#475569;line-height:1.55;overflow-wrap:anywhere}
   .aom-doc-center-contact>div{margin-top:3px}
   .aom-doc-sign{text-align:center;font-size:11.2px;line-height:1.3;break-inside:avoid}
@@ -1236,14 +1297,15 @@ function estilosImpresion(){
   .aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto;background:#eef2f7;min-height:calc(100vh - 60px)}
   .aom-stage{margin:0 auto;width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 6px 24px #0002}
-  .aom-stage .aom-paper{width:100%;min-height:0}
+  .aom-stage .aom-paper{width:100%;min-height:273mm}
   @media print{
     html,body{background:#fff!important;overflow:visible!important}
     .aom-print-toolbar{display:none!important}
     .aom-view{padding:0!important;overflow:visible!important;background:#fff!important}
     .aom-stage{zoom:1!important;transform:none!important;width:auto!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;box-shadow:none!important}
-    .aom-paper{min-height:0!important;width:100%!important;padding:0!important;display:block!important;break-after:auto!important}
-    .aom-doc-bottom{margin-top:9mm!important;break-inside:avoid!important;page-break-inside:avoid!important}
+    .aom-paper{min-height:273mm!important;width:100%!important;padding:0!important;display:flex!important;flex-direction:column!important;break-after:page!important;page-break-after:always!important}
+    .aom-paper:last-child{break-after:auto!important;page-break-after:auto!important}
+    .aom-doc-bottom{margin-top:auto!important;break-inside:avoid!important;page-break-inside:avoid!important}
   }`;
 }
 
