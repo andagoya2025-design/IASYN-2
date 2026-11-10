@@ -411,7 +411,11 @@ async function cargarDiagnosticosOrden(id){
   const token=++state.diagnosticosToken;
   state.diagnosticos=[];
   state.diagnosticosAtencion=id;
-  if(state.diagnosticosSeleccionAtencion!==id) sincronizarDxOrden([],id);
+  if(state.diagnosticosSeleccionAtencion!==id){
+    state.diagnosticosSeleccionAtencion=id;
+    state.diagnosticosExcluidos=new Set();
+    state.diagnosticosSeleccionados=new Set();
+  }
   state.diagnosticosVerificados=false;
   state.diagnosticosCargando=!!id;
   state.diagnosticosError='';
@@ -815,7 +819,8 @@ function render(){
   document.getElementById('iasynOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
   app.querySelectorAll('[data-aom-dx-key]').forEach(input=>input.addEventListener('change',()=>{
     const id=txt(contexto().id),key=input.getAttribute('data-aom-dx-key');
-    if(!state.diagnosticosVerificados||id!==state.diagnosticosSeleccionAtencion){input.checked=!input.checked;return;}
+    if(!state.diagnosticosVerificados||id!==state.diagnosticosSeleccionAtencion){return;}
+    // La interacción del usuario es la autoridad; no se invierte artificialmente el visto.
     if(input.checked){state.diagnosticosExcluidos.delete(key);state.diagnosticosSeleccionados.add(key);}
     else{state.diagnosticosExcluidos.add(key);state.diagnosticosSeleccionados.delete(key);}
   }));
@@ -1203,13 +1208,13 @@ function docHTML(data){
     if(!root||!table||!footer) throw Error('Estructura de documento incompleta');
     root.style.cssText+=';min-height:0!important;height:auto!important;display:block!important';
     footer.style.cssText+=';margin-top:0!important';
-    const head=Array.from(root.children).filter(el=>el!==table&&el!==footer&&el.compareDocumentPosition(table)&Node.DOCUMENT_POSITION_FOLLOWING);
-    const notes=Array.from(root.children).filter(el=>el!==table&&el!==footer&&el.compareDocumentPosition(table)&Node.DOCUMENT_POSITION_PRECEDING);
+    const head=Array.from(root.children).filter(el=>el!==table&&el!==footer&&Boolean(el.compareDocumentPosition(table)&Node.DOCUMENT_POSITION_FOLLOWING));
+    const notes=Array.from(root.children).filter(el=>el!==table&&el!==footer&&Boolean(el.compareDocumentPosition(table)&Node.DOCUMENT_POSITION_PRECEDING));
     const rows=Array.from(table.tBodies[0]?.rows||[]);
     const mm=document.createElement('div');mm.style.cssText='height:100mm;width:1px;position:absolute';host.appendChild(mm);
     const pxmm=mm.getBoundingClientRect().height/100;
     if(!(pxmm>0)) throw Error('No se pudo medir la escala A4');
-    const capacity=273*pxmm-3; // 297mm menos 12mm superior e inferior, tolerancia de impresión
+    const capacity=273*pxmm-6; // 297mm menos 12mm superior e inferior, tolerancia de impresión
     const height=el=>{
       if(!el)return 0;
       const cs=getComputedStyle(el);
@@ -1322,14 +1327,14 @@ function estilosImpresion(){
   .aom-print-toolbar .primary{background:#8b1e5a;color:#fff}
   .aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto;background:#eef2f7;min-height:calc(100vh - 60px)}
-  .aom-stage{margin:0 auto;width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 6px 24px #0002}
-  .aom-stage .aom-paper{width:100%;min-height:273mm;break-after:page}.aom-stage .aom-paper:last-child{break-after:auto}
+  .aom-stage{margin:0 auto;width:210mm;min-height:0;background:transparent;padding:0;box-shadow:none}
+  .aom-stage .aom-paper{width:210mm;min-height:297mm;height:297mm;max-height:297mm;overflow:hidden;padding:12mm 15mm;background:#fff;margin:0 auto 12px;box-shadow:0 6px 24px #0002;break-after:page}.aom-stage .aom-paper:last-child{break-after:auto}
   @media print{
     html,body{background:#fff!important;overflow:visible!important}
     .aom-print-toolbar{display:none!important}
     .aom-view{padding:0!important;overflow:visible!important;background:#fff!important}
     .aom-stage{zoom:1!important;transform:none!important;width:auto!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;box-shadow:none!important}
-    .aom-paper{min-height:273mm!important;width:100%!important;padding:0!important;display:flex!important;flex-direction:column!important;break-after:page!important;page-break-after:always!important}
+    .aom-paper{min-height:273mm!important;height:273mm!important;max-height:273mm!important;overflow:visible!important;width:100%!important;padding:0!important;display:flex!important;flex-direction:column!important;break-after:page!important;page-break-after:always!important}
     .aom-paper:last-child{break-after:auto!important;page-break-after:auto!important}
     .aom-doc-bottom{margin-top:auto!important;break-inside:avoid!important}.aom-doc-table{flex:none!important}
   }`;
