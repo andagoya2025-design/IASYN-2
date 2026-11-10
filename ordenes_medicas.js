@@ -27,7 +27,7 @@
 
 if(window.IASYN_ORDENES_MEDICAS?.version) return;
 
-const VERSION='1.4.3-BASE06-A4-CIE10-CANDIDATA';
+const VERSION='1.4.4-BASE07-CIE10-CIUDAD-MARGEN';
 const JSON_VERSION='IASYN_ORDEN_MEDICA_JSON_V1';
 
 const state={
@@ -349,6 +349,15 @@ function itemsUnicos(lista){
   return out;
 }
 
+/* Formato exclusivamente visual: nunca reescribe el código persistido. */
+function cie10VisualOrden(valor){
+  const codigo=txt(valor).toUpperCase().replace(/\s+/g,'');
+  if(/^[A-Z][0-9]{2}[0-9A-Z]{1,4}$/.test(codigo)) return codigo.slice(0,3)+'.'+codigo.slice(3);
+  return codigo;
+}
+function cie10ClaveOrden(valor){
+  return cie10VisualOrden(valor).replace(/\./g,'');
+}
 /* CIE-10: solo registros persistidos y activos de la atención exacta. */
 function normalizarDiagnosticoOrden(d){
   d=d||{};
@@ -371,7 +380,7 @@ function diagnosticosUnicosOrden(lista){
   (Array.isArray(lista)?lista:[]).forEach(d=>{
     const x=normalizarDiagnosticoOrden(d);
     if(!x) return;
-    const k=norm(x.codigo_cie10)+'|'+norm(x.descripcion);
+    const k=norm(cie10ClaveOrden(x.codigo_cie10))+'|'+norm(x.descripcion);
     if(vistos.has(k)) return;
     vistos.add(k);salida.push(x);
   });
@@ -389,7 +398,7 @@ async function consultarDiagnosticosPersistidos(id){
   return diagnosticosUnicosOrden(lista);
 }
 function claveDiagnosticoOrden(d){
-  return norm(d.codigo_cie10)+'|'+norm(d.descripcion);
+  return norm(cie10ClaveOrden(d.codigo_cie10))+'|'+norm(d.descripcion);
 }
 function reconciliarSeleccionDiagnosticos(lista,id){
   if(state.diagnosticosSeleccionAtencion!==id){
@@ -410,7 +419,7 @@ function bloqueSeleccionDiagnosticosOrden(lista){
   return lista.map((d,i)=>{
     const k=claveDiagnosticoOrden(d);
     const marcado=state.diagnosticosSeleccionados.has(k)&&!state.diagnosticosExcluidos.has(k);
-    return `<label class="aom-dx-choice"><input type="checkbox" data-aom-dx-key="${esc(k)}" ${marcado?'checked':''}><span><strong>${esc(d.codigo_cie10||'Sin código')}</strong> — ${esc(d.descripcion||'')}${d.principal?' (Principal)':''}</span></label>`;
+    return `<label class="aom-dx-choice"><input type="checkbox" data-aom-dx-key="${esc(k)}" ${marcado?'checked':''}><span><strong>${esc(cie10VisualOrden(d.codigo_cie10)||'Sin código')}</strong> — ${esc(d.descripcion||'')}${d.principal?' (Principal)':''}</span></label>`;
   }).join('');
 }
 async function cargarDiagnosticosOrden(id){
@@ -439,7 +448,7 @@ async function cargarDiagnosticosOrden(id){
 }
 function bloqueDiagnosticosOrden(lista){
   const dx=diagnosticosUnicosOrden(lista);
-  return `<section class="aom-diagnosticos"><div class="aom-diagnosticos-title">DIAGNÓSTICOS CIE-10</div>${dx.length?`<ol>${dx.map(x=>`<li><strong>${esc(x.codigo_cie10||'Sin código')}</strong>${x.descripcion?' — '+esc(x.descripcion):''}${x.principal?' <span>(Principal)</span>':''}${x.tipo_diagnostico?' · '+esc(x.tipo_diagnostico):''}</li>`).join('')}</ol>`:'<div>Sin diagnósticos CIE-10 registrados en esta atención.</div>'}</section>`;
+  return `<section class="aom-diagnosticos"><div class="aom-diagnosticos-title">DIAGNÓSTICOS CIE-10</div>${dx.length?`<ol>${dx.map(x=>`<li><strong>${esc(cie10VisualOrden(x.codigo_cie10)||'Sin código')}</strong>${x.descripcion?' — '+esc(x.descripcion):''}${x.principal?' <span>(Principal)</span>':''}${x.tipo_diagnostico?' · '+esc(x.tipo_diagnostico):''}</li>`).join('')}</ol>`:'<div>Sin diagnósticos CIE-10 registrados en esta atención.</div>'}</section>`;
 }
 
 function contextoPlanSeguro(ctx){
@@ -823,6 +832,7 @@ function render(){
     const k=input.getAttribute('data-aom-dx-key');
     if(input.checked){state.diagnosticosExcluidos.delete(k);state.diagnosticosSeleccionados.add(k);}
     else{state.diagnosticosSeleccionados.delete(k);state.diagnosticosExcluidos.add(k);}
+    input.checked=state.diagnosticosSeleccionados.has(k)&&!state.diagnosticosExcluidos.has(k);
   }));
   document.getElementById('iasynOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
   if(state.ultimoAviso){
@@ -1175,7 +1185,7 @@ function docHTMLBase06(data){
   // No sustituir datos históricos con cambios posteriores de Configuración del Centro.
   const centro=Object.assign({},normalizarConfig(configGlobal()),state.configuracion||{},d.centro||{});
   const medico=d.medico||{}; const items=itemsUnicos(d.items||[]);
-  const ciudad=txt(centro.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
+  const ciudad=txt(centro.ciudad||state.configuracion?.ciudad); const color=txt(centro.colorPrincipal)||'#8b1e5a'; const logo=txt(centro.logo);
   const ubicacion=[centro.direccion,centro.ciudad,centro.provincia,centro.pais].map(txt).filter(Boolean).join(' · ');
   const contactoInstitucional=filaContactoInstitucional('ubicacion',ubicacion)+filaContactoInstitucional('correo',centro.email)+filaContactoInstitucional('telefono',centro.telefono)+filaContactoInstitucional('web',centro.web);
   const registros=[medico.registro_msp?`Registro MSP/ACESS: ${medico.registro_msp}`:'',medico.registro_senescyt?`Registro SENESCYT: ${medico.registro_senescyt}`:''].filter(Boolean);
@@ -1186,7 +1196,7 @@ function docHTMLBase06(data){
     <div class="aom-doc-title">ORDEN MÉDICA</div>
     <section class="aom-doc-grid"><div><span class="aom-doc-label">Paciente:</span> ${esc(data.nombre_paciente||d.paciente?.nombre||'—')}</div><div><span class="aom-doc-label">Identificación:</span> ${esc(data.numero_documento||d.paciente?.numero_documento||'—')}</div><div><span class="aom-doc-label">Historia clínica:</span> ${esc(data.id_historia||d.historia?.numero_historia||d.historia?.id_historia||'—')}</div><div><span class="aom-doc-label">Consulta:</span> #${esc(data.numero_consulta||d.numero_consulta||'—')}</div><div><span class="aom-doc-label">ID orden:</span> ${esc(data.id_orden||'—')}</div><div><span class="aom-doc-label">Versión:</span> ${esc(data.version||1)}</div></section>
     ${bloqueDiagnosticosOrden(d.diagnosticos||[])}
-    <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(o.codigo_cie10)}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
+    <table class="aom-doc-table"><thead><tr><th style="width:40px">#</th><th>Examen / procedimiento</th><th style="width:34mm">Categoría</th><th>Observación</th></tr></thead><tbody>${items.map((o,i)=>`<tr><td>${i+1}</td><td><strong>${esc(o.orden)}</strong>${o.codigo_cie10?`<br><small>CIE-10: ${esc(cie10VisualOrden(o.codigo_cie10))}${o.diagnostico?` · ${esc(o.diagnostico)}`:''}</small>`:''}</td><td>${esc(o.cat||'OTROS')}</td><td>${esc(o.obs||'')}</td></tr>`).join('')}</tbody></table>
     ${txt(d.observaciones_generales)?`<div style="margin-top:15px;font-size:11.5px"><strong>Observaciones:</strong><br>${esc(d.observaciones_generales)}</div>`:''}
     <section class="aom-doc-bottom"><div class="aom-doc-center-contact">${contactoInstitucional}${centro.razon_social?`<div class="aom-contact-legal">${esc(centro.razon_social)}${centro.ruc?' · RUC '+esc(centro.ruc):''}</div>`:''}</div><div class="aom-doc-sign"><div class="aom-doc-line"></div><strong>${esc(data.nombre_medico||medico.nombre||'Profesional tratante')}</strong>${(data.especialidad||medico.especialidad)?`<br><span>${esc(data.especialidad||medico.especialidad)}</span>`:''}${registros.map(x=>`<br><span>${esc(x)}</span>`).join('')}${medico.email?`<br><span>${esc(medico.email)}</span>`:''}<br><span>Firma y sello</span></div></section>
   </article>`;
@@ -1218,9 +1228,9 @@ function docHTML(data){
   });
   // 267mm printable height: first-page heading ~65-90mm, footer ~35mm.
   const dxExtra=(d.diagnosticos||[]).length*5;
-  const firstBudget=Math.max(90,170-dxExtra);
-  const laterBudget=225;
-  const finalReserve=43;
+  const firstBudget=Math.max(82,162-dxExtra);
+  const laterBudget=217;
+  const finalReserve=51;
   const chunks=[];let cur=[],used=0,budget=firstBudget;
   for(let i=0;i<items.length;i++){
     const h=estimated[i];
@@ -1261,7 +1271,7 @@ function estilosImpresion(){
   @page{size:A4 portrait;margin:12mm 15mm}
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#111827}
-  .aom-paper{width:180mm;height:273mm;min-height:273mm;max-height:273mm;margin:0;padding:0;position:relative;display:flex;flex-direction:column;overflow:hidden;background:#fff;color:#111827;font-family:Arial,Helvetica,sans-serif}
+  .aom-paper{width:180mm;height:265mm;min-height:265mm;max-height:265mm;margin:0;padding:0 0 8mm;position:relative;display:flex;flex-direction:column;overflow:hidden;background:#fff;color:#111827;font-family:Arial,Helvetica,sans-serif}
   .aom-doc-head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;border-bottom:2.5px solid #8b1e5a;padding-bottom:10px;margin-bottom:18px;break-inside:avoid}
   .aom-doc-head.no-logo{grid-template-columns:minmax(0,1fr) auto}
   .aom-logo-wrap{width:60px;height:60px;display:block;overflow:hidden}
@@ -1295,13 +1305,13 @@ function estilosImpresion(){
   .aom-print-toolbar .secondary{background:#f3f4f6;color:#111827}
   .aom-view{padding:18px;overflow:auto;background:#eef2f7;min-height:calc(100vh - 60px)}
   .aom-stage{margin:0 auto;width:210mm;min-height:297mm;background:#fff;padding:12mm 15mm;box-shadow:0 6px 24px #0002}
-  .aom-stage .aom-paper{width:180mm;min-height:273mm;margin-bottom:12mm}
+  .aom-stage .aom-paper{width:180mm;min-height:265mm;margin-bottom:12mm}
   @media print{
     html,body{background:#fff!important;overflow:visible!important}
     .aom-print-toolbar{display:none!important}
     .aom-view{padding:0!important;overflow:visible!important;background:#fff!important}
     .aom-stage{zoom:1!important;transform:none!important;width:auto!important;min-height:0!important;height:auto!important;margin:0!important;padding:0!important;box-shadow:none!important}
-    .aom-paper{height:273mm!important;min-height:273mm!important;max-height:273mm!important;width:180mm!important;padding:0!important;display:flex!important;flex-direction:column!important;break-after:page;page-break-after:always}
+    .aom-paper{height:265mm!important;min-height:265mm!important;max-height:265mm!important;width:180mm!important;padding:0 0 8mm!important;display:flex!important;flex-direction:column!important;break-after:page;page-break-after:always}
     .aom-paper:last-child{break-after:auto;page-break-after:auto}
     .aom-doc-bottom{margin-top:auto!important;break-inside:avoid!important}
   }`;
