@@ -836,9 +836,11 @@ function render(){
     if(a){a.className='aom-notice '+state.ultimoAviso.tipo;a.textContent=state.ultimoAviso.mensaje;}
   }
   app.querySelectorAll('[data-aom-dx-key]').forEach(input=>input.addEventListener('change',()=>{
-    if(!state.diagnosticosVerificados||state.diagnosticosSeleccionAtencion!==txt(contexto().id)) return;
     const clave=input.getAttribute('data-aom-dx-key');
-    if(!diagnosticosUnicosOrden(state.diagnosticos).some(x=>claveDiagnosticoOrden(x)===clave)) return;
+    if(!state.diagnosticosVerificados||!diagnosticosUnicosOrden(state.diagnosticos).some(x=>claveDiagnosticoOrden(x)===clave)){
+      input.checked=state.diagnosticosSeleccionados.has(clave);
+      return;
+    }
     if(input.checked){state.diagnosticosSeleccionados.add(clave);state.diagnosticosExcluidos.delete(clave);}
     else {state.diagnosticosSeleccionados.delete(clave);state.diagnosticosExcluidos.add(clave);}
   }));
@@ -1241,7 +1243,7 @@ function docHTML(data){
     const groups=[];let current=[],used=firstHeader+th;
     rows.forEach((row,i)=>{
       const h=rowHeights[i];
-      if(current.length&&used+h+footer>capacity){groups.push(current);current=[];used=th;}
+      if(current.length&&used+h>capacity){groups.push(current);current=[];used=th;}
       // Si una sola fila es más alta que la hoja, dejar que CSS la fragmente.
       current.push(row.outerHTML);used+=h;
     });
