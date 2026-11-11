@@ -1982,7 +1982,7 @@
       d.open();
       d.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><style>'+recEstilosImpresion()+
         '.ar-page{width:100%!important;height:263mm!important;min-height:263mm!important;max-height:263mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}'+
-        '.ar-page-main{width:100%;flex:0 0 auto;display:flow-root}.ar-page .ar-firma-area{padding-top:18mm!important;padding-bottom:4mm!important;margin-top:auto!important;transform:translateY(-4mm)!important}'+
+        '.ar-page-main{width:100%;flex:0 0 auto;display:flow-root}.ar-page .ar-firma-area{padding-top:18mm!important;margin-top:auto!important}'+
         '</style></head><body></body></html>');
       d.close();
       const plantilla=d.createElement('template');plantilla.innerHTML=html;
@@ -2002,14 +2002,10 @@
       crearPagina();
       const mm=d.createElement('div');mm.style.cssText='height:1mm;width:1mm;position:absolute;visibility:hidden';d.body.appendChild(mm);
       const pxmm=mm.getBoundingClientRect().height||3.779527559;mm.remove();
-      const tempFooter=footerOriginal.cloneNode(true);tempFooter.style.marginTop='0';tempFooter.style.paddingTop='18mm';tempFooter.style.paddingBottom='4mm';
+      const tempFooter=footerOriginal.cloneNode(true);tempFooter.style.marginTop='0';tempFooter.style.paddingTop='18mm';tempFooter.style.paddingBottom='8mm';
       paginaActual.appendChild(tempFooter);
-      const altoFooterVisual=tempFooter.getBoundingClientRect().height;
+      const altoFooter=tempFooter.getBoundingClientRect().height;
       tempFooter.remove();
-      // Reserva preventiva para el QR agregado posteriormente por IASYN.
-      // Validar 35 mm en Edge/Windows antes de usar en produccion.
-      const reservaQRPosterior=35*pxmm;
-      const altoFooter=altoFooterVisual+reservaQRPosterior;
       // Altura segura 263 mm: margen interior para los distintos motores de PDF.
       // No se modifica @page ni la geometría externa de A4.
       const maximo=(263*pxmm)-(4*pxmm); // 259 mm de cuerpo clínico por hoja.
@@ -2136,7 +2132,7 @@
       // Reserva del pie SOLO en la última página. El resto conserva máxima capacidad.
       // Si queda un espacio insuficiente, trasladar los últimos párrafos completos
       // a una nueva última página, manteniendo el orden y la identidad de los bloques.
-      const maximaFinal=(263*pxmm)-(3*pxmm);
+      const maximaFinal=(263*pxmm)-(11*pxmm);
       if(cuerpoActual.getBoundingClientRect().height + altoFooter > maximaFinal){
         const anterior=cuerpoActual;
         moverPagina();
@@ -2179,7 +2175,7 @@
           throw new Error('El pie excede la última página después de reubicar contenido');
         }
       }
-      paginaActual.appendChild(footerOriginal.cloneNode(true));
+      const pieFinal=footerOriginal.cloneNode(true);pieFinal.style.paddingBottom="8mm";paginaActual.appendChild(pieFinal);
       /* V1.5.2 — inspección preventiva del cierre: nunca entregar al motor
          un artículo final vacío cuyo único contenido sea el pie. Si se
          produce por falta de altura utilizable, el respaldo seguro fluirá
@@ -2386,7 +2382,7 @@ body{overflow-x:hidden}
 .ar-paginas .ar-page{height:263mm!important;min-height:263mm!important;max-height:263mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}
 .ar-paginas .ar-page:last-child{break-after:auto;page-break-after:auto}
 .ar-paginas .ar-page-main{display:flow-root;width:100%;flex:0 0 auto}
-.ar-paginas .ar-page .ar-firma-area{padding-top:18mm!important;padding-bottom:4mm!important;margin-top:auto!important;transform:translateY(-4mm)!important}
+.ar-paginas .ar-page .ar-firma-area{padding-top:18mm!important;padding-bottom:8mm!important;margin-top:auto!important}
 /* En flujo de respaldo, el documento sigue teniendo páginas A4 pero el cierre
    se mantiene con el texto que lo precede, nunca en una hoja aislada por flex. */
 .ar-flujo-respaldo{display:block!important;min-height:0!important;height:auto!important}
