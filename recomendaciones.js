@@ -1982,7 +1982,7 @@
       d.open();
       d.write('<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><style>'+recEstilosImpresion()+
         '.ar-page{width:100%!important;height:263mm!important;min-height:263mm!important;max-height:263mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}'+
-        '.ar-page-main{width:100%;flex:0 0 auto;display:flow-root}.ar-page .ar-firma-area{padding-top:18mm!important;margin-top:auto!important}'+
+        '.ar-page-main{width:100%;flex:0 0 auto;display:flow-root}.ar-page .ar-firma-area{padding-top:18mm!important;padding-bottom:4mm!important;margin-top:auto!important}'+
         '</style></head><body></body></html>');
       d.close();
       const plantilla=d.createElement('template');plantilla.innerHTML=html;
@@ -2002,7 +2002,7 @@
       crearPagina();
       const mm=d.createElement('div');mm.style.cssText='height:1mm;width:1mm;position:absolute;visibility:hidden';d.body.appendChild(mm);
       const pxmm=mm.getBoundingClientRect().height||3.779527559;mm.remove();
-      const tempFooter=footerOriginal.cloneNode(true);tempFooter.style.marginTop='0';tempFooter.style.paddingTop='18mm';
+      const tempFooter=footerOriginal.cloneNode(true);tempFooter.style.marginTop='0';tempFooter.style.paddingTop='18mm';tempFooter.style.paddingBottom='4mm';
       paginaActual.appendChild(tempFooter);
       const altoFooterVisual=tempFooter.getBoundingClientRect().height;
       tempFooter.remove();
@@ -2386,7 +2386,7 @@ body{overflow-x:hidden}
 .ar-paginas .ar-page{height:263mm!important;min-height:263mm!important;max-height:263mm!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}
 .ar-paginas .ar-page:last-child{break-after:auto;page-break-after:auto}
 .ar-paginas .ar-page-main{display:flow-root;width:100%;flex:0 0 auto}
-.ar-paginas .ar-page .ar-firma-area{padding-top:18mm!important;margin-top:auto!important}
+.ar-paginas .ar-page .ar-firma-area{padding-top:18mm!important;padding-bottom:4mm!important;margin-top:auto!important}
 /* En flujo de respaldo, el documento sigue teniendo páginas A4 pero el cierre
    se mantiene con el texto que lo precede, nunca en una hoja aislada por flex. */
 .ar-flujo-respaldo{display:block!important;min-height:0!important;height:auto!important}
