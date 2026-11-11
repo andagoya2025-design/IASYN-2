@@ -1494,7 +1494,8 @@ body{overflow-x:hidden}
   min-width:0;
   min-height:265mm;
   margin:0;
-  padding:0;
+  padding:0 0 22mm;
+  /* Zona inferior reservada para firma/QR, dentro del A4 útil. */
   background:#fff;
   overflow:visible;
   position:relative;
@@ -1563,6 +1564,8 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
   iPhone / Android reciben el mismo documento; solo cambia la escala del visor.
 */
 
+/* Firma IASYN: reserva inferior real de 22 mm en vista, impresión y HTML enviado al agente.
+   No se alteran las coordenadas P12 ni el reconocimiento del motor. */
 /* Impresión: el área útil la define @page. No se vuelve a forzar 210 mm en html/body. */
 @media print{
   html,body{
@@ -1582,7 +1585,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     min-width:0!important;
     min-height:265mm!important; /* Reserva de seguridad de 8 mm dentro del A4 útil (273 mm): evita desbordamiento por redondeo/renderizado al firmar. */
     margin:0!important;
-    padding:0!important;
+    padding:0 0 22mm!important;
     overflow:visible!important;
     position:relative!important;
     display:flex!important;
@@ -1629,7 +1632,7 @@ html,body{background:#dfe3e8}
 .auro-cert-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}
 .auro-cert-preview-stage{min-height:calc(100vh - 62px);padding:20px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
 .auro-cert-preview-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
-.auro-cert-preview-sheet>.ac-paper{min-height:265mm}
+.auro-cert-preview-sheet>.ac-paper{min-height:265mm;padding-bottom:22mm}
 @media(max-width:980px){
   .auro-cert-preview-stage{padding:12px 0 20px;overflow-x:hidden;display:flex;justify-content:center}
   .auro-cert-preview-sheet{transform-origin:top center}
@@ -1667,7 +1670,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:265mm!important;margin:0!important;padding:0!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:265mm!important;margin:0!important;padding:0 0 22mm!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
 }
 </style>
 </head>
