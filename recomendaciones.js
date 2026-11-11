@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.5.5-RECOMENDACIONES-ANCLA-FIRMA-HTML';
+  const VERSION = '1.5.6-RECOMENDACIONES-FIRMA-ULTIMA-HOJA';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20261029_iasyn2_recomendaciones_firma_html_a4_v155_candidata';
+  const RELEASE = '20261111_iasyn2_recomendaciones_pie_ultima_hoja_v156_candidata';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -2134,45 +2134,38 @@
       // a una nueva última página, manteniendo el orden y la identidad de los bloques.
       const maximaFinal=(263*pxmm)-(11*pxmm);
       if(cuerpoActual.getBoundingClientRect().height + altoFooter > maximaFinal){
+        // La hoja anterior ya fue medida sin firma y cabe en maximo.
+        // Crear la ultima hoja y mover SOLO el ultimo bloque clinico;
+        // el error anterior comparaba el alto de la hoja anterior con el
+        // footer y podia trasladar demasiados bloques a la nueva hoja.
         const anterior=cuerpoActual;
         moverPagina();
         const destino=cuerpoActual;
-        let movimientos=0;
-        while(anterior.getBoundingClientRect().height+altoFooter > maximaFinal){
-          if(++movimientos>80) throw new Error('No fue posible reservar el pie final sin recortar texto');
-          const ultimo=anterior.lastElementChild;
-          if(!ultimo) break;
-          if(ultimo.classList.contains('ar-section') && ultimo.children.length>1){
-            const hoja=ultimo.lastElementChild;
-            if(hoja.tagName==='UL'||hoja.tagName==='OL'){
-              const item=hoja.lastElementChild;
-              if(item){
-                item.remove();
-                let copia=destino.firstElementChild;
-                if(!copia || !copia.classList.contains('ar-section') || copia.dataset.iasynSeccion!==ultimo.dataset.iasynSeccion){copia=ultimo.cloneNode(false);destino.prepend(copia);}
-                let lista=copia.firstElementChild;
-                if(!lista || (lista.tagName!=='UL' && lista.tagName!=='OL')){lista=hoja.cloneNode(false);copia.prepend(lista);}
-                lista.prepend(item);
-                if(!hoja.children.length) hoja.remove();
-              }else hoja.remove();
-            }else{
-              hoja.remove();
-              let copia=destino.firstElementChild;
-              if(!copia || !copia.classList.contains('ar-section') || copia.dataset.iasynSeccion!==ultimo.dataset.iasynSeccion){copia=ultimo.cloneNode(false);destino.prepend(copia);}
-              copia.prepend(hoja);
-            }
-            if(ultimo.children.length===1 && ultimo.firstElementChild.tagName==='H3'){
-              let destinoSeccion=destino.firstElementChild;
-              if(destinoSeccion && destinoSeccion.dataset.iasynSeccion===ultimo.dataset.iasynSeccion) destinoSeccion.prepend(ultimo.firstElementChild);
-              ultimo.remove();
-            }
-          }else{
-            ultimo.remove();destino.prepend(ultimo);
+        const ultimo=anterior.lastElementChild;
+        if(!ultimo) throw new Error('No hay contenido clinico para acompanhar el pie final');
+        if(ultimo.classList.contains('ar-section') && ultimo.children.length>1){
+          const pieza=ultimo.lastElementChild;
+          const copia=ultimo.cloneNode(false);
+          // Mantener el titulo si el fragmento es el unico de la seccion.
+          if(ultimo.children.length===2 && ultimo.firstElementChild.tagName==='H3'){
+            copia.appendChild(ultimo.firstElementChild);
           }
+          copia.appendChild(pieza);
+          destino.appendChild(copia);
+          if(!ultimo.children.length) ultimo.remove();
+          else if(ultimo.children.length===1 && ultimo.firstElementChild.tagName==='H3'){
+            // Evitar encabezados huerfanos en la hoja anterior.
+            copia.prepend(ultimo.firstElementChild);ultimo.remove();
+          }
+        }else{
+          destino.appendChild(ultimo);
         }
-        if(destino.getBoundingClientRect().height+altoFooter>maximaFinal){
-          // Contenido individual inusualmente grande: conservar el flujo nativo.
-          throw new Error('El pie excede la última página después de reubicar contenido');
+        // Medir la NUEVA ultima hoja junto a la reserva real del pie.
+        // Ante un bloque indivisible demasiado alto, usar el respaldo
+        // legible en lugar de producir una pagina cortada o firma fuera.
+        if(!destino.textContent.trim() ||
+           destino.getBoundingClientRect().height + altoFooter > maximaFinal + 0.5){
+          throw new Error('El ultimo bloque no cabe junto al pie; se usa flujo seguro');
         }
       }
       const pieFinal=footerOriginal.cloneNode(true);pieFinal.style.paddingBottom="8mm";paginaActual.appendChild(pieFinal);
