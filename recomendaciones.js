@@ -26,9 +26,9 @@
   }
 
   const MODULO = 'IASYN RECOMENDACIONES';
-  const VERSION = '1.5.6-RECOMENDACIONES-FIRMA-ULTIMA-HOJA';
+  const VERSION = '1.5.7-RECOMENDACIONES-ANCLA-AUTOMATICA';
   const JSON_VERSION = 'IASYN_RECOMENDACIONES_JSON_V1';
-  const RELEASE = '20261111_iasyn2_recomendaciones_pie_ultima_hoja_v156_candidata';
+  const RELEASE = '20261111_iasyn2_recomendaciones_sin_ancla_fija_v157_candidata';
 
   /*
     IASYN - COMPATIBILIDAD INTERNA TEMPORAL
@@ -2874,20 +2874,12 @@ html,body{background:#dfe3e8}
       logo:logo
     });
 
-    // Solo RECOMENDACION: ancla exacta en la ultima hoja A4 ya paginada.
-    // Usa el contrato HTML de anclas existente en IASYN Firma, sin cambiar el agente.
-    // El flujo de respaldo mantiene el comportamiento previo si no hay paginas verificables.
-    const paginasFirma=(cuerpo.match(/<article class="ar-paper ar-page"/g)||[]).length;
-    const anclaFirma=paginasFirma>0
-      ? '<meta name="iasyn-signature-anchors" content="'+btoa(JSON.stringify({
-          tipo_documento:'RECOMENDACION',coordinate_system:'pdf',
-          anchors:[{name:'IASYN_RECOMENDACION',page:paginasFirma,rect:[347.211,97.6985,512.211,143.6985]}]
-        }))+'">'
-      : '';
+    // IASYN: sin ancla PDF fija. El agente localiza la linea de firma
+    // en la ultima pagina; evita forzar una coordenada desactualizada.
+    // No cambia la paginacion, el pie ni el motor P12.
     return '<!DOCTYPE html><html lang="es"><head>'+
       '<meta charset="UTF-8">'+
       '<meta name="viewport" content="width=device-width,initial-scale=1">'+
-      anclaFirma+
       '<title>Recomendaciones médicas</title>'+
       '<style>'+recEstilosImpresion()+'</style>'+
       '</head><body>'+cuerpo+'</body></html>';
