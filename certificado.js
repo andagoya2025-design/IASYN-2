@@ -1137,94 +1137,153 @@ function acPaginarBloqueFirma(html){
     if(!original||!firma)throw Error('Estructura de certificado/firma ausente');
     const cont=d.createElement('div');d.body.appendChild(cont);
     const pages=[];let main;
+    const pxmm=96/25.4;
+    const limiteNormal=259*pxmm;
+    const tolerancia=.25;
     function nueva(){
       const page=d.createElement('article');page.className='ac-paper ac-page';
       page.style.cssText=original.style.cssText;
-      main=d.createElement('div');main.className='ac-page-main';page.appendChild(main);
-      cont.appendChild(page);pages.push(page);
+      const body=d.createElement('div');body.className='ac-page-main';
+      page.appendChild(body);cont.appendChild(page);pages.push(page);main=body;
+      return body;
     }
-    nueva();
-    const pxmm=96/25.4;
-    const limite=259*pxmm; // Recomendaciones: 263mm útiles menos 4mm de tolerancia.
-    const altura=()=>main.getBoundingClientRect().height;
-    const cabe=()=>altura()<=limite+.25;
-    const contenido=()=>Array.from(main.children).some(x=>(x.textContent||'').trim()||x.querySelector('img'));
-    function trocear(n){
-      // Conserva HTML original si cabe; para texto extenso preserva las palabras y el orden.
+    const altura=(body)=>body.getBoundingClientRect().height;
+    const tieneContenido=(body)=>Array.from(body.children).some(x=>(x.textContent||'').trim()||x.querySelector('img,svg'));
+    function cabe(body,limite){return altura(body)<=limite+tolerancia;}
+    // Extrae el HTML original por rangos de texto, conservando negritas, etiquetas y orden.
+    function fragmentoTexto(n,inicio,fin){
+      const clon=n.cloneNode(true);
+      const walker=d.createTreeWalker(clon,NodeFilter.SHOW_TEXT);
+      const textos=[];let t,total=0;
+      while((t=walker.nextNode())){textos.push({n:t,desde:total,hasta:total+t.length});total+=t.length;}
+      if(!textos.length)return null;
+      const range=d.createRange();
+      const primero=textos.find(x=>x.hasta>inicio)||textos[textos.length-1];
+      const ultimo=textos.find(x=>x.hasta>=fin)||textos[textos.length-1];
+      range.setStart(primero.n,Math.max(0,inicio-primero.desde));
+      range.setEnd(ultimo.n,Math.max(0,fin-ultimo.desde));
+      const envoltorio=n.cloneNode(false);envoltorio.appendChild(range.cloneContents());
+      return envoltorio;
+    }
+    function cortarTexto(n,body,limite){
       const texto=n.textContent||'';
-      const partes=texto.match(/\S+\s*/g)||[];
-      if(!partes.length)throw Error('Bloque indivisible excede el área A4');
+      const palabras=Array.from(texto.matchAll(/\S+\s*/g));
+      if(!palabras.length)throw Error('No se puede dividir un bloque vacío');
       let desde=0;
-      while(desde<partes.length){
-        let lo=1,hi=partes.length-desde,mejor=0;
+      while(desde<palabras.length){
+        let lo=1,hi=palabras.length-desde,mejor=0;
         while(lo<=hi){
           const mid=(lo+hi)>>1;
-          const x=n.cloneNode(false);x.textContent=partes.slice(desde,desde+mid).join('');
-          main.appendChild(x);const ok=cabe();x.remove();
+          const ini=palabras[desde].index;
+          const fin=desde+mid<palabras.length?palabras[desde+mid].index:texto.length;
+          const x=fragmentoTexto(n,ini,fin);
+          body.appendChild(x);const ok=cabe(body,limite);x.remove();
           if(ok){mejor=mid;lo=mid+1;}else hi=mid-1;
         }
-        if(!mejor){if(contenido()){nueva();continue;}throw Error('Una línea excede la página');}
-        const x=n.cloneNode(false);x.textContent=partes.slice(desde,desde+mejor).join('');main.appendChild(x);
-        desde+=mejor;if(desde<partes.length)nueva();
+        if(!mejor){
+          if(tieneContenido(body)){body=nueva();continue;}
+          throw Error('Una palabra o línea no cabe en el área A4');
+        }
+        const ini=palabras[desde].index;
+        const fin=desde+mejor<palabras.length?palabras[desde+mejor].index:texto.length;
+        body.appendChild(fragmentoTexto(n,ini,fin));
+        desde+=mejor;
+        if(desde<palabras.length)body=nueva();
       }
+      return body;
     }
-    function agregar(n){
-      main.appendChild(n);
-      if(cabe())return;
+    function agregar(n,body,limite){
+      body.appendChild(n);
+      if(cabe(body,limite))return body;
       n.remove();
-      // En vez de mandar un párrafo entero a otra hoja, usar el espacio restante.
-      // Dividir párrafos largos por palabras y grupos estructurados por hijos.
-      if(n.matches('p,.ac-cert-line,.ac-dx-doc-row,.ac-reposo-row')){trocear(n);return;}
-      if(n.children.length && !n.matches('.ac-doc-head')){
-        const hijos=Array.from(n.children);
-        for(const hijo of hijos){
-          const wrapper=n.cloneNode(false);
-          wrapper.appendChild(hijo.cloneNode(true));
-          main.appendChild(wrapper);
-          if(cabe())continue;
-          wrapper.remove();
+      if(n.matches('p,.ac-cert-line,.ac-dx-doc-row,.ac-reposo-row'))return cortarTexto(n,body,limite);
+      if(n.children.length&&!n.matches('.ac-doc-head')){
+        for(const hijo of Array.from(n.children)){
+          const envoltorio=n.cloneNode(false);
+          envoltorio.appendChild(hijo.cloneNode(true));
+          body.appendChild(envoltorio);
+          if(cabe(body,limite))continue;
+          envoltorio.remove();
           if(hijo.matches('p,.ac-cert-line,.ac-dx-doc-row,.ac-reposo-row')){
-            // Dividir dentro de un envoltorio manteniendo sus estilos de bloque.
-            const words=(hijo.textContent||'').match(/\S+\s*/g)||[];
-            let at=0;
-            while(at<words.length){
-              let low=1,high=words.length-at,best=0;
-              while(low<=high){const mid=(low+high)>>1;const w=n.cloneNode(false),c=hijo.cloneNode(false);c.textContent=words.slice(at,at+mid).join('');w.appendChild(c);main.appendChild(w);const ok=cabe();w.remove();if(ok){best=mid;low=mid+1;}else high=mid-1;}
-              if(!best){if(contenido()){nueva();continue;}throw Error('Fila demasiado alta');}
-              const w=n.cloneNode(false),c=hijo.cloneNode(false);c.textContent=words.slice(at,at+best).join('');w.appendChild(c);main.appendChild(w);at+=best;if(at<words.length)nueva();
+            // Medición con el mismo contenedor del bloque original.
+            const texto=hijo.textContent||'';
+            const palabras=Array.from(texto.matchAll(/\S+\s*/g));
+            if(!palabras.length)throw Error('Fila vacía fuera de página');
+            let desde=0;
+            while(desde<palabras.length){
+              let lo=1,hi=palabras.length-desde,mejor=0;
+              while(lo<=hi){
+                const mid=(lo+hi)>>1;
+                const ini=palabras[desde].index;
+                const fin=desde+mid<palabras.length?palabras[desde+mid].index:texto.length;
+                const w=n.cloneNode(false);w.appendChild(fragmentoTexto(hijo,ini,fin));
+                body.appendChild(w);const ok=cabe(body,limite);w.remove();
+                if(ok){mejor=mid;lo=mid+1;}else hi=mid-1;
+              }
+              if(!mejor){if(tieneContenido(body)){body=nueva();continue;}throw Error('Fila demasiado alta');}
+              const ini=palabras[desde].index;
+              const fin=desde+mejor<palabras.length?palabras[desde+mejor].index:texto.length;
+              const w=n.cloneNode(false);w.appendChild(fragmentoTexto(hijo,ini,fin));body.appendChild(w);
+              desde+=mejor;if(desde<palabras.length)body=nueva();
             }
           }else{
-            if(contenido())nueva();
-            main.appendChild(wrapper);
-            if(!cabe())throw Error('Elemento no divisible excede la página');
+            if(tieneContenido(body))body=nueva();
+            body.appendChild(envoltorio);
+            if(!cabe(body,limite))throw Error('Elemento indivisible excede A4');
           }
         }
-        return;
+        return body;
       }
-      if(contenido())nueva();
-      main.appendChild(n);
-      if(!cabe())throw Error('Bloque no divisible excede A4');
+      if(tieneContenido(body))body=nueva();
+      body.appendChild(n);
+      if(!cabe(body,limite))throw Error('Bloque indivisible excede A4');
+      return body;
     }
-    for(const child of Array.from(original.children))if(child!==firma)agregar(child.cloneNode(true));
-    // Solo la última página reserva espacio para firma, sin tocar el texto anterior.
-    const last=()=>pages[pages.length-1];
-    const f=firma.cloneNode(true);last().appendChild(f);
+    nueva();
+    for(const child of Array.from(original.children)){
+      if(child!==firma)main=agregar(child.cloneNode(true),main,limiteNormal);
+    }
+    // La firma se mide sin modificarla. Solo se redistribuye el contenido anterior.
+    const f=firma.cloneNode(true);pages[pages.length-1].appendChild(f);
     const altoFirma=f.getBoundingClientRect().height;
-    const limiteFinal=(263-8)*pxmm-altoFirma;
-    if(limiteFinal<=0)throw Error('Firma demasiado alta');
-    // Mover bloques finales completos a una página nueva si no caben con la firma.
-    while(main.getBoundingClientRect().height>limiteFinal+.25){
-      const ultimo=main.lastElementChild;
-      if(!ultimo)break;
-      ultimo.remove();f.remove();nueva();main.appendChild(ultimo);main.parentElement.appendChild(f);
-      if(main.getBoundingClientRect().height>limiteFinal+.25){
-        ultimo.remove();agregar(ultimo);
-        if(f.parentElement!==last()) {f.remove();last().appendChild(f);}
+    const limiteFinal=255*pxmm-altoFirma;
+    if(limiteFinal<=0)throw Error('Bloque de firma demasiado alto');
+    // Reflujo final: nunca crear una hoja con un bloque que ya excede la reserva.
+    // Se retira el contenido de la última hoja y se vuelve a distribuir respetando la firma.
+    const ultima=pages[pages.length-1];
+    const contenidoFinal=Array.from(main.children).map(n=>n.cloneNode(true));
+    if(!cabe(main,limiteFinal)){
+      main.replaceChildren();
+      f.remove();
+      // El contenido previo puede quedar como hoja intermedia; la última reserva firma.
+      for(const nodo of contenidoFinal){
+        main=agregar(nodo,main,limiteNormal);
       }
+      // Si sigue sin caber el cierre, se crea una nueva hoja y se trasladan
+      // los últimos fragmentos en orden, sin duplicar ni borrar texto.
+      let guard=0;
+      while(!cabe(main,limiteFinal)){
+        if(++guard>1000)throw Error('No converge la paginación del cierre');
+        const ultimo=main.lastElementChild;
+        if(!ultimo)throw Error('No hay contenido trasladable');
+        ultimo.remove();
+        const anterior=main;
+        const nuevo=nueva();
+        main=agregar(ultimo,nuevo,limiteFinal);
+        if(main!==nuevo){throw Error('El último bloque requiere una división adicional');}
+        // La página anterior permanece como página de contenido.
+        if(!tieneContenido(anterior)){
+          const hoja=anterior.parentElement;
+          hoja.remove();const i=pages.indexOf(hoja);if(i>=0)pages.splice(i,1);
+        }
+      }
+      pages[pages.length-1].appendChild(f);
     }
-    if(main.getBoundingClientRect().height>limiteFinal+.25)throw Error('No cabe la firma en la última hoja');
+    if(pages.filter(p=>p.querySelector('.ac-firma-area')).length!==1)throw Error('Firma duplicada');
+    if(pages[pages.length-1].querySelector('.ac-firma-area')!==f)throw Error('Firma fuera de la última hoja');
+    if(!cabe(main,limiteFinal))throw Error('El contenido invade la firma');
     if(pages.some(p=>p.getBoundingClientRect().height>263*pxmm+2))throw Error('Desbordamiento A4');
-    if(pages.length>1&&pages.some(p=>!(p.querySelector('.ac-page-main').textContent||'').trim()))throw Error('Página vacía');
+    if(pages.length>1&&pages.some(p=>!tieneContenido(p.querySelector('.ac-page-main'))))throw Error('Página vacía');
     return cont.innerHTML;
   }catch(e){console.error('IASYN Certificados: paginación no validada',e);throw e;}
   finally{if(iframe)iframe.remove();}
