@@ -1120,103 +1120,121 @@ async function resolverLogoCertificado(data,paraFirma){
 
 /* IASYN CERT: paginación del ANCLA de firma. Opera sobre una copia DOM medida,
    no sobre coordenadas del motor P12. Nunca altera órdenes ni recetas. */
+/* Paginación A4 de certificados: medir y renderizar con idéntico ancho y CSS.
+   No toca el motor P12 ni las estructuras de Órdenes/Recetas. */
 function acPaginarBloqueFirma(html){
-  if(typeof document==='undefined'||!document.body) return html;
-  let iframe=null;
+  if(typeof document==='undefined'||!document.body)return html;
+  let iframe;
   try{
     iframe=document.createElement('iframe');
-    iframe.setAttribute('aria-hidden','true');
-    iframe.style.cssText='position:fixed;left:-12000px;top:0;width:180mm;height:273mm;border:0;visibility:hidden;pointer-events:none';
+    iframe.style.cssText='position:fixed;left:-15000px;top:0;width:180mm;height:273mm;border:0;visibility:hidden;pointer-events:none';
     document.body.appendChild(iframe);
     const d=iframe.contentDocument;
-    d.open();d.write('<!doctype html><html><head><meta charset="utf-8"><style>'+estilosImpresion()+acEstilosAnclaFirma()+'</style></head><body></body></html>');d.close();
-    const template=d.createElement('template');template.innerHTML=html;
-    const origen=template.content.querySelector('.ac-paper');
-    const firma=origen&&origen.querySelector(':scope > .ac-firma-area');
-    if(!origen||!firma) throw Error('No se encontró el bloque de firma del certificado');
+    d.open();d.write('<!doctype html><html><head><meta charset="utf-8"><style>'+estilosImpresion()+acEstilosAnclaFirma()+'</style></head><body style="margin:0;padding:0"></body></html>');d.close();
+    const tmp=d.createElement('template');tmp.innerHTML=html;
+    const original=tmp.content.querySelector('.ac-paper');
+    const firma=original&&original.querySelector(':scope > .ac-firma-area');
+    if(!original||!firma)throw Error('Estructura de certificado/firma ausente');
     const cont=d.createElement('div');d.body.appendChild(cont);
-    const paginas=[];let main=null;
+    const pages=[];let main;
     function nueva(){
       const page=d.createElement('article');page.className='ac-paper ac-page';
-      page.style.cssText=origen.style.cssText;
+      page.style.cssText=original.style.cssText;
       main=d.createElement('div');main.className='ac-page-main';page.appendChild(main);
-      cont.appendChild(page);paginas.push(page);return main;
+      cont.appendChild(page);pages.push(page);
     }
     nueva();
-    const unidad=d.createElement('div');unidad.style.cssText='height:1mm;position:absolute;visibility:hidden';d.body.appendChild(unidad);
-    const pxmm=96/25.4;unidad.remove();
-    // Se mide el bloque completo, incluida su reserva superior de 18mm.
-    const copiaFirma=firma.cloneNode(true);copiaFirma.style.marginTop='0';paginas[0].appendChild(copiaFirma);
-    const altoFirma=copiaFirma.getBoundingClientRect().height;copiaFirma.remove();
-    const presupuesto=263*pxmm-altoFirma-8*pxmm;
-    if(presupuesto<100) throw Error('Bloque de firma excede espacio A4');
-    const cabe=()=>main.getBoundingClientRect().height<=presupuesto+0.3;
+    const pxmm=96/25.4;
+    const limite=259*pxmm; // Recomendaciones: 263mm útiles menos 4mm de tolerancia.
+    const altura=()=>main.getBoundingClientRect().height;
+    const cabe=()=>altura()<=limite+.25;
+    const contenido=()=>Array.from(main.children).some(x=>(x.textContent||'').trim()||x.querySelector('img'));
+    function trocear(n){
+      // Conserva HTML original si cabe; para texto extenso preserva las palabras y el orden.
+      const texto=n.textContent||'';
+      const partes=texto.match(/\S+\s*/g)||[];
+      if(!partes.length)throw Error('Bloque indivisible excede el área A4');
+      let desde=0;
+      while(desde<partes.length){
+        let lo=1,hi=partes.length-desde,mejor=0;
+        while(lo<=hi){
+          const mid=(lo+hi)>>1;
+          const x=n.cloneNode(false);x.textContent=partes.slice(desde,desde+mid).join('');
+          main.appendChild(x);const ok=cabe();x.remove();
+          if(ok){mejor=mid;lo=mid+1;}else hi=mid-1;
+        }
+        if(!mejor){if(contenido()){nueva();continue;}throw Error('Una línea excede la página');}
+        const x=n.cloneNode(false);x.textContent=partes.slice(desde,desde+mejor).join('');main.appendChild(x);
+        desde+=mejor;if(desde<partes.length)nueva();
+      }
+    }
     function agregar(n){
       main.appendChild(n);
       if(cabe())return;
       n.remove();
-      if(main.childElementCount){nueva();main.appendChild(n);if(cabe())return;n.remove();}
-      // Fragmentar solo cuando un bloque individual excede la hoja.
-      if(n.children.length){
-        const esGrupo=n.matches('.ac-cert-lines,.ac-dx-doc,.ac-reposo');
-        if(esGrupo){
-          const hijos=Array.from(n.children);
-          let grupo=n.cloneNode(false);
-          for(const hijo of hijos){
-            grupo.appendChild(hijo.cloneNode(true));
-            main.appendChild(grupo);
-            if(!cabe()){
-              main.removeChild(grupo);grupo.removeChild(grupo.lastChild);
-              if(grupo.childElementCount){main.appendChild(grupo);nueva();}
-              grupo=n.cloneNode(false);grupo.appendChild(hijo.cloneNode(true));
-              main.appendChild(grupo);
-              if(!cabe()){main.removeChild(grupo);fragmentarTexto(hijo.cloneNode(true),n);grupo=n.cloneNode(false);}
+      // En vez de mandar un párrafo entero a otra hoja, usar el espacio restante.
+      // Dividir párrafos largos por palabras y grupos estructurados por hijos.
+      if(n.matches('p,.ac-cert-line,.ac-dx-doc-row,.ac-reposo-row')){trocear(n);return;}
+      if(n.children.length && !n.matches('.ac-doc-head')){
+        const hijos=Array.from(n.children);
+        for(const hijo of hijos){
+          const wrapper=n.cloneNode(false);
+          wrapper.appendChild(hijo.cloneNode(true));
+          main.appendChild(wrapper);
+          if(cabe())continue;
+          wrapper.remove();
+          if(hijo.matches('p,.ac-cert-line,.ac-dx-doc-row,.ac-reposo-row')){
+            // Dividir dentro de un envoltorio manteniendo sus estilos de bloque.
+            const words=(hijo.textContent||'').match(/\S+\s*/g)||[];
+            let at=0;
+            while(at<words.length){
+              let low=1,high=words.length-at,best=0;
+              while(low<=high){const mid=(low+high)>>1;const w=n.cloneNode(false),c=hijo.cloneNode(false);c.textContent=words.slice(at,at+mid).join('');w.appendChild(c);main.appendChild(w);const ok=cabe();w.remove();if(ok){best=mid;low=mid+1;}else high=mid-1;}
+              if(!best){if(contenido()){nueva();continue;}throw Error('Fila demasiado alta');}
+              const w=n.cloneNode(false),c=hijo.cloneNode(false);c.textContent=words.slice(at,at+best).join('');w.appendChild(c);main.appendChild(w);at+=best;if(at<words.length)nueva();
             }
+          }else{
+            if(contenido())nueva();
+            main.appendChild(wrapper);
+            if(!cabe())throw Error('Elemento no divisible excede la página');
           }
-          return;
         }
+        return;
       }
-      fragmentarTexto(n);
+      if(contenido())nueva();
+      main.appendChild(n);
+      if(!cabe())throw Error('Bloque no divisible excede A4');
     }
-    function fragmentarTexto(n,envoltura){
-      const original=n.textContent||'';
-      const palabras=original.match(/\S+\s*/g)||[];
-      if(!palabras.length)throw Error('Bloque vacío que excede la página');
-      let inicio=0;
-      while(inicio<palabras.length){
-        let lo=1,hi=palabras.length-inicio,mejor=0;
-        while(lo<=hi){
-          const mid=Math.floor((lo+hi)/2);
-          const bloque=n.cloneNode(false);bloque.textContent=palabras.slice(inicio,inicio+mid).join('');
-          const wrap=envoltura?envoltura.cloneNode(false):null;
-          if(wrap){wrap.appendChild(bloque);main.appendChild(wrap);}else main.appendChild(bloque);
-          const ok=cabe();if(wrap)wrap.remove();else bloque.remove();
-          if(ok){mejor=mid;lo=mid+1;}else hi=mid-1;
-        }
-        if(!mejor){if(main.childElementCount) {nueva();continue;}throw Error('Texto indivisible excede A4');}
-        const trozo=n.cloneNode(false);trozo.textContent=palabras.slice(inicio,inicio+mejor).join('');
-        if(envoltura){const w=envoltura.cloneNode(false);w.appendChild(trozo);main.appendChild(w);}else main.appendChild(trozo);
-        inicio+=mejor;if(inicio<palabras.length)nueva();
+    for(const child of Array.from(original.children))if(child!==firma)agregar(child.cloneNode(true));
+    // Solo la última página reserva espacio para firma, sin tocar el texto anterior.
+    const last=()=>pages[pages.length-1];
+    const f=firma.cloneNode(true);last().appendChild(f);
+    const altoFirma=f.getBoundingClientRect().height;
+    const limiteFinal=(263-8)*pxmm-altoFirma;
+    if(limiteFinal<=0)throw Error('Firma demasiado alta');
+    // Mover bloques finales completos a una página nueva si no caben con la firma.
+    while(main.getBoundingClientRect().height>limiteFinal+.25){
+      const ultimo=main.lastElementChild;
+      if(!ultimo)break;
+      ultimo.remove();f.remove();nueva();main.appendChild(ultimo);main.parentElement.appendChild(f);
+      if(main.getBoundingClientRect().height>limiteFinal+.25){
+        ultimo.remove();agregar(ultimo);
+        if(f.parentElement!==last()) {f.remove();last().appendChild(f);}
       }
     }
-    for(const child of Array.from(origen.children))if(child!==firma)agregar(child.cloneNode(true));
-    // Una sola firma, únicamente en la última hoja.
-    paginas[paginas.length-1].appendChild(firma.cloneNode(true));
-    if(paginas.some(p=>p.getBoundingClientRect().height>263*pxmm+2))throw Error('Página fuera del presupuesto: '+paginas.map(p=>p.getBoundingClientRect().height).join(','));
-    if(paginas.length>1&&!paginas[paginas.length-1].querySelector('.ac-page-main').textContent.trim())throw Error('Última página vacía');
+    if(main.getBoundingClientRect().height>limiteFinal+.25)throw Error('No cabe la firma en la última hoja');
+    if(pages.some(p=>p.getBoundingClientRect().height>263*pxmm+2))throw Error('Desbordamiento A4');
+    if(pages.length>1&&pages.some(p=>!(p.querySelector('.ac-page-main').textContent||'').trim()))throw Error('Página vacía');
     return cont.innerHTML;
-  }catch(e){
-    // No se entrega un PDF firmado con geometría incierta.
-    console.error('IASYN Certificados: ancla de firma no validada',e);
-    throw e;
-  }finally{if(iframe)iframe.remove();}
+  }catch(e){console.error('IASYN Certificados: paginación no validada',e);throw e;}
+  finally{if(iframe)iframe.remove();}
 }
 function acEstilosAnclaFirma(){return `
-.ac-page{width:100%!important;height:263mm!important;min-height:263mm!important;max-height:263mm!important;padding:0 0 8mm!important;margin:0!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}
+.ac-page{width:100%!important;height:263mm!important;min-height:263mm!important;max-height:263mm!important;padding:0 0 8mm!important;margin:0!important;display:flex!important;flex-direction:column!important;overflow:hidden!important;break-after:page!important;page-break-after:always!important}
 .ac-page:last-child{break-after:auto!important;page-break-after:auto!important}
 .ac-page-main{display:flow-root;width:100%;flex:0 0 auto}
 .ac-page>.ac-firma-area{margin-top:auto!important;padding-top:18mm!important;break-inside:avoid!important;page-break-inside:avoid!important}
-@media print{.ac-page{height:263mm!important;min-height:263mm!important;max-height:263mm!important;padding-bottom:8mm!important;break-after:page!important;page-break-after:always!important}.ac-page:last-child{break-after:auto!important;page-break-after:auto!important}}
+@media print{.ac-page{height:263mm!important;min-height:263mm!important;max-height:263mm!important;overflow:hidden!important;break-after:page!important;page-break-after:always!important}.ac-page:last-child{break-after:auto!important;page-break-after:auto!important}}
 `;}
 
 async function htmlCompletoFirmaCertificado(certificado){
