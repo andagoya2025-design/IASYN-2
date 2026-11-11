@@ -2004,8 +2004,12 @@
       const pxmm=mm.getBoundingClientRect().height||3.779527559;mm.remove();
       const tempFooter=footerOriginal.cloneNode(true);tempFooter.style.marginTop='0';tempFooter.style.paddingTop='18mm';
       paginaActual.appendChild(tempFooter);
-      const altoFooter=tempFooter.getBoundingClientRect().height;
+      const altoFooterVisual=tempFooter.getBoundingClientRect().height;
       tempFooter.remove();
+      // Reserva preventiva para el QR agregado posteriormente por IASYN.
+      // Validar 35 mm en Edge/Windows antes de usar en produccion.
+      const reservaQRPosterior=35*pxmm;
+      const altoFooter=altoFooterVisual+reservaQRPosterior;
       // Altura segura 263 mm: margen interior para los distintos motores de PDF.
       // No se modifica @page ni la geometría externa de A4.
       const maximo=(263*pxmm)-(4*pxmm); // 259 mm de cuerpo clínico por hoja.
