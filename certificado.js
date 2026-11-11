@@ -440,7 +440,7 @@ function instalarCSS(){
 .ac-error{background:#fef2f2;color:#991b1b}
 .ac-warn{background:#fffbeb;color:#92400e}
 .ac-preview{margin-top:14px;overflow:auto;background:#eef1f4;border-radius:16px;padding:18px}
-.ac-paper{width:210mm;min-height:297mm;background:#fff;margin:auto;padding:15mm 17mm;box-shadow:0 8px 28px rgba(0,0,0,.12);transform-origin:top center;position:relative;display:flex;flex-direction:column}
+.ac-paper{width:210mm;min-height:297mm;background:#fff;margin:auto;padding:12mm 15mm 8mm;box-shadow:0 8px 28px rgba(0,0,0,.12);transform-origin:top center;position:relative;display:flex;flex-direction:column}
 .ac-doc-head{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;border-bottom:2.5px solid var(--ac-color,#8b1e5a);padding-bottom:10px}
 .ac-logo-wrap{width:60px;height:60px;display:grid;place-items:center;border-radius:12px;overflow:hidden}
 .ac-logo-wrap:empty{display:none}
@@ -464,7 +464,7 @@ function instalarCSS(){
 .ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start}
 .ac-contacto-icono{width:12px;height:12px;display:block;margin-top:2px;color:var(--ac-color,#8b1e5a)}
 .ac-contacto-texto{min-width:0;overflow-wrap:anywhere}
-.ac-sign{text-align:center;font-size:11.5px;position:relative;top:2mm}
+.ac-sign{text-align:center;font-size:11.5px;position:relative;top:0}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.5px}
 .ac-toast-zone{
@@ -1117,18 +1117,120 @@ async function resolverLogoCertificado(data,paraFirma){
 /* IASYN CERT 1.4.6 — cierre A4 unificado. El bloque de firma usa CSS
    idéntico en la vista de impresión y el HTML entregado al firmador.
    No se ejecutan cálculos de altura por JavaScript antes de imprimir. */
+
+/* IASYN CERT: paginación del ANCLA de firma. Opera sobre una copia DOM medida,
+   no sobre coordenadas del motor P12. Nunca altera órdenes ni recetas. */
+function acPaginarBloqueFirma(html){
+  if(typeof document==='undefined'||!document.body) return html;
+  let iframe=null;
+  try{
+    iframe=document.createElement('iframe');
+    iframe.setAttribute('aria-hidden','true');
+    iframe.style.cssText='position:fixed;left:-12000px;top:0;width:180mm;height:273mm;border:0;visibility:hidden;pointer-events:none';
+    document.body.appendChild(iframe);
+    const d=iframe.contentDocument;
+    d.open();d.write('<!doctype html><html><head><meta charset="utf-8"><style>'+estilosImpresion()+acEstilosAnclaFirma()+'</style></head><body></body></html>');d.close();
+    const template=d.createElement('template');template.innerHTML=html;
+    const origen=template.content.querySelector('.ac-paper');
+    const firma=origen&&origen.querySelector(':scope > .ac-firma-area');
+    if(!origen||!firma) throw Error('No se encontró el bloque de firma del certificado');
+    const cont=d.createElement('div');d.body.appendChild(cont);
+    const paginas=[];let main=null;
+    function nueva(){
+      const page=d.createElement('article');page.className='ac-paper ac-page';
+      page.style.cssText=origen.style.cssText;
+      main=d.createElement('div');main.className='ac-page-main';page.appendChild(main);
+      cont.appendChild(page);paginas.push(page);return main;
+    }
+    nueva();
+    const unidad=d.createElement('div');unidad.style.cssText='height:1mm;position:absolute;visibility:hidden';d.body.appendChild(unidad);
+    const pxmm=96/25.4;unidad.remove();
+    // Se mide el bloque completo, incluida su reserva superior de 18mm.
+    const copiaFirma=firma.cloneNode(true);copiaFirma.style.marginTop='0';paginas[0].appendChild(copiaFirma);
+    const altoFirma=copiaFirma.getBoundingClientRect().height;copiaFirma.remove();
+    const presupuesto=263*pxmm-altoFirma-8*pxmm;
+    if(presupuesto<100) throw Error('Bloque de firma excede espacio A4');
+    const cabe=()=>main.getBoundingClientRect().height<=presupuesto+0.3;
+    function agregar(n){
+      main.appendChild(n);
+      if(cabe())return;
+      n.remove();
+      if(main.childElementCount){nueva();main.appendChild(n);if(cabe())return;n.remove();}
+      // Fragmentar solo cuando un bloque individual excede la hoja.
+      if(n.children.length){
+        const esGrupo=n.matches('.ac-cert-lines,.ac-dx-doc,.ac-reposo');
+        if(esGrupo){
+          const hijos=Array.from(n.children);
+          let grupo=n.cloneNode(false);
+          for(const hijo of hijos){
+            grupo.appendChild(hijo.cloneNode(true));
+            main.appendChild(grupo);
+            if(!cabe()){
+              main.removeChild(grupo);grupo.removeChild(grupo.lastChild);
+              if(grupo.childElementCount){main.appendChild(grupo);nueva();}
+              grupo=n.cloneNode(false);grupo.appendChild(hijo.cloneNode(true));
+              main.appendChild(grupo);
+              if(!cabe()){main.removeChild(grupo);fragmentarTexto(hijo.cloneNode(true),n);grupo=n.cloneNode(false);}
+            }
+          }
+          return;
+        }
+      }
+      fragmentarTexto(n);
+    }
+    function fragmentarTexto(n,envoltura){
+      const original=n.textContent||'';
+      const palabras=original.match(/\S+\s*/g)||[];
+      if(!palabras.length)throw Error('Bloque vacío que excede la página');
+      let inicio=0;
+      while(inicio<palabras.length){
+        let lo=1,hi=palabras.length-inicio,mejor=0;
+        while(lo<=hi){
+          const mid=Math.floor((lo+hi)/2);
+          const bloque=n.cloneNode(false);bloque.textContent=palabras.slice(inicio,inicio+mid).join('');
+          const wrap=envoltura?envoltura.cloneNode(false):null;
+          if(wrap){wrap.appendChild(bloque);main.appendChild(wrap);}else main.appendChild(bloque);
+          const ok=cabe();if(wrap)wrap.remove();else bloque.remove();
+          if(ok){mejor=mid;lo=mid+1;}else hi=mid-1;
+        }
+        if(!mejor){if(main.childElementCount) {nueva();continue;}throw Error('Texto indivisible excede A4');}
+        const trozo=n.cloneNode(false);trozo.textContent=palabras.slice(inicio,inicio+mejor).join('');
+        if(envoltura){const w=envoltura.cloneNode(false);w.appendChild(trozo);main.appendChild(w);}else main.appendChild(trozo);
+        inicio+=mejor;if(inicio<palabras.length)nueva();
+      }
+    }
+    for(const child of Array.from(origen.children))if(child!==firma)agregar(child.cloneNode(true));
+    // Una sola firma, únicamente en la última hoja.
+    paginas[paginas.length-1].appendChild(firma.cloneNode(true));
+    if(paginas.some(p=>p.getBoundingClientRect().height>263*pxmm+2))throw Error('Página fuera del presupuesto: '+paginas.map(p=>p.getBoundingClientRect().height).join(','));
+    if(paginas.length>1&&!paginas[paginas.length-1].querySelector('.ac-page-main').textContent.trim())throw Error('Última página vacía');
+    return cont.innerHTML;
+  }catch(e){
+    // No se entrega un PDF firmado con geometría incierta.
+    console.error('IASYN Certificados: ancla de firma no validada',e);
+    throw e;
+  }finally{if(iframe)iframe.remove();}
+}
+function acEstilosAnclaFirma(){return `
+.ac-page{width:100%!important;height:263mm!important;min-height:263mm!important;max-height:263mm!important;padding:0 0 8mm!important;margin:0!important;display:flex!important;flex-direction:column!important;overflow:visible!important;break-after:page;page-break-after:always}
+.ac-page:last-child{break-after:auto!important;page-break-after:auto!important}
+.ac-page-main{display:flow-root;width:100%;flex:0 0 auto}
+.ac-page>.ac-firma-area{margin-top:auto!important;padding-top:18mm!important;break-inside:avoid!important;page-break-inside:avoid!important}
+@media print{.ac-page{height:263mm!important;min-height:263mm!important;max-height:263mm!important;padding-bottom:8mm!important;break-after:page!important;page-break-after:always!important}.ac-page:last-child{break-after:auto!important;page-break-after:auto!important}}
+`;}
+
 async function htmlCompletoFirmaCertificado(certificado){
   /* El PDF firmado no necesita handlers HTML. Se eliminan atributos on*
      del documento que son útiles solo para la vista del navegador. */
   const logoFirma=await resolverLogoCertificado(certificado,true);
-  const cuerpo=docHTML(certificado,logoFirma).replace(/\son[a-z]+=(?:"[^"]*"|'[^']*')/gi,'');
+  const cuerpo=acPaginarBloqueFirma(docHTML(certificado,logoFirma)).replace(/\son[a-z]+=(?:"[^"]*"|'[^']*')/gi,'');
   return `<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Certificado médico</title>
-<style>${estilosImpresion()}</style>
+<style>${estilosImpresion()}${acEstilosAnclaFirma()}</style>
 </head>
 <body>${cuerpo}</body>
 </html>`;
@@ -1492,10 +1594,10 @@ body{overflow-x:hidden}
   width:100%;
   max-width:100%;
   min-width:0;
-  min-height:265mm;
+  min-height:263mm;
   margin:0;
-  padding:0 0 22mm;
-  /* Zona inferior reservada para firma/QR, dentro del A4 útil. */
+  padding:0 0 8mm;
+  /* Reserva inferior de 8 mm dentro del A4 útil; el pie se ancla con flex. */
   background:#fff;
   overflow:visible;
   position:relative;
@@ -1544,7 +1646,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   gap:15mm;
   align-items:end;
-  margin-top:10mm;
+  margin-top:auto;
   padding-top:18mm;
   break-inside:avoid;
   page-break-inside:avoid;
@@ -1554,7 +1656,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
 .ac-contacto-fila{display:grid;grid-template-columns:13px minmax(0,1fr);gap:6px;align-items:start;break-inside:avoid}
 .ac-contacto-icono{display:block;width:12px;height:12px;margin-top:2px;color:var(--ac-color,#8b1e5a)}
 .ac-contacto-texto{min-width:0;overflow-wrap:anywhere}
-.ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere;position:relative;top:2mm}
+.ac-sign{text-align:center;font-size:11.2px;overflow-wrap:anywhere;position:relative;top:0}
 .ac-sign-line{border-top:1px solid #111;margin-bottom:6px}
 .ac-sign b{font-size:12.4px}
 
@@ -1564,7 +1666,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
   iPhone / Android reciben el mismo documento; solo cambia la escala del visor.
 */
 
-/* Firma IASYN: reserva inferior real de 22 mm en vista, impresión y HTML enviado al agente.
+/* Firma IASYN: reserva inferior de 8 mm en vista, impresión y HTML enviado al agente.
    No se alteran las coordenadas P12 ni el reconocimiento del motor. */
 /* Impresión: el área útil la define @page. No se vuelve a forzar 210 mm en html/body. */
 @media print{
@@ -1583,9 +1685,9 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     width:100%!important;
     max-width:100%!important;
     min-width:0!important;
-    min-height:265mm!important; /* Reserva de seguridad de 8 mm dentro del A4 útil (273 mm): evita desbordamiento por redondeo/renderizado al firmar. */
+    min-height:263mm!important; /* Altura de 263 mm y reserva de 8 mm, acorde con Recomendaciones. */
     margin:0!important;
-    padding:0 0 22mm!important;
+    padding:0 0 8mm!important;
     overflow:visible!important;
     position:relative!important;
     display:flex!important;
@@ -1596,7 +1698,7 @@ p{font-size:12.2px;line-height:1.6;text-align:justify;white-space:pre-line;margi
     break-inside:auto!important;
   }
   .ac-doc-head{grid-template-columns:auto minmax(0,1fr) auto!important}
-   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:auto!important;break-before:avoid-page!important;break-inside:avoid!important;page-break-inside:avoid!important}
+   .ac-firma-area{position:relative!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;margin-top:auto!important;padding-top:18mm!important;break-before:avoid-page!important;break-inside:avoid!important;page-break-inside:avoid!important}
 }`;
 }
 
@@ -1610,7 +1712,7 @@ async function auroGenerarVistaImpresionCertificadoUnificada(dataOpcional){
   }
 
   const logoVista=await resolverLogoCertificado(data,false);
-  const htmlDoc=docHTML(data,logoVista);
+  const htmlDoc=acPaginarBloqueFirma(docHTML(data,logoVista));
   ventana.document.open();
   ventana.document.write(`<!DOCTYPE html>
 <html lang="es">
@@ -1619,7 +1721,7 @@ async function auroGenerarVistaImpresionCertificadoUnificada(dataOpcional){
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Vista previa de certificado médico</title>
 <style>
-${estilosImpresion()}
+${estilosImpresion()}${acEstilosAnclaFirma()}
 html,body{background:#dfe3e8}
 .auro-cert-preview-toolbar{
   position:sticky;top:0;z-index:9999;display:flex;justify-content:space-between;
@@ -1632,7 +1734,7 @@ html,body{background:#dfe3e8}
 .auro-cert-preview-btn.secondary{background:#fff;color:#374151;border:1px solid #cbd5e1}
 .auro-cert-preview-stage{min-height:calc(100vh - 62px);padding:20px;box-sizing:border-box;display:flex;justify-content:center;align-items:flex-start;overflow:auto}
 .auro-cert-preview-sheet{width:210mm;min-width:210mm;min-height:297mm;flex:0 0 210mm;background:#fff;box-shadow:0 18px 42px rgba(15,23,42,.24);padding:12mm 15mm;box-sizing:border-box;transform-origin:top center}
-.auro-cert-preview-sheet>.ac-paper{min-height:265mm;padding-bottom:22mm}
+.auro-cert-preview-sheet>.ac-paper{min-height:263mm;padding-bottom:8mm}
 @media(max-width:980px){
   .auro-cert-preview-stage{padding:12px 0 20px;overflow-x:hidden;display:flex;justify-content:center}
   .auro-cert-preview-sheet{transform-origin:top center}
@@ -1670,7 +1772,7 @@ html,body{background:#dfe3e8}
   .auro-cert-preview-toolbar{display:none!important}
   .auro-cert-preview-stage{display:block!important;min-height:0!important;padding:0!important;overflow:visible!important}
   .auro-cert-preview-sheet{width:auto!important;min-height:0!important;margin:0!important;padding:0!important;box-shadow:none!important;transform:none!important}
-  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:265mm!important;margin:0!important;padding:0 0 22mm!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
+  .auro-cert-preview-sheet>.ac-paper{width:100%!important;max-width:100%!important;min-height:263mm!important;margin:0!important;padding:0 0 8mm!important;position:relative!important;display:flex!important;flex-direction:column!important;transform:none!important}
 }
 </style>
 </head>
