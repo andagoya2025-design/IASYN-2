@@ -4131,6 +4131,8 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           .auro-rx-diagnosticos-section{margin-top:6px!important}.auro-rx-diagnosticos-section h4{margin-bottom:4px!important;font-size:10.8px!important;padding-bottom:3px!important}.auro-rx-diagnosticos-grid{display:grid;grid-template-columns:repeat(var(--auro-rx-dx-cols,3),minmax(0,1fr));gap:0;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb}.auro-rx-diagnostico-card{min-width:0;border:0;border-right:1px solid #e5e7eb;border-radius:0;background:#fff;padding:5px 9px 5px 0;box-shadow:none}.auro-rx-diagnostico-card:last-child{border-right:0;padding-right:0}.auro-rx-diagnostico-card.principal{background:#fff}.auro-rx-diagnostico-card-head{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:3px}.auro-rx-diagnostico-card-head strong{color:#8b1e5a;font-size:9.8px;font-weight:950}.auro-rx-dx-jerarquia,.auro-rx-dx-tipo{display:inline-flex;align-items:center;padding:0;font-size:7.2px;font-weight:900;line-height:1.1;white-space:nowrap;background:transparent!important}.auro-rx-dx-jerarquia{color:#64748b}.auro-rx-diagnostico-card.principal .auro-rx-dx-jerarquia{color:#8b1e5a}.auro-rx-dx-tipo{color:#9a3412}.auro-rx-dx-tipo.definitivo{color:#166534}.auro-rx-diagnostico-card-name{color:#1f2937;font-size:8.8px;font-weight:750;line-height:1.25;overflow-wrap:anywhere}
           .auro-rx-table-wrap{width:100%;overflow-x:auto;border:1px solid #d9dde3;border-radius:10px;background:#fff}.auro-rx-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.8px;line-height:1.25}.auro-rx-table th{background:#edf3f6;color:#263238;border-right:1px solid #cfd8dc;border-bottom:1px solid #bfc8cd;padding:6px 5px;text-align:center;font-size:9.2px;font-weight:950;text-transform:uppercase;letter-spacing:.025em}.auro-rx-table th:last-child{border-right:0}.auro-rx-table td{border-right:1px solid #dfe5e8;border-bottom:1px solid #dfe5e8;padding:6px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:normal}.auro-rx-table tr:last-child td{border-bottom:0}.auro-rx-table td:last-child{border-right:0}.auro-rx-col-num{text-align:center;font-weight:900;color:#7a174f}.auro-rx-col-med strong{font-size:11.2px;color:#111827}.auro-rx-col-cant{text-align:center;font-weight:850}.auro-rx-col-ind{color:#334155}.auro-rx-vacio{color:#94a3b8}.auro-rx-w-num{width:5%}.auro-rx-w-med{width:20%}.auro-rx-w-pres{width:23%}.auro-rx-w-cant{width:10%}.auro-rx-w-ind{width:42%}
           .auro-text-premium{color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:7px 9px;font-size:12px;line-height:1.35}.auro-empty-note{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:7px 9px;font-size:12px}
+          .auro-rx-vigencia{margin-left:auto;padding-left:9px;border-left:1px solid #efd8e6;font-size:8.4px;line-height:1.25;color:#374151;white-space:normal;max-width:46%;min-width:0}
+          .auro-rx-vigencia strong{color:#8b1e5a;font-weight:750}
           .auro-rx-contacto-iconos{display:flex;flex-direction:column;gap:3px;min-width:0}
           .auro-rx-contacto-item{display:flex;align-items:flex-start;gap:5px;overflow-wrap:anywhere;font-size:8px;line-height:1.25}
           .auro-rx-contacto-icono{flex:0 0 11px;width:11px;height:11px;color:#8b1e5a}
@@ -4151,6 +4153,7 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
             .modo-paciente .auro-receta-grid .auro-rx-registro{grid-column:1/-1!important;border-right:0}
             .modo-paciente .auro-receta-grid .auro-rx-registro{padding-left:7px}
             .auro-rx-alergias-linea{display:grid;grid-template-columns:1fr;width:100%;gap:2px}
+            .auro-rx-vigencia{margin-left:0;max-width:100%;padding-left:0;border-left:0}
             .auro-receta-footer{grid-template-columns:1fr}
             .auro-rx-diagnosticos-grid{grid-template-columns:1fr!important}
             .auro-rx-table-wrap{overflow-x:auto}
@@ -4164,7 +4167,7 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           <div class="auro-receta-title"><b>RECETA MÉDICA</b>${esAdministrativo ? `<span class="badge-auro ${estadoClass}">${safe(r.estado || 'Emitida')}</span>` : ''}</div>
         </div>
         <div class="auro-receta-grid">${datosPaciente}</div>
-        ${!esAdministrativo ? `<div class="auro-rx-alergias-linea"><span>Antecedentes de alergias</span><b>${safe(alergias)}</b></div>` : ''}
+        ${!esAdministrativo ? `<div class="auro-rx-alergias-linea"><span>Antecedentes de alergias</span><b>${safe(alergias)}</b><div class="auro-rx-vigencia"><strong>Vigencia para dispensación:</strong> 3 días desde la prescripción</div></div>` : ''}
         <div class="auro-receta-section auro-rx-tratamiento-section"><h4>Tratamiento prescrito</h4><div class="auro-receta-box">${auroRecetaMedicamentosPacienteHTML(r.medicamento)}</div></div>
         ${!esAdministrativo ? `<div class="auro-rx-cuadrantes-inferiores">
           <div class="auro-rx-cuadrante-diagnosticos">
@@ -4584,12 +4587,26 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           white-space:nowrap;
         }
 
+        /* IASYN2: modo de desbordamiento, nunca recortar contenido clinico. */
+        html.auro-rx-paginas-extra .auro-hoja-a4-doble{height:auto!important;max-height:none!important;overflow:visible!important}
+        html.auro-rx-paginas-extra .auro-media-receta{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;padding:3mm 0 9mm!important;margin:0!important;break-after:page!important;page-break-after:always!important}
+        html.auro-rx-paginas-extra .auro-media-copia{border-top:0!important}
+        html.auro-rx-paginas-extra .auro-ejemplar-contenido{height:auto!important;overflow:visible!important}
+        html.auro-rx-paginas-extra .auro-media-receta .auro-receta-documento{height:auto!important;overflow:visible!important;display:block!important}
+        html.auro-rx-paginas-extra .auro-ejemplar-etiqueta{position:static!important;margin-top:4mm!important}
+        html.auro-rx-paginas-extra .auro-media-receta .auro-receta-section,html.auro-rx-paginas-extra .auro-media-receta .auro-rx-diagnosticos-section{break-inside:auto!important;page-break-inside:auto!important}
         @page{
           size:A4 portrait;
           margin:6mm 8mm;
         }
 
         @media print{
+          html.auro-rx-paginas-extra,html.auro-rx-paginas-extra body{height:auto!important;overflow:visible!important}
+          html.auro-rx-paginas-extra .auro-hoja-a4-doble{height:auto!important;overflow:visible!important}
+          html.auro-rx-paginas-extra .auro-media-receta{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
+          html.auro-rx-paginas-extra .auro-media-receta:last-child{break-after:auto!important;page-break-after:auto!important}
+          html.auro-rx-paginas-extra.auro-ios .auro-hoja-a4-doble{height:auto!important}
+          html.auro-rx-paginas-extra.auro-ios .auro-media-receta{height:auto!important;min-height:0!important;max-height:none!important}
           html,body{
             width:210mm!important;
             height:297mm!important;
@@ -4927,7 +4944,7 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
               <button type="button" onclick="auroCambiarZoom(10)" title="Aumentar zoom">+</button>
               <button type="button" class="auro-preview-fit" onclick="auroAjustarZoom()" title="Ajustar a la ventana">Ajustar</button>
             </div>
-            <button type="button" class="auro-preview-btn" onclick="window.print()">Imprimir / Guardar PDF</button>
+            <button type="button" class="auro-preview-btn" onclick="auroImprimirRecetaSinRecortes()">Imprimir / Guardar PDF</button>
             <button type="button" class="auro-preview-btn secondary" onclick="window.close()">Cerrar</button>
           </div>
         </div>
@@ -4938,6 +4955,30 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
 
         <script>
           (function(){
+            // No modifica el contenido, el QR ni la firma: solo selecciona la paginacion.
+            function auroRecetaNecesitaMasEspacio(){
+              return Array.from(document.querySelectorAll('.auro-media-receta')).some(function(ejemplar){
+                const contenido=ejemplar.querySelector('.auro-ejemplar-contenido');
+                const documento=ejemplar.querySelector('.auro-receta-documento');
+                if(!contenido||!documento) return true;
+                const finalContenido=contenido.getBoundingClientRect().bottom;
+                const finalDocumento=documento.getBoundingClientRect().bottom;
+                const etiqueta=ejemplar.querySelector('.auro-ejemplar-etiqueta');
+                const topeEtiqueta=etiqueta?etiqueta.getBoundingClientRect().top:finalContenido;
+                return finalDocumento>Math.min(finalContenido,topeEtiqueta)-1 ||
+                  documento.scrollHeight>contenido.clientHeight+1;
+              });
+            }
+            window.auroImprimirRecetaSinRecortes=function(){
+              document.documentElement.classList.remove('auro-rx-paginas-extra');
+              // Recalcula antes de imprimir, sin modificar medicamentos ni diagnosticos.
+              if(auroRecetaNecesitaMasEspacio()) document.documentElement.classList.add('auro-rx-paginas-extra');
+              window.print();
+            };
+            window.addEventListener('beforeprint',function(){
+              if(!document.documentElement.classList.contains('auro-rx-paginas-extra') && auroRecetaNecesitaMasEspacio())
+                document.documentElement.classList.add('auro-rx-paginas-extra');
+            });
             let auroZoomActual = 115;
             const auroZoomMinimo = 30;
             const auroZoomMaximo = 180;
