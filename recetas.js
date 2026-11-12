@@ -4015,6 +4015,27 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
   }
 
   // IASYN2: pie institucional visual, sin llamadas externas ni cambios en persistencia.
+  // Solo presentación: no altera la configuración guardada ni los datos clínicos.
+  function auroRecetaUbicacionSinDuplicados(cfg){
+    cfg = cfg || {};
+    const partes = [cfg.direccion, cfg.ciudad, cfg.provincia, cfg.pais]
+      .map(x => String(x || '').trim()).filter(Boolean);
+    const salida = [];
+    const normalizar = x => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ').trim();
+    partes.forEach(parte => {
+      const clave = normalizar(parte);
+      if(!clave) return;
+      // Una dirección completa ya puede contener ciudad, provincia y país.
+      if(salida.some(actual => {
+        const texto = ' ' + normalizar(actual) + ' ';
+        return texto.includes(' ' + clave + ' ');
+      })) return;
+      if(!salida.some(actual => normalizar(actual) === clave)) salida.push(parte);
+    });
+    return salida.join(' · ');
+  }
+
   function auroRecetaContactoIconosHTML(cfg){
     cfg = cfg || {};
     const iconos = {
@@ -4022,7 +4043,7 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
       email:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
       telefono:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h3l2 5-2.5 2.2a15 15 0 0 0 4.3 4.3L16 12l5 2v3a4 4 0 0 1-4 4A14 14 0 0 1 3 7a4 4 0 0 1 4-4Z"/></svg>'
     };
-    const ubicacion = [cfg.direccion,cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(' · ');
+    const ubicacion = auroRecetaUbicacionSinDuplicados(cfg);
     const entradas = [['direccion',ubicacion],['email',cfg.email],['telefono',cfg.telefono]];
     return entradas.filter(x=>String(x[1]||'').trim()).map(x=>
       `<div class="auro-rx-contacto-item"><span class="auro-rx-contacto-icono">${iconos[x[0]]}</span><span>${safe(x[1])}</span></div>`
@@ -4059,7 +4080,7 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
       ? auroRecetaDiagnosticosMultiplesPacienteHTML(r)
       : '';
     const esMultidiagnosticoPaciente = !esAdministrativo && diagnosticosPaciente.length > 1;
-    const ubicacion = [cfg.direccion, cfg.ciudad, cfg.provincia, cfg.pais].filter(Boolean).join(' · ');
+    const ubicacion = auroRecetaUbicacionSinDuplicados(cfg);
     const contacto = [cfg.telefono, cfg.email, cfg.web].filter(Boolean).join(' · ');
     const contactoIconos = auroRecetaContactoIconosHTML(cfg);
     const registros = [
@@ -4118,7 +4139,7 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           .modo-paciente .auro-rx-paciente b,.modo-paciente .auro-rx-medico b,.modo-paciente .auro-rx-especialidad b{white-space:normal;overflow-wrap:anywhere;font-size:9.8px}
           .modo-paciente .auro-rx-cedula b,.modo-paciente .auro-rx-sexo b,.modo-paciente .auro-rx-edad b,.modo-paciente .auro-rx-fecha b,.modo-paciente .auro-rx-registro b{white-space:nowrap;overflow-wrap:normal;word-break:normal;font-size:9.2px!important}
           .modo-paciente .auro-rx-numero b{white-space:nowrap!important;overflow-wrap:normal!important;word-break:normal!important;font-size:8.8px!important;letter-spacing:-.035em}
-          .auro-rx-alergias-linea{display:inline-grid;grid-template-columns:auto minmax(0,1fr);align-items:baseline;gap:8px;max-width:100%;width:fit-content;box-sizing:border-box;margin:0 0 7px;padding:5px 9px;border:1px solid #efd8e6;border-left:3px solid #8b1e5a;border-radius:8px;background:#fffafb}
+          .auro-rx-alergias-linea{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px;width:100%;box-sizing:border-box;margin:0 0 7px;padding:5px 9px;border:1px solid #efd8e6;border-left:3px solid #8b1e5a;border-radius:8px;background:#fffafb}
           .auro-rx-alergias-linea span{color:#8b1e5a;font-size:7.8px;font-weight:900;text-transform:uppercase;letter-spacing:.025em;white-space:nowrap}
           .auro-rx-alergias-linea b{color:#1f2937;font-size:9.5px;line-height:1.25;font-weight:800;overflow-wrap:anywhere}
           .auro-rx-diagnosticos-lista{display:grid;gap:2px;margin-top:1px}
@@ -4131,7 +4152,7 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           .auro-rx-diagnosticos-section{margin-top:6px!important}.auro-rx-diagnosticos-section h4{margin-bottom:4px!important;font-size:10.8px!important;padding-bottom:3px!important}.auro-rx-diagnosticos-grid{display:grid;grid-template-columns:repeat(var(--auro-rx-dx-cols,3),minmax(0,1fr));gap:0;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb}.auro-rx-diagnostico-card{min-width:0;border:0;border-right:1px solid #e5e7eb;border-radius:0;background:#fff;padding:5px 9px 5px 0;box-shadow:none}.auro-rx-diagnostico-card:last-child{border-right:0;padding-right:0}.auro-rx-diagnostico-card.principal{background:#fff}.auro-rx-diagnostico-card-head{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:3px}.auro-rx-diagnostico-card-head strong{color:#8b1e5a;font-size:9.8px;font-weight:950}.auro-rx-dx-jerarquia,.auro-rx-dx-tipo{display:inline-flex;align-items:center;padding:0;font-size:7.2px;font-weight:900;line-height:1.1;white-space:nowrap;background:transparent!important}.auro-rx-dx-jerarquia{color:#64748b}.auro-rx-diagnostico-card.principal .auro-rx-dx-jerarquia{color:#8b1e5a}.auro-rx-dx-tipo{color:#9a3412}.auro-rx-dx-tipo.definitivo{color:#166534}.auro-rx-diagnostico-card-name{color:#1f2937;font-size:8.8px;font-weight:750;line-height:1.25;overflow-wrap:anywhere}
           .auro-rx-table-wrap{width:100%;overflow-x:auto;border:1px solid #d9dde3;border-radius:10px;background:#fff}.auro-rx-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.8px;line-height:1.25}.auro-rx-table th{background:#edf3f6;color:#263238;border-right:1px solid #cfd8dc;border-bottom:1px solid #bfc8cd;padding:6px 5px;text-align:center;font-size:9.2px;font-weight:950;text-transform:uppercase;letter-spacing:.025em}.auro-rx-table th:last-child{border-right:0}.auro-rx-table td{border-right:1px solid #dfe5e8;border-bottom:1px solid #dfe5e8;padding:6px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:normal}.auro-rx-table tr:last-child td{border-bottom:0}.auro-rx-table td:last-child{border-right:0}.auro-rx-col-num{text-align:center;font-weight:900;color:#7a174f}.auro-rx-col-med strong{font-size:11.2px;color:#111827}.auro-rx-col-cant{text-align:center;font-weight:850}.auro-rx-col-ind{color:#334155}.auro-rx-vacio{color:#94a3b8}.auro-rx-w-num{width:5%}.auro-rx-w-med{width:20%}.auro-rx-w-pres{width:23%}.auro-rx-w-cant{width:10%}.auro-rx-w-ind{width:42%}
           .auro-text-premium{color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:7px 9px;font-size:12px;line-height:1.35}.auro-empty-note{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:7px 9px;font-size:12px}
-          .auro-rx-vigencia{margin-left:auto;padding-left:9px;border-left:1px solid #efd8e6;font-size:8.4px;line-height:1.25;color:#374151;white-space:normal;max-width:46%;min-width:0}
+          .auro-rx-vigencia{margin-left:auto;padding-left:7px;border-left:1px solid #efd8e6;font-size:7.4px;line-height:1.12;color:#374151;white-space:nowrap;max-width:none;min-width:0;text-align:right}
           .auro-rx-vigencia strong{color:#8b1e5a;font-weight:750}
           .auro-rx-contacto-iconos{display:flex;flex-direction:column;gap:3px;min-width:0}
           .auro-rx-contacto-item{display:flex;align-items:flex-start;gap:5px;overflow-wrap:anywhere;font-size:8px;line-height:1.25}
@@ -4152,8 +4173,8 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
             .modo-paciente .auro-receta-grid .auro-rx-medico,
             .modo-paciente .auro-receta-grid .auro-rx-registro{grid-column:1/-1!important;border-right:0}
             .modo-paciente .auro-receta-grid .auro-rx-registro{padding-left:7px}
-            .auro-rx-alergias-linea{display:grid;grid-template-columns:1fr;width:100%;gap:2px}
-            .auro-rx-vigencia{margin-left:0;max-width:100%;padding-left:0;border-left:0}
+            .auro-rx-alergias-linea{display:grid;grid-template-columns:auto minmax(0,1fr) auto;width:100%;gap:5px}
+            .auro-rx-vigencia{margin-left:auto;max-width:none;padding-left:5px;border-left:1px solid #efd8e6;white-space:nowrap;font-size:7px}
             .auro-receta-footer{grid-template-columns:1fr}
             .auro-rx-diagnosticos-grid{grid-template-columns:1fr!important}
             .auro-rx-table-wrap{overflow-x:auto}
@@ -4368,6 +4389,22 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           gap:5px!important;
           border-radius:6px!important;
           flex:0 0 auto!important;
+        }
+
+        .auro-media-receta .auro-rx-alergias-linea{
+          display:grid!important;
+          grid-template-columns:auto minmax(0,1fr) auto!important;
+          align-items:center!important;
+          width:100%!important;
+        }
+        .auro-media-receta .auro-rx-alergias-linea .auro-rx-vigencia{
+          grid-column:3!important;
+          margin-left:auto!important;
+          font-size:7px!important;
+          line-height:1.1!important;
+          white-space:nowrap!important;
+          text-align:right!important;
+          max-width:none!important;
         }
 
         .auro-media-receta .auro-rx-alergias-linea span{
@@ -4587,26 +4624,28 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           white-space:nowrap;
         }
 
-        /* IASYN2: modo de desbordamiento, nunca recortar contenido clinico. */
-        html.auro-rx-paginas-extra .auro-hoja-a4-doble{height:auto!important;max-height:none!important;overflow:visible!important}
-        html.auro-rx-paginas-extra .auro-media-receta{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important;padding:3mm 0 9mm!important;margin:0!important;break-after:page!important;page-break-after:always!important}
-        html.auro-rx-paginas-extra .auro-media-copia{border-top:0!important}
-        html.auro-rx-paginas-extra .auro-ejemplar-contenido{height:auto!important;overflow:visible!important}
-        html.auro-rx-paginas-extra .auro-media-receta .auro-receta-documento{height:auto!important;overflow:visible!important;display:block!important}
-        html.auro-rx-paginas-extra .auro-ejemplar-etiqueta{position:static!important;margin-top:4mm!important}
-        html.auro-rx-paginas-extra .auro-media-receta .auro-receta-section,html.auro-rx-paginas-extra .auro-media-receta .auro-rx-diagnosticos-section{break-inside:auto!important;page-break-inside:auto!important}
+        /* IASYN2 A4: compactacion progresiva, sin paginas adicionales.
+           No se modifica el bloque de firma ni el QR. */
+        html.auro-rx-compacto-1 .auro-media-receta .auro-receta-section{margin-top:3px!important}
+        html.auro-rx-compacto-1 .auro-media-receta .auro-receta-section h4{margin-bottom:2px!important}
+        html.auro-rx-compacto-1 .auro-media-receta .auro-rx-table td{padding-top:2px!important;padding-bottom:2px!important;line-height:1.12!important}
+        html.auro-rx-compacto-1 .auro-media-receta .auro-rx-cuadrantes-inferiores{margin-top:3px!important}
+        html.auro-rx-compacto-2 .auro-media-receta .auro-receta-section{margin-top:2px!important}
+        html.auro-rx-compacto-2 .auro-media-receta .auro-receta-section h4{margin-bottom:1px!important}
+        html.auro-rx-compacto-2 .auro-media-receta .auro-rx-table td{padding-top:1px!important;padding-bottom:1px!important;line-height:1.08!important;font-size:9px!important}
+        html.auro-rx-compacto-2 .auro-media-receta .auro-rx-cuadrantes-inferiores{margin-top:2px!important}
+        html.auro-rx-compacto-2 .auro-media-receta .auro-rx-diagnostico-card{margin-bottom:1px!important}
+        html.auro-rx-compacto-3 .auro-media-receta .auro-receta-section{margin-top:1px!important}
+        html.auro-rx-compacto-3 .auro-media-receta .auro-receta-section h4{margin-bottom:0!important}
+        html.auro-rx-compacto-3 .auro-media-receta .auro-rx-table td{padding-top:0!important;padding-bottom:0!important;line-height:1.04!important;font-size:8.5px!important}
+        html.auro-rx-compacto-3 .auro-media-receta .auro-rx-cuadrantes-inferiores{margin-top:1px!important}
+        html.auro-rx-compacto-3 .auro-media-receta .auro-rx-diagnostico-card{margin-bottom:0!important}
         @page{
           size:A4 portrait;
           margin:6mm 8mm;
         }
 
         @media print{
-          html.auro-rx-paginas-extra,html.auro-rx-paginas-extra body{height:auto!important;overflow:visible!important}
-          html.auro-rx-paginas-extra .auro-hoja-a4-doble{height:auto!important;overflow:visible!important}
-          html.auro-rx-paginas-extra .auro-media-receta{height:auto!important;min-height:0!important;max-height:none!important;overflow:visible!important}
-          html.auro-rx-paginas-extra .auro-media-receta:last-child{break-after:auto!important;page-break-after:auto!important}
-          html.auro-rx-paginas-extra.auro-ios .auro-hoja-a4-doble{height:auto!important}
-          html.auro-rx-paginas-extra.auro-ios .auro-media-receta{height:auto!important;min-height:0!important;max-height:none!important}
           html,body{
             width:210mm!important;
             height:297mm!important;
@@ -4955,29 +4994,55 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
 
         <script>
           (function(){
-            // No modifica el contenido, el QR ni la firma: solo selecciona la paginacion.
-            function auroRecetaNecesitaMasEspacio(){
-              return Array.from(document.querySelectorAll('.auro-media-receta')).some(function(ejemplar){
+            // Comprobacion visual A4: compacta progresivamente y, si no cabe,
+            // advierte y bloquea imprimir. No toca QR, firma, medicamentos ni datos.
+            const auroClasesCompactacion=['auro-rx-compacto-1','auro-rx-compacto-2','auro-rx-compacto-3'];
+            function auroRecetaDesborda(){
+              const ejemplares=Array.from(document.querySelectorAll('.auro-media-receta'));
+              if(ejemplares.length!==2) return true;
+              return ejemplares.some(function(ejemplar){
                 const contenido=ejemplar.querySelector('.auro-ejemplar-contenido');
                 const documento=ejemplar.querySelector('.auro-receta-documento');
-                if(!contenido||!documento) return true;
-                const finalContenido=contenido.getBoundingClientRect().bottom;
-                const finalDocumento=documento.getBoundingClientRect().bottom;
+                const inferior=ejemplar.querySelector('.auro-rx-cuadrantes-inferiores');
                 const etiqueta=ejemplar.querySelector('.auro-ejemplar-etiqueta');
-                const topeEtiqueta=etiqueta?etiqueta.getBoundingClientRect().top:finalContenido;
-                return finalDocumento>Math.min(finalContenido,topeEtiqueta)-1 ||
-                  documento.scrollHeight>contenido.clientHeight+1;
+                if(!contenido||!documento||!inferior||!etiqueta) return true;
+                const rContenido=contenido.getBoundingClientRect();
+                const rDocumento=documento.getBoundingClientRect();
+                const rInferior=inferior.getBoundingClientRect();
+                const rEtiqueta=etiqueta.getBoundingClientRect();
+                const limite=Math.min(rContenido.bottom,rEtiqueta.top)-1;
+                // Se verifica tambien el bloque inferior (diagnosticos/contacto/firma).
+                if(rDocumento.bottom>limite||rInferior.bottom>limite) return true;
+                if(documento.scrollHeight>contenido.clientHeight+1) return true;
+                // Detecta tablas, textos o elementos que exceden horizontalmente.
+                const ancho=contenido.getBoundingClientRect().right+1;
+                return Array.from(documento.querySelectorAll('table, .auro-rx-cuadrantes-inferiores, .auro-rx-alergias-linea')).some(function(el){
+                  return el.getBoundingClientRect().right>ancho;
+                });
               });
             }
+            function auroRecetaAjustarA4(){
+              document.documentElement.classList.remove.apply(document.documentElement.classList,auroClasesCompactacion);
+              if(!auroRecetaDesborda()) return true;
+              for(const clase of auroClasesCompactacion){
+                document.documentElement.classList.add(clase);
+                if(!auroRecetaDesborda()) return true;
+              }
+              return false;
+            }
             window.auroImprimirRecetaSinRecortes=function(){
-              document.documentElement.classList.remove('auro-rx-paginas-extra');
-              // Recalcula antes de imprimir, sin modificar medicamentos ni diagnosticos.
-              if(auroRecetaNecesitaMasEspacio()) document.documentElement.classList.add('auro-rx-paginas-extra');
+              if(!auroRecetaAjustarA4()){
+                window.alert('La receta supera el espacio legible de una hoja A4 con ORIGINAL y COPIA. No se imprimira ni se ocultaran medicamentos, diagnosticos, QR o firma. Revise el contenido de la receta.');
+                return;
+              }
               window.print();
             };
             window.addEventListener('beforeprint',function(){
-              if(!document.documentElement.classList.contains('auro-rx-paginas-extra') && auroRecetaNecesitaMasEspacio())
-                document.documentElement.classList.add('auro-rx-paginas-extra');
+              // Proteccion adicional para Ctrl+P; el navegador puede ignorar cancelaciones
+              // de beforeprint. El boton del ERP es la via de impresion validada.
+              if(!auroRecetaAjustarA4()){
+                window.alert('ADVERTENCIA: el contenido no cabe completo en una hoja A4. Cancele la impresion para evitar recortes.');
+              }
             });
             let auroZoomActual = 115;
             const auroZoomMinimo = 30;
