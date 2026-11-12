@@ -4014,6 +4014,21 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
     return `Refiere alergias: ${raw}`;
   }
 
+  // IASYN2: pie institucional visual, sin llamadas externas ni cambios en persistencia.
+  function auroRecetaContactoIconosHTML(cfg){
+    cfg = cfg || {};
+    const iconos = {
+      direccion:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+      email:'<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+      telefono:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h3l2 5-2.5 2.2a15 15 0 0 0 4.3 4.3L16 12l5 2v3a4 4 0 0 1-4 4A14 14 0 0 1 3 7a4 4 0 0 1 4-4Z"/></svg>'
+    };
+    const ubicacion = [cfg.direccion,cfg.ciudad,cfg.provincia,cfg.pais].filter(Boolean).join(' · ');
+    const entradas = [['direccion',ubicacion],['email',cfg.email],['telefono',cfg.telefono]];
+    return entradas.filter(x=>String(x[1]||'').trim()).map(x=>
+      `<div class="auro-rx-contacto-item"><span class="auro-rx-contacto-icono">${iconos[x[0]]}</span><span>${safe(x[1])}</span></div>`
+    ).join('');
+  }
+
   function construirHTMLReceta(r, modo){
     r = r || {};
     modo = modo === 'administrativo' ? 'administrativo' : 'paciente';
@@ -4046,6 +4061,7 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
     const esMultidiagnosticoPaciente = !esAdministrativo && diagnosticosPaciente.length > 1;
     const ubicacion = [cfg.direccion, cfg.ciudad, cfg.provincia, cfg.pais].filter(Boolean).join(' · ');
     const contacto = [cfg.telefono, cfg.email, cfg.web].filter(Boolean).join(' · ');
+    const contactoIconos = auroRecetaContactoIconosHTML(cfg);
     const registros = [
       medico.registro_msp ? `Registro MSP/ACESS: ${medico.registro_msp}` : '',
       medico.registro_senescyt ? `Registro SENESCYT: ${medico.registro_senescyt}` : ''
@@ -4115,6 +4131,10 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           .auro-rx-diagnosticos-section{margin-top:6px!important}.auro-rx-diagnosticos-section h4{margin-bottom:4px!important;font-size:10.8px!important;padding-bottom:3px!important}.auro-rx-diagnosticos-grid{display:grid;grid-template-columns:repeat(var(--auro-rx-dx-cols,3),minmax(0,1fr));gap:0;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb}.auro-rx-diagnostico-card{min-width:0;border:0;border-right:1px solid #e5e7eb;border-radius:0;background:#fff;padding:5px 9px 5px 0;box-shadow:none}.auro-rx-diagnostico-card:last-child{border-right:0;padding-right:0}.auro-rx-diagnostico-card.principal{background:#fff}.auro-rx-diagnostico-card-head{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:3px}.auro-rx-diagnostico-card-head strong{color:#8b1e5a;font-size:9.8px;font-weight:950}.auro-rx-dx-jerarquia,.auro-rx-dx-tipo{display:inline-flex;align-items:center;padding:0;font-size:7.2px;font-weight:900;line-height:1.1;white-space:nowrap;background:transparent!important}.auro-rx-dx-jerarquia{color:#64748b}.auro-rx-diagnostico-card.principal .auro-rx-dx-jerarquia{color:#8b1e5a}.auro-rx-dx-tipo{color:#9a3412}.auro-rx-dx-tipo.definitivo{color:#166534}.auro-rx-diagnostico-card-name{color:#1f2937;font-size:8.8px;font-weight:750;line-height:1.25;overflow-wrap:anywhere}
           .auro-rx-table-wrap{width:100%;overflow-x:auto;border:1px solid #d9dde3;border-radius:10px;background:#fff}.auro-rx-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.8px;line-height:1.25}.auro-rx-table th{background:#edf3f6;color:#263238;border-right:1px solid #cfd8dc;border-bottom:1px solid #bfc8cd;padding:6px 5px;text-align:center;font-size:9.2px;font-weight:950;text-transform:uppercase;letter-spacing:.025em}.auro-rx-table th:last-child{border-right:0}.auro-rx-table td{border-right:1px solid #dfe5e8;border-bottom:1px solid #dfe5e8;padding:6px 6px;vertical-align:top;overflow-wrap:anywhere;word-break:normal}.auro-rx-table tr:last-child td{border-bottom:0}.auro-rx-table td:last-child{border-right:0}.auro-rx-col-num{text-align:center;font-weight:900;color:#7a174f}.auro-rx-col-med strong{font-size:11.2px;color:#111827}.auro-rx-col-cant{text-align:center;font-weight:850}.auro-rx-col-ind{color:#334155}.auro-rx-vacio{color:#94a3b8}.auro-rx-w-num{width:5%}.auro-rx-w-med{width:20%}.auro-rx-w-pres{width:23%}.auro-rx-w-cant{width:10%}.auro-rx-w-ind{width:42%}
           .auro-text-premium{color:#1f2937;background:#f8fafc;border:1px solid #eef2f7;border-radius:12px;padding:7px 9px;font-size:12px;line-height:1.35}.auro-empty-note{color:#64748b;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:7px 9px;font-size:12px}
+          .auro-rx-contacto-iconos{display:flex;flex-direction:column;gap:3px;min-width:0}
+          .auro-rx-contacto-item{display:flex;align-items:flex-start;gap:5px;overflow-wrap:anywhere;font-size:8px;line-height:1.25}
+          .auro-rx-contacto-icono{flex:0 0 11px;width:11px;height:11px;color:#8b1e5a}
+          .auro-rx-contacto-icono svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
           .auro-receta-footer{display:grid;grid-template-columns:1.2fr .8fr;gap:18px;margin-top:24px;align-items:end}.auro-centro-contacto{font-size:10.5px;color:#475569;line-height:1.45}.auro-firma{text-align:center;padding-top:20px;font-size:11px}.auro-linea{border-top:1px solid #111827;margin-bottom:5px}.badge-auro{display:inline-block;border-radius:999px;padding:4px 9px;font-size:10.5px;font-weight:900;margin-top:3px}.badge-ok{background:#dcfce7;color:#166534}.badge-danger{background:#fee2e2;color:#991b1b}
           .auro-admin-alert{border:1px solid #bfdbfe;background:#eff6ff;color:#1e3a8a;border-radius:12px;padding:7px 9px;margin-bottom:9px;font-weight:800;font-size:11px}
           @page{size:A4;margin:10mm}@media print{.no-print{display:none!important}.auro-receta-documento{max-width:none;font-size:11.4px;line-height:1.25}.auro-receta-header,.auro-receta-box,.auro-rx-table-wrap,.auro-rx-table tr,.auro-rx-diagnosticos-section,.auro-rx-diagnostico-unico-section,.auro-rx-alergias-linea{break-inside:avoid;page-break-inside:avoid}.auro-receta-grid{gap:4px;padding:6px}.auro-receta-grid div{padding:4px 6px}.modo-paciente .auro-receta-grid{gap:0!important;padding:0 0 5px!important}.modo-paciente .auro-receta-grid .auro-rx-dato{padding:3px 5px!important;min-height:32px!important}.modo-paciente .auro-receta-grid .auro-rx-especialidad,.modo-paciente .auro-receta-grid .auro-rx-medico,.modo-paciente .auro-receta-grid .auro-rx-registro{padding-top:5px!important}.modo-paciente .auro-receta-grid .auro-rx-registro{padding-left:10px!important}.modo-paciente .auro-receta-grid span{margin-bottom:2px!important}.modo-paciente .auro-receta-grid b{font-size:8.9px!important;line-height:1.2!important}.modo-paciente .auro-receta-grid .auro-rx-paciente b,.modo-paciente .auro-receta-grid .auro-rx-medico b,.modo-paciente .auro-receta-grid .auro-rx-especialidad b{font-size:9.05px!important}.modo-paciente .auro-receta-grid .auro-rx-cedula b,.modo-paciente .auro-receta-grid .auro-rx-sexo b,.modo-paciente .auro-receta-grid .auro-rx-edad b,.modo-paciente .auro-receta-grid .auro-rx-fecha b,.modo-paciente .auro-receta-grid .auro-rx-registro b{font-size:8.7px!important}.modo-paciente .auro-rx-numero b{font-size:8.15px!important}.auro-rx-alergias-linea{padding:4px 7px!important;margin-bottom:5px!important;gap:6px!important}.auro-rx-alergias-linea span{font-size:7.2px!important}.auro-rx-alergias-linea b{font-size:8.6px!important}.auro-rx-table{font-size:9.4px}.auro-rx-table th{font-size:8.3px;padding:4px}.auro-rx-table td{padding:4px 5px}.auro-rx-col-med strong{font-size:9.8px}.auro-rx-diagnostico-unico{padding:3px 0!important;gap:5px!important}.auro-rx-diagnostico-unico-name{font-size:8.2px!important}.auro-rx-diagnosticos-grid{gap:0}.auro-rx-diagnostico-card{padding:4px 6px 4px 0}.auro-rx-diagnostico-card-name{font-size:8px;line-height:1.22}.auro-receta-footer{margin-top:18px}.auro-admin-alert{display:none}}
@@ -4150,7 +4170,7 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           <div class="auro-rx-cuadrante-diagnosticos">
             ${diagnosticoUnicoPaciente}
             ${diagnosticosMultiplesPaciente}
-            <div class="auro-centro-contacto">${ubicacion ? `<div>${safe(ubicacion)}</div>` : ''}${contacto ? `<div>${safe(contacto)}</div>` : ''}</div>
+            <div class="auro-centro-contacto auro-rx-contacto-iconos">${contactoIconos}</div>
           </div>
           <div class="auro-rx-cuadrante-firma"><div class="auro-firma"><div class="auro-linea"></div><b>${safe(medico.nombre)}</b>${medico.especialidad ? `<br><span>${safe(medico.especialidad)}</span>` : ''}${registros.map(x=>`<br><span>${safe(x)}</span>`).join('')}<br><span>Firma y sello</span></div></div>
         </div>` : ''}
