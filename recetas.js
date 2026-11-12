@@ -3580,6 +3580,28 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
     return [...new Set(partes)].join(' · ');
   }
 
+  /* IASYN2 RX: formato visual de cantidades; nunca altera el dato guardado. */
+  function auroRecetaCantidadVisual(cantidad){
+    const texto = String(cantidad == null ? '' : cantidad).trim();
+    if(!/^\d{1,4}$/.test(texto)) return texto;
+    const numero = Number(texto);
+    if(!Number.isSafeInteger(numero) || numero > 9999) return texto;
+    const unidades = ['cero','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve',
+      'diez','once','doce','trece','catorce','quince','dieciséis','diecisiete','dieciocho','diecinueve',
+      'veinte','veintiuno','veintidós','veintitrés','veinticuatro','veinticinco','veintiséis','veintisiete','veintiocho','veintinueve'];
+    const decenas = ['','','','treinta','cuarenta','cincuenta','sesenta','setenta','ochenta','noventa'];
+    const centenas = ['','ciento','doscientos','trescientos','cuatrocientos','quinientos',
+      'seiscientos','setecientos','ochocientos','novecientos'];
+    const letras = (n) => {
+      if(n < 30) return unidades[n];
+      if(n < 100) return decenas[Math.floor(n/10)] + (n%10 ? ' y ' + unidades[n%10] : '');
+      if(n === 100) return 'cien';
+      if(n < 1000) return centenas[Math.floor(n/100)] + (n%100 ? ' ' + letras(n%100) : '');
+      return (n < 2000 ? 'mil' : letras(Math.floor(n/1000)) + ' mil') + (n%1000 ? ' ' + letras(n%1000) : '');
+    };
+    return texto + ' (' + letras(numero) + ')';
+  }
+
   function auroRecetaMedicamentosPacienteHTML(valor){
     const txt = String(valor || '').trim();
     if(!txt){
@@ -3629,7 +3651,7 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           <td class="auro-rx-col-num">${index + 1}</td>
           <td class="auro-rx-col-med"><strong>${safe(nombre)}</strong></td>
           <td class="auro-rx-col-pres">${presentacion ? safe(presentacion) : '<span class="auro-rx-vacio">—</span>'}</td>
-          <td class="auro-rx-col-cant">${cantidad ? safe(cantidad) : '<span class="auro-rx-vacio">—</span>'}</td>
+          <td class="auro-rx-col-cant">${cantidad ? `<span class="auro-rx-cantidad-visual">${safe(auroRecetaCantidadVisual(cantidad))}</span>` : '<span class="auro-rx-vacio">—</span>'}</td>
           <td class="auro-rx-col-ind">${indicaciones ? safe(indicaciones) : '<span class="auro-rx-vacio">—</span>'}</td>
         </tr>`;
     }).join('');
@@ -4510,6 +4532,20 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           word-break:normal!important;
         }
 
+        /* Centrado por fila: la altura depende de las indicaciones, no de un alto fijo. */
+        .auro-media-receta .auro-rx-table tbody td{
+          vertical-align:middle!important;
+          height:auto!important;
+        }
+        .auro-media-receta .auro-rx-cantidad-visual{
+          display:inline-block;
+          white-space:normal;
+          overflow-wrap:normal;
+          word-break:normal;
+          hyphens:none;
+          line-height:1.12;
+        }
+
         .auro-media-receta .auro-rx-col-med strong{
           font-size:10.8px!important;
           line-height:1.10!important;
@@ -4518,8 +4554,8 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
         .auro-media-receta .auro-rx-w-num{width:5%!important}
         .auro-media-receta .auro-rx-w-med{width:21%!important}
         .auro-media-receta .auro-rx-w-pres{width:23%!important}
-        .auro-media-receta .auro-rx-w-cant{width:9%!important}
-        .auro-media-receta .auro-rx-w-ind{width:42%!important}
+        .auro-media-receta .auro-rx-w-cant{width:14%!important}
+        .auro-media-receta .auro-rx-w-ind{width:37%!important}
 
         /* IASYN2: cuadrantes inferiores, solo presentación; sin alterar motor de firma */
         .auro-media-receta .auro-rx-cuadrantes-inferiores{
