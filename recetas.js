@@ -4852,6 +4852,9 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           .auro-a4-alerta[data-estado="verde"]{background:#e9f7ee;color:#166534;border-color:#86cba0}
           .auro-a4-alerta[data-estado="amarillo"]{background:#fff6db;color:#854d0e;border-color:#e6c566}
           .auro-a4-alerta[data-estado="rojo"]{background:#feecec;color:#991b1b;border-color:#f0a3a3}
+          .auro-a4-leyenda{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px;margin-top:5px;font:400 11px/1.4 Arial,system-ui,sans-serif;color:#374151}
+          .auro-a4-leyenda span{white-space:normal}
+          @media(max-width:480px){.auro-a4-alerta{padding:9px 12px;font-size:12px}.auro-a4-leyenda{gap:3px 10px;font-size:10px}}
           .auro-a4-alerta button{margin-left:12px;padding:5px 11px;border:1px solid currentColor;border-radius:5px;background:transparent;color:inherit;cursor:pointer;font-weight:700}
           .auro-preview-toolbar{
             position:sticky;
@@ -5112,6 +5115,15 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
               const dato=mensajes[nivel]||mensajes[4];
               aviso.dataset.estado=dato[0];
               aviso.textContent=dato[1];
+              const leyenda=document.createElement('div');
+              leyenda.className='auro-a4-leyenda';
+              leyenda.setAttribute('aria-label','Significado de los colores del semáforo A4');
+              ['🟢 Verde: cabe correctamente','🟡 Amarillo: espacio ajustado','🔴 Rojo: riesgo de recorte'].forEach(function(etiqueta){
+                const item=document.createElement('span');
+                item.textContent=etiqueta;
+                leyenda.appendChild(item);
+              });
+              aviso.appendChild(leyenda);
               if(nivel===4){
                 const boton=document.createElement('button');
                 boton.type='button';
