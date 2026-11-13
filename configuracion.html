@@ -2243,6 +2243,10 @@ function showSecurityPanel(id,btn){
           <input id="medMsp" class="form-control" value="${safeText(m.registro_msp || '')}" placeholder="Opcional">
         </div>
         <div class="col-md-6">
+          <label class="form-label fw-bold">Entidad certificadora de firma electrónica</label>
+          <input id="medEntidadCertificadora" class="form-control" value="${safeText(m.entidad_certificadora || '')}" placeholder="Nombre de la entidad certificadora">
+        </div>
+        <div class="col-md-6">
           <label class="form-label fw-bold">Teléfono</label>
           <input id="medTelefono" class="form-control" value="${safeText(m.telefono || '')}" placeholder="0999999999">
         </div>
@@ -2385,6 +2389,7 @@ function showSecurityPanel(id,btn){
       especialidad_principal: document.getElementById('medEspecialidad').value.trim(),
       registro_senescyt: document.getElementById('medSenescyt').value.trim(),
       registro_msp: document.getElementById('medMsp').value.trim(),
+      entidad_certificadora: document.getElementById('medEntidadCertificadora').value.trim(),
       telefono: document.getElementById('medTelefono').value.trim(),
       email: document.getElementById('medEmail').value.trim(),
       estado: document.getElementById('medEstado').value || 'Activo'
