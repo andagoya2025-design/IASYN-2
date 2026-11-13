@@ -4838,6 +4838,21 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
             font-family:Arial,system-ui,sans-serif;
           }
 
+          .auro-a4-alerta{
+            position:relative;
+            z-index:9998;
+            box-sizing:border-box;
+            width:100%;
+            padding:11px 18px;
+            font:600 13px/1.5 Arial,system-ui,sans-serif;
+            border-bottom:1px solid #d1d5db;
+            background:#eef2f7;
+            color:#374151;
+          }
+          .auro-a4-alerta[data-estado="verde"]{background:#e9f7ee;color:#166534;border-color:#86cba0}
+          .auro-a4-alerta[data-estado="amarillo"]{background:#fff6db;color:#854d0e;border-color:#e6c566}
+          .auro-a4-alerta[data-estado="rojo"]{background:#feecec;color:#991b1b;border-color:#f0a3a3}
+          .auro-a4-alerta button{margin-left:12px;padding:5px 11px;border:1px solid currentColor;border-radius:5px;background:transparent;color:inherit;cursor:pointer;font-weight:700}
           .auro-preview-toolbar{
             position:sticky;
             top:0;
@@ -5035,6 +5050,8 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
           </div>
         </div>
 
+        <div id="auroA4Alerta" class="auro-a4-alerta" role="status" aria-live="polite" data-estado="calculando">⏳ Comprobando el espacio A4 de ORIGINAL y COPIA…</div>
+
         <main class="auro-preview-stage">
           <div class="auro-preview-sheet" id="auroPreviewSheet">${html}</div>
         </main>
@@ -5072,22 +5089,44 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
                 });
               });
             }
+            function auroRecetaMostrarEstadoA4(nivel){
+              const aviso=document.getElementById('auroA4Alerta');
+              if(!aviso) return;
+              const mensajes={
+                0:['verde','🟢 ESPACIO A4 CORRECTO. ORIGINAL y COPIA caben sin compactación.'],
+                1:['amarillo','🟡 ESPACIO A4 AJUSTADO. Se aplicó compactación leve para conservar todos los datos. Revise la legibilidad.'],
+                2:['amarillo','🟡 ESPACIO A4 JUSTO. Se compactó el contenido para conservar medicamentos, diagnósticos, firma y pie institucional. Revise la legibilidad.'],
+                3:['amarillo','🟡 ESPACIO A4 MUY JUSTO. Se aplicó la máxima compactación; revise cuidadosamente la legibilidad antes de imprimir.'],
+                4:['rojo','🔴 DESBORDAMIENTO A4. ORIGINAL o COPIA excede el espacio disponible. Edite las indicaciones o emita otra receta; la impresión desde el botón queda bloqueada.']
+              };
+              const dato=mensajes[nivel]||mensajes[4];
+              aviso.dataset.estado=dato[0];
+              aviso.textContent=dato[1];
+              if(nivel===4){
+                const boton=document.createElement('button');
+                boton.type='button';
+                boton.textContent='Cerrar y corregir';
+                boton.addEventListener('click',function(){window.close();});
+                aviso.appendChild(boton);
+              }
+              document.documentElement.dataset.auroA4Validado=nivel===4?'NO':'SI';
+              document.documentElement.dataset.auroA4Nivel=String(nivel);
+            }
             function auroRecetaAjustarA4(){
               const hoja=document.querySelector('.auro-hoja-a4-doble');
-              if(!hoja) return false;
+              if(!hoja){auroRecetaMostrarEstadoA4(4);return false;}
               for(const clase of auroClasesCompactacion) hoja.classList.remove(clase);
-              if(!auroRecetaDesborda()) return true;
-              for(const clase of auroClasesCompactacion){
-                hoja.classList.add(clase);
-                if(!auroRecetaDesborda()) return true;
+              // Medición DOM real: incorpora saltos de línea de las indicaciones y diagnósticos.
+              if(!auroRecetaDesborda()){auroRecetaMostrarEstadoA4(0);return true;}
+              for(let i=0;i<auroClasesCompactacion.length;i++){
+                hoja.classList.add(auroClasesCompactacion[i]);
+                if(!auroRecetaDesborda()){auroRecetaMostrarEstadoA4(i+1);return true;}
               }
+              auroRecetaMostrarEstadoA4(4);
               return false;
             }
             function auroRecetaPrepararVista(){
-              const lista=Array.from(document.querySelectorAll('.auro-media-receta'));
-              if(lista.length!==2) return;
-              const cabe=auroRecetaAjustarA4();
-              document.documentElement.dataset.auroA4Validado=cabe?'SI':'NO';
+              auroRecetaAjustarA4();
             }
             window.addEventListener('load',function(){
               requestAnimationFrame(function(){requestAnimationFrame(auroRecetaPrepararVista);});
