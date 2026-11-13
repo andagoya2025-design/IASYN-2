@@ -371,6 +371,13 @@ function auroAtencionVinculadaACitaAgenda(c){
   }) || null;
 }
 
+/* IASYN AGENDA 05 · Citas cerradas: nunca generan acciones clínicas.
+   Control compartido por render de escritorio/móvil y handlers de acceso. */
+function auroCitaSinAccionClinicaAgenda(c){
+  const estado = normalizarEstadoAgenda(auroEstadoAgenda(c));
+  return estado === 'anulada' || estado === 'no asistio' || estado === 'atendida';
+}
+
 function auroPuedeIniciarConsultaAgenda(c){
   if(auroAtencionVinculadaACitaAgenda(c)){
     return false;
@@ -466,6 +473,12 @@ function abrirCrearPacienteDesdeAgenda(index){
     return;
   }
 
+  if(auroCitaSinAccionClinicaAgenda(c)){
+    alert('Esta cita está cerrada. No corresponde crear un paciente desde Agenda.');
+    renderAgendaWeb();
+    return;
+  }
+
   if(auroPacienteVinculadoAgenda(c)){
     renderAgendaWeb();
     alert('La cita ya tiene un paciente registrado vinculado.');
@@ -518,6 +531,14 @@ function abrirCrearPacienteDesdeAgenda(index){
 }
 
 function auroAccionClinicaAgendaHTML(c, modoMovil){
+  /* PRIORIDAD ABSOLUTA: el estado de la cita se evalúa antes del paciente
+     y de la historia. Impide botones clínicos en citas cerradas. */
+  if(auroCitaSinAccionClinicaAgenda(c)){
+    return modoMovil
+      ? '<div class="auro-agenda-estado-cerrado"><i class="bi bi-check2-circle"></i> Sin acción clínica</div>'
+      : '<span class="auro-agenda-estado-cerrado"><i class="bi bi-check2-circle"></i> Sin acción clínica</span>';
+  }
+
   if(!auroPacienteVinculadoAgenda(c)){
     return modoMovil
       ? `<button class="btn-auro w-100" onclick="abrirCrearPacienteDesdeAgenda(${c.originalIndex})"><i class="bi bi-person-plus me-1"></i> Crear paciente</button>`
@@ -748,6 +769,12 @@ function abrirHistoriaDesdeAgenda(index){
   const c = citasAgendaWeb[index];
   if(!c){
     alert('No se encontró la cita seleccionada.');
+    return;
+  }
+
+  if(auroCitaSinAccionClinicaAgenda(c)){
+    alert('Esta cita está cerrada. No corresponde crear historia ni iniciar atención desde Agenda.');
+    renderAgendaWeb();
     return;
   }
 
