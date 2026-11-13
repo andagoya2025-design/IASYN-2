@@ -2,7 +2,7 @@
  IASYN ERP
  Archivo: documentos.js
  Módulo: Documentos clínicos por atención
- Versión: 1.3.0
+ Versión: 1.3.1
  Fecha: 2026-08-14
  -----------------------------------------------------------------------
  ARQUITECTURA / ANTIRREGRESIÓN
@@ -31,7 +31,7 @@
   }
 
   const MODULO = 'IASYN DOCUMENTOS';
-  const VERSION = '1.3.0';
+  const VERSION = '1.3.1';
   const JSON_VERSION = 'IASYN_DOCUMENTOS_JSON_V1';
 
   /*
@@ -122,6 +122,12 @@
       accept:'image/jpeg,image/png,image/webp,image/heic,image/heif'
     },
     {
+      key:'PATOLOGIA',
+      label:'Patología',
+      icon:'bi-file-earmark-medical',
+      accept:'application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif'
+    },
+    {
       key:'OTRO',
       label:'Otros documentos',
       icon:'bi-file-earmark-medical',
@@ -145,6 +151,7 @@
       LABORATORIO:{files:[], idAtencion:''},
       ECOGRAFIA_IMAGEN:{files:[], idAtencion:''},
       FOTOGRAFIA_CLINICA:{files:[], idAtencion:''},
+      PATOLOGIA:{files:[], idAtencion:''},
       OTRO:{files:[], idAtencion:''}
     },
     ultimoError:''
@@ -321,6 +328,34 @@
       idMedico:txt(a.id_medico),
       numeroConsulta:txt(a.numero_consulta || a.numero_atencion || a.numero)
     };
+  }
+
+  function resolverPacienteSeguro(ctx){
+    const idPaciente = txt(ctx?.idPaciente);
+    if(!idPaciente) return null;
+
+    /*
+      Solo completa datos descriptivos del MISMO id_paciente ya validado
+      por contextoAtencion(). Nunca acepta otro paciente por contexto visual.
+    */
+    try{
+      if(typeof window.getPacienteActivo === 'function'){
+        const p = window.getPacienteActivo();
+        if(p && txt(p.id_paciente || p.id) === idPaciente) return p;
+      }
+    }catch(e){}
+
+    const listas = [];
+    try{ if(Array.isArray(window.patients)) listas.push(window.patients); }catch(e){}
+    try{
+      if(typeof patients !== 'undefined' && Array.isArray(patients)) listas.push(patients);
+    }catch(e){}
+
+    for(const lista of listas){
+      const p = lista.find(x=>txt(x?.id_paciente || x?.id) === idPaciente);
+      if(p) return p;
+    }
+    return null;
   }
 
   function nombrePaciente(ctx){
@@ -519,6 +554,7 @@
     if(/labor/.test(norm(v))) return 'LABORATORIO';
     if(/eco|imagen|radiol|tomograf|reson/.test(norm(v))) return 'ECOGRAFIA_IMAGEN';
     if(/foto/.test(norm(v))) return 'FOTOGRAFIA_CLINICA';
+    if(/patolog|anatomopat|histopat|biops/.test(norm(v))) return 'PATOLOGIA';
     return 'OTRO';
   }
 
@@ -574,7 +610,7 @@
 .auro-doc-msg.ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
 .auro-doc-msg.warn{background:#fffbeb;color:#92400e;border:1px solid #fde68a}
 .auro-doc-msg.error{background:#fff1f2;color:#9f1239;border:1px solid #fecdd3}
-.auro-doc-categories{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:11px}
+.auro-doc-categories{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:11px}
 .auro-doc-category{border:1px solid #e7e9ed;border-radius:17px;background:#fff;padding:13px;display:grid;gap:9px;box-shadow:0 7px 20px rgba(15,23,42,.035);min-width:0}
 .auro-doc-category-top{display:flex;align-items:center;gap:9px}
 .auro-doc-category-icon{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:#fdf2f8;color:#8b1e5a;font-size:18px;flex:0 0 auto}
@@ -606,6 +642,9 @@
 .auro-doc-file-meta{font-size:10.5px;color:#64748b;font-weight:700;margin-top:3px;line-height:1.35;overflow-wrap:anywhere}
 .auro-doc-file-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
 .auro-doc-btn{border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:7px 9px;font-size:10.5px;font-weight:850;color:#374151;cursor:pointer}
+.auro-doc-btn.download{border-color:#cbd5e1;background:#f8fafc;color:#334155}
+.auro-doc-btn.whatsapp{border-color:#bbf7d0;background:#f0fdf4;color:#166534}
+.auro-doc-btn.email{border-color:#ddd6fe;background:#f5f3ff;color:#6d28d9}
 .auro-doc-btn.open{border-color:#bfdbfe;background:#eff6ff;color:#1d4ed8}
 .auro-doc-btn.danger{border-color:#fecdd3;background:#fff1f2;color:#9f1239}
 .auro-doc-btn:disabled{opacity:.45;cursor:not-allowed}
@@ -1003,6 +1042,22 @@
               data-auro-doc-open="${esc(id)}"
               ${url ? '' : 'disabled'}>
               <i class="bi bi-box-arrow-up-right me-1"></i> Ver
+            </button>
+            <button type="button"
+              class="auro-doc-btn download"
+              data-auro-doc-download="${esc(id)}"
+              ${url ? '' : 'disabled'}>
+              <i class="bi bi-download me-1"></i> Descargar
+            </button>
+            <button type="button"
+              class="auro-doc-btn whatsapp"
+              data-auro-doc-whatsapp="${esc(id)}">
+              <i class="bi bi-whatsapp me-1"></i> WhatsApp
+            </button>
+            <button type="button"
+              class="auro-doc-btn email"
+              data-auro-doc-email="${esc(id)}">
+              <i class="bi bi-envelope me-1"></i> Correo
             </button>
             <button type="button"
               class="auro-doc-btn danger"
@@ -1568,11 +1623,26 @@
   }
 
 
-  function abrirDocumento(idDocumento){
+  function registroSeguro(idDocumento){
+    const ctx = contextoAtencion();
     const r = state.registros.find(x=>txt(x.id_documento) === txt(idDocumento));
-    if(!r) return;
 
-    const url = txt(r.archivo_url);
+    if(!r || !ctx.id || ctx.valido !== true || !ctx.idPaciente) return null;
+    if(state.idAtencion !== ctx.id || state.contexto?.idPaciente !== ctx.idPaciente) return null;
+    if(txt(r.id_paciente) && txt(r.id_paciente) !== ctx.idPaciente) return null;
+    if(!txt(r.id_atencion) || txt(r.id_atencion) !== ctx.id) return null;
+
+    return {ctx,r};
+  }
+
+  function abrirDocumento(idDocumento){
+    const seguro = registroSeguro(idDocumento);
+    if(!seguro){
+      setMsg('Protección de seguridad: el documento no pertenece de forma inequívoca a la atención activa.','error');
+      return;
+    }
+
+    const url = txt(seguro.r.archivo_url);
     if(!url){
       setMsg('Este registro no tiene un enlace de Drive disponible.','error');
       return;
@@ -1584,6 +1654,145 @@
     }
   }
 
+  function nombreArchivoSeguro(r){
+    return txt(r?.nombre_documento || 'documento-clinico')
+      .replace(/[\/:*?"<>|]+/g,'_')
+      .slice(0,180) || 'documento-clinico';
+  }
+
+  function urlDescargaRegistro(r){
+    const idDrive = txt(r?.drive_file_id);
+    if(idDrive){
+      return 'https://drive.google.com/uc?export=download&id='+encodeURIComponent(idDrive);
+    }
+    return txt(r?.archivo_url);
+  }
+
+  async function obtenerBlobDocumento(r){
+    const url = txt(r?.archivo_url);
+    if(!url) throw new Error('Documento sin URL disponible.');
+
+    const resp = await fetch(url,{method:'GET',cache:'no-store',credentials:'omit'});
+    if(!resp.ok) throw new Error('No se pudo obtener el archivo desde Drive.');
+    const tipo = txt(resp.headers.get('content-type')).toLowerCase();
+    if(tipo.includes('text/html')) throw new Error('Drive devolvió una página en lugar del archivo.');
+    return await resp.blob();
+  }
+
+  async function descargarDocumento(idDocumento){
+    const seguro = registroSeguro(idDocumento);
+    if(!seguro){
+      setMsg('Protección de seguridad: no se descargará un documento fuera de la atención activa.','error');
+      return;
+    }
+
+    const {r} = seguro;
+    const nombre = nombreArchivoSeguro(r);
+
+    try{
+      const blob = await obtenerBlobDocumento(r);
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = nombre;
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(()=>URL.revokeObjectURL(objectUrl),1500);
+      setMsg('Descarga iniciada.','ok');
+      return;
+    }catch(error){
+      /*
+        Google Drive puede impedir fetch cross-origin según permisos.
+        En ese caso se usa su URL de descarga bajo demanda sin alterar datos.
+      */
+      const url = urlDescargaRegistro(r);
+      if(!url){
+        setMsg('No existe una URL disponible para descargar este documento.','error');
+        return;
+      }
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.download = nombre;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setMsg('Se abrió la descarga mediante Google Drive.','info');
+    }
+  }
+
+  function abrirWhatsAppDocumento(idDocumento){
+    const seguro = registroSeguro(idDocumento);
+    if(!seguro){
+      setMsg('Protección de seguridad: no se abrirá WhatsApp para un documento fuera de la atención activa.','error');
+      return;
+    }
+
+    const {ctx} = seguro;
+    const idPaciente = txt(ctx?.idPaciente);
+
+    if(!idPaciente){
+      setMsg('La atención activa no tiene un paciente válido asociado.','error');
+      return;
+    }
+
+    /*
+      Reutiliza el flujo oficial ya existente del ERP para WhatsApp.
+      Ese flujo resuelve el teléfono registrado del paciente por id_paciente
+      y abre el chat correspondiente. Documentos NO inventa ni guarda teléfonos.
+    */
+    if(typeof window.abrirWhatsAppPaciente === 'function'){
+      window.abrirWhatsAppPaciente(idPaciente);
+      return;
+    }
+
+    setMsg('El módulo de WhatsApp de Pacientes no está disponible en esta sesión.','error');
+  }
+
+  function abrirCorreoDocumento(idDocumento){
+    const seguro = registroSeguro(idDocumento);
+    if(!seguro){
+      setMsg('Protección de seguridad: no se abrirá Correo para un documento fuera de la atención activa.','error');
+      return;
+    }
+
+    const {ctx} = seguro;
+    const idPaciente = txt(ctx?.idPaciente);
+    if(!idPaciente){
+      setMsg('La atención activa no tiene un paciente válido asociado.','error');
+      return;
+    }
+
+    const paciente = resolverPacienteSeguro(ctx);
+    if(!paciente){
+      setMsg('No se pudo resolver de forma segura el paciente de esta atención.','error');
+      return;
+    }
+
+    const correo = txt(paciente.email).trim();
+    if(!correo){
+      setMsg('El paciente no tiene un correo electrónico registrado. Regístrelo en Pacientes para poder abrir un correo dirigido.','error');
+      return;
+    }
+
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(correo)){
+      setMsg('El correo electrónico registrado del paciente no tiene un formato válido.','error');
+      return;
+    }
+
+    const nombre = nombreCompletoPersona(paciente) || nombrePaciente(ctx);
+    const asunto = 'IASYN - Documento clínico';
+    const cuerpo = 'Estimado/a '+nombre+',\n\nLe escribimos en relación con su documento clínico. El archivo debe adjuntarse manualmente antes del envío.\n\nSaludos cordiales';
+
+    window.location.href='mailto:'+encodeURIComponent(correo)+
+      '?subject='+encodeURIComponent(asunto)+
+      '&body='+encodeURIComponent(cuerpo);
+  }
+
   async function anularDocumento(idDocumento){
     if(state.subiendo) return;
 
@@ -1592,7 +1801,10 @@
 
     if(!r || !ctx.id) return;
 
-    if(txt(r.id_atencion) && txt(r.id_atencion) !== ctx.id){
+    if(ctx.valido !== true || !ctx.idPaciente || state.idAtencion !== ctx.id ||
+       state.contexto?.idPaciente !== ctx.idPaciente ||
+       txt(r.id_atencion) !== ctx.id ||
+       (txt(r.id_paciente) && txt(r.id_paciente) !== ctx.idPaciente)){
       setMsg('Protección de seguridad: el documento no pertenece a la atención activa.','error');
       return;
     }
@@ -1676,6 +1888,27 @@
       const abrir = e.target.closest('[data-auro-doc-open]');
       if(abrir){
         abrirDocumento(abrir.dataset.auroDocOpen);
+        return;
+      }
+
+      const descargar = e.target.closest('[data-auro-doc-download]');
+      if(descargar){
+        descargarDocumento(descargar.dataset.auroDocDownload).catch(error=>{
+          console.error(MODULO+':',error);
+          setMsg('No se pudo descargar: '+txt(error.message || error),'error');
+        });
+        return;
+      }
+
+      const whatsapp = e.target.closest('[data-auro-doc-whatsapp]');
+      if(whatsapp){
+        abrirWhatsAppDocumento(whatsapp.dataset.auroDocWhatsapp);
+        return;
+      }
+
+      const correo = e.target.closest('[data-auro-doc-email]');
+      if(correo){
+        abrirCorreoDocumento(correo.dataset.auroDocEmail);
         return;
       }
 
