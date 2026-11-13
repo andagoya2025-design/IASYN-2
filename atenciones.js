@@ -2109,71 +2109,109 @@
     }
   }
 
-  async function finalizarAtencion(){
-    if(finalizandoAtencionEnCurso){
-      return;
+  /* IASYN-2 | Verificación remota de cierre: lectura directa, sin mezclar caché local. */
+  async function verificarEstadoAtencionRemoto(idAtencion, estadoEsperado, idPacienteEsperado){
+    const id = String(idAtencion || '').trim();
+    const paciente = String(idPacienteEsperado || '').trim();
+    if(!id || !paciente || typeof API_URL === 'undefined' || !API_URL){
+      return {success:false, message:'Faltan identificadores o conexión API.'};
     }
-
-    finalizandoAtencionEnCurso = true;
-    const btnFinalizarLock = $('btnFinalizarAtencion');
-    if(btnFinalizarLock) btnFinalizarLock.disabled = true;
-
     try{
-      const idPaciente = idPacienteActivo();
-    if(!idPaciente){
-      alert('Seleccione primero un paciente.');
-      return;
-    }
-
-    const abierta = atencionAbierta(idPaciente);
-    if(!abierta){
-      alert('No hay atención abierta para finalizar.');
-      return;
-    }
-
-    if(!confirm('¿Finalizar la atención actual? Quedará registrada como consulta histórica.')) return;
-
-    const lista = leerLocal();
-    const idx = lista.findIndex(a => String(a.id_atencion) === String(abierta.id_atencion));
-
-    let atencionFinalizada = null;
-
-    if(idx >= 0){
-      atencionFinalizada = Object.assign({}, lista[idx], {
-        numero_consulta: Number(lista[idx].numero_consulta || abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
-        estado_atencion: 'Finalizada',
-        actualizado_en: fechaHora()
-      });
-
-      lista[idx] = atencionFinalizada;
-      guardarLocal(lista);
-    }else{
-      atencionFinalizada = Object.assign({}, abierta, {
-        numero_consulta: Number(abierta.numero_consulta || siguienteConsulta(idPaciente) || 1),
-        estado_atencion: 'Finalizada',
-        actualizado_en: fechaHora()
-      });
-    }
-
-    const idFinalizada = String(atencionFinalizada?.id_atencion || abierta.id_atencion || '').trim();
-
-    auroInvalidarContextoAtencion({
-      idAnterior:idFinalizada,
-      idNueva:'',
-      idPaciente:idPaciente,
-      motivo:'atencion_finalizada',
-      limpiarVisual:true
-    });
-
-    renderAtencionesPaciente();
-
-    const resultado = await enviarAtencionGoogleSheets(atencionFinalizada, 'editarAtencion');
-
-      if(resultado && resultado.success){
-        alert('Atención finalizada y enviada a Google Sheets.');
-      }else{
-        alert('Atención finalizada localmente, pero no se pudo enviar a Google Sheets. Revise Apps Script o conexión.');
+      const separador = String(API_URL).includes('?') ? '&' : '?';
+      const url = API_URL + separador + 'accion=listarAtencionesPorPaciente' +
+        '&id_paciente=' + encodeURIComponent(paciente) + '&_=' + Date.now();
+      const respuesta = await fetch(url, {cache:'no-store'});
+      if(!respuesta.ok) return {success:false, message:'Lectura remota HTTP ' + respuesta.status};
+      const json = await respuesta.json();
+      if(json && json.success === false) return {success:false, message:'El servidor rechazó la lectura.'};
+      const registros = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : null);
+      if(!registros) return {success:false, message:'Respuesta remota sin lista verificable.'};
+      const coincidencias = registros.filter(a => String(a?.id_atencion || '').trim() === id &&
+        String(a?.id_paciente || '').trim() === paciente);
+      if(coincidencias.length !== 1) return {success:false, message:'La atención remota no es única o no existe.'};
+      const encontrada = coincidencias[0];
+      if(String(encontrada.estado_atencion || '').trim().toLowerCase() !== String(estadoEsperado || '').trim().toLowerCase()){
+        return {success:false, message:'Estado remoto distinto al esperado.'};
       }
+      return {success:true, atencion:encontrada};
+    }catch(error){
+      console.warn(MODULO, 'No fue posible verificar el cierre en Sheets.', error);
+      return {success:false, message:'No se pudo consultar Google Sheets.'};
+    }
+  }
+
+  async function finalizarAtencion(){
+    if(finalizandoAtencionEnCurso) return;
+    finalizandoAtencionEnCurso = true;
+    const boton = $('btnFinalizarAtencion');
+    if(boton) boton.disabled = true;
+    try{
+      const paciente = String(idPacienteActivo() || '').trim();
+      const id = String(atencionActivaId || '').trim();
+      const idDe = a => String(a?.id_atencion || '').trim();
+      const pacienteDe = a => String(a?.id_paciente || '').trim();
+      const estado = a => String(a?.estado_atencion || '').trim().toLowerCase();
+      const mismoContexto = () => String(idPacienteActivo() || '').trim() === paciente &&
+        String(atencionActivaId || '').trim() === id;
+      const validar = () => {
+        const lista = leerLocal();
+        const elegidas = lista.filter(a => idDe(a) === id);
+        const abiertas = lista.filter(a => pacienteDe(a) === paciente && estado(a) === 'abierta');
+        if(!paciente || !id || elegidas.length !== 1 || abiertas.length !== 1) return null;
+        const a = elegidas[0];
+        return pacienteDe(a) === paciente && estado(a) === 'abierta' && idDe(abiertas[0]) === id ? a : null;
+      };
+      let actual = validar();
+      if(!actual || !mismoContexto()){
+        alert('Seleccione con Ver la única atención abierta del paciente antes de finalizar.');
+        return;
+      }
+      if(!confirm('¿Finalizar esta atención seleccionada? Quedará registrada como consulta histórica.')) return;
+      actual = validar();
+      if(!actual || !mismoContexto()){
+        alert('Cambió la atención seleccionada. Vuelva a abrirla antes de finalizar.');
+        return;
+      }
+      const finalizada = Object.assign({}, actual, {
+        estado_atencion:'Finalizada', actualizado_en:fechaHora()
+      });
+      const envio = await enviarAtencionGoogleSheets(finalizada, 'editarAtencion');
+      // El POST no-cors no prueba persistencia; aun si falló la respuesta,
+      // se consulta el estado real para evitar reintentos ciegos.
+      const verificacion = await verificarEstadoAtencionRemoto(id, 'Finalizada', paciente);
+      if(!verificacion.success){
+        alert('No se confirmó la finalización en Google Sheets. No se cambió el estado local. ' +
+          'Revise la conexión y el estado remoto antes de reintentar.');
+        return;
+      }
+      const listaActual = leerLocal();
+      const coincidencias = listaActual.map((a,i) => ({a,i})).filter(x => idDe(x.a) === id);
+      if(coincidencias.length !== 1 || pacienteDe(coincidencias[0].a) !== paciente ||
+          estado(coincidencias[0].a) !== 'abierta'){
+        alert('Google Sheets confirmó el cierre, pero la copia local cambió. Recargue las atenciones antes de continuar.');
+        return;
+      }
+      const indice = coincidencias[0].i;
+      listaActual[indice] = Object.assign({}, listaActual[indice], verificacion.atencion, {
+        id_atencion:id, id_paciente:paciente, estado_atencion:'Finalizada'
+      });
+      guardarLocal(listaActual);
+      const guardada = leerLocal().find(a => idDe(a) === id && pacienteDe(a) === paciente);
+      if(!guardada || estado(guardada) !== 'finalizada'){
+        alert('Google Sheets confirmó el cierre, pero no pudo actualizarse la copia local. Recargue la página.');
+        return;
+      }
+      if(mismoContexto()){
+        auroInvalidarContextoAtencion({
+          idAnterior:id, idNueva:'', idPaciente:paciente,
+          motivo:'atencion_finalizada', limpiarVisual:true
+        });
+      }
+      renderAtencionesPaciente();
+      alert('Atención finalizada y verificada en Google Sheets.');
+    }catch(error){
+      console.error(MODULO, 'Error al finalizar atención:', error);
+      alert('No se pudo confirmar el cierre. Verifique el estado remoto antes de reintentar.');
     }finally{
       finalizandoAtencionEnCurso = false;
       renderAtencionesPaciente();
@@ -3143,9 +3181,11 @@
     }
 
     if(btnFinalizar){
-      btnFinalizar.disabled = !abierta || finalizandoAtencionEnCurso;
-      btnFinalizar.style.opacity = (abierta && !finalizandoAtencionEnCurso) ? '1' : '0.55';
-      btnFinalizar.style.cursor = (abierta && !finalizandoAtencionEnCurso) ? 'pointer' : 'not-allowed';
+      const seleccionadaParaFinalizar = !!abierta &&
+        String(atencionActivaId || '').trim() === String(abierta.id_atencion || '').trim();
+      btnFinalizar.disabled = !seleccionadaParaFinalizar || finalizandoAtencionEnCurso;
+      btnFinalizar.style.opacity = (seleccionadaParaFinalizar && !finalizandoAtencionEnCurso) ? '1' : '0.55';
+      btnFinalizar.style.cursor = (seleccionadaParaFinalizar && !finalizandoAtencionEnCurso) ? 'pointer' : 'not-allowed';
       btnFinalizar.innerHTML = finalizandoAtencionEnCurso
         ? '<i class="bi bi-hourglass-split me-1"></i> Finalizando...'
         : (abierta
