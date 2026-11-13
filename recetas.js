@@ -5014,7 +5014,8 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
               background:#ffffff!important;
             }
 
-            .auro-preview-toolbar{
+            .auro-preview-toolbar,
+            .auro-a4-alerta{
               display:none!important;
             }
 
@@ -5062,30 +5063,39 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
             // advierte y bloquea imprimir. No toca QR, firma, medicamentos ni datos.
             const auroClasesCompactacion=['auro-rx-compacto-1','auro-rx-compacto-2','auro-rx-compacto-3'];
             function auroRecetaDesborda(){
+              // Medir contenido real, no el borde de .auro-receta-documento:
+              // ese contenedor tiene height:100% y coincide siempre con el límite.
               const ejemplares=Array.from(document.querySelectorAll('.auro-media-receta'));
               if(ejemplares.length!==2) return true;
+              const tolerancia=2; // px de redondeo subpíxel; no reduce la reserva de firma
               return ejemplares.some(function(ejemplar){
                 const contenido=ejemplar.querySelector('.auro-ejemplar-contenido');
                 const documento=ejemplar.querySelector('.auro-receta-documento');
+                const tratamiento=ejemplar.querySelector('.auro-rx-tratamiento-section');
                 const inferior=ejemplar.querySelector('.auro-rx-cuadrantes-inferiores');
+                const firma=ejemplar.querySelector('.auro-rx-cuadrante-firma');
+                const contacto=ejemplar.querySelector('.auro-centro-contacto');
                 const etiqueta=ejemplar.querySelector('.auro-ejemplar-etiqueta');
-                if(!contenido||!documento||!inferior||!etiqueta) return true;
-                const rContenido=contenido.getBoundingClientRect();
-                const rDocumento=documento.getBoundingClientRect();
-                const rInferior=inferior.getBoundingClientRect();
-                const rEtiqueta=etiqueta.getBoundingClientRect();
-                const limite=Math.min(rContenido.bottom,rEtiqueta.top)-1;
-                // Se verifica tambien el bloque inferior (diagnosticos/contacto/firma).
-                if(rDocumento.bottom>limite||rInferior.bottom>limite) return true;
-                const tabla=documento.querySelector('.auro-rx-table');
-                const firma=documento.querySelector('.auro-rx-cuadrante-firma');
-                if(tabla && tabla.getBoundingClientRect().bottom>rInferior.top-1) return true;
-                if(firma && firma.getBoundingClientRect().bottom>limite) return true;
-                if(documento.scrollHeight>contenido.clientHeight+1) return true;
-                // Detecta tablas, textos o elementos que exceden horizontalmente.
-                const ancho=contenido.getBoundingClientRect().right+1;
-                return Array.from(documento.querySelectorAll('table, .auro-rx-cuadrantes-inferiores, .auro-rx-alergias-linea')).some(function(el){
-                  return el.getBoundingClientRect().right>ancho;
+                if(!contenido||!documento||!tratamiento||!inferior||!firma||!etiqueta) return true;
+                const area=contenido.getBoundingClientRect();
+                const pie=etiqueta.getBoundingClientRect();
+                const rx=tratamiento.getBoundingClientRect();
+                const cuadrantes=inferior.getBoundingClientRect();
+                const rf=firma.getBoundingClientRect();
+                const limite=Math.min(area.bottom,pie.top);
+                // La zona de firma automática permanece íntegra: jamás se compacta
+                // ni se sustituye por el área manual.
+                if(rx.bottom>cuadrantes.top+tolerancia) return true;
+                if(cuadrantes.bottom>limite+tolerancia||rf.bottom>limite+tolerancia) return true;
+                if(contacto && contacto.getBoundingClientRect().bottom>limite+tolerancia) return true;
+                // Un bloque puede quedar recortado internamente aunque su caja quepa.
+                const bloques=[tratamiento.querySelector('.auro-rx-table-wrap'),inferior.querySelector('.auro-rx-cuadrante-diagnosticos')].filter(Boolean);
+                if(bloques.some(function(el){return el.scrollHeight>el.clientHeight+tolerancia;})) return true;
+                // Verificar bordes horizontales reales sin comparar con el borde de la hoja.
+                const piezas=documento.querySelectorAll('.auro-rx-table, .auro-rx-cuadrantes-inferiores, .auro-rx-alergias-linea');
+                return Array.from(piezas).some(function(el){
+                  const r=el.getBoundingClientRect();
+                  return r.right>area.right+tolerancia||r.left<area.left-tolerancia;
                 });
               });
             }
@@ -5130,6 +5140,9 @@ recetaAtencionActualId = String(obtenerIdAtencionActivaSeguro() || '').trim();
             }
             window.addEventListener('load',function(){
               requestAnimationFrame(function(){requestAnimationFrame(auroRecetaPrepararVista);});
+              if(document.fonts && document.fonts.ready){
+                document.fonts.ready.then(auroRecetaPrepararVista);
+              }
             });
             window.auroImprimirRecetaSinRecortes=function(){
               if(!auroRecetaAjustarA4()){
