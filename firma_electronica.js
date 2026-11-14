@@ -4074,7 +4074,7 @@
   }
   async function vincularUnaVezV3(intento){
     const url=apiUrl(),token=tokenSesion();
-    if(!url||!token)throw new Error('Su sesión no está disponible. Ingrese nuevamente e intente firmar.');
+    if(!url||!token)throw new Error('No hay conexión o sesión IASYN activa para firmar.');
 
     // Fase 1: crear un reto NUEVO en el mismo servidor ERP configurado.
     const inicioReto=Date.now();
@@ -4088,22 +4088,22 @@
       });
     }catch(_e){
       registrarV3('RETO_ERP',inicioReto,intento,'RED');
-      throw errorTransitorioV3('No se pudo conectar con el sistema de firma. Intente nuevamente.');
+      throw errorTransitorioV3('No se pudo comunicar con IASYN ERP para iniciar la vinculación local.');
     }
     if(!c.ok){
       registrarV3('RETO_ERP',inicioReto,intento,'HTTP_'+c.status);
-      const mensaje='No se pudo iniciar la firma (código '+c.status+').';
+      const mensaje='El ERP no pudo iniciar la vinculación local (HTTP '+c.status+').';
       if(c.status===429 || c.status>=500) throw errorTransitorioV3(mensaje);
       throw new Error(mensaje);
     }
     let challenge;
     try{challenge=await c.json();}catch(_e){
       registrarV3('RETO_ERP',inicioReto,intento,'RESPUESTA_INVALIDA');
-      throw errorTransitorioV3('No se pudo iniciar la firma. Intente nuevamente.');
+      throw errorTransitorioV3('El ERP devolvió una respuesta ilegible al iniciar la vinculación.');
     }
     if(!challenge||challenge.success!==true||!/^[a-f0-9]{64}$/i.test(texto(challenge.nonce_vinculo_local_v3))){
       registrarV3('RETO_ERP',inicioReto,intento,'RECHAZADO');
-      throw new Error('No se pudo iniciar la firma electrónica. Contacte a soporte.');
+      throw new Error(texto(challenge&&challenge.message)||'ERP sin contrato de firma local V3.');
     }
     registrarV3('RETO_ERP',inicioReto,intento,'OK');
 
@@ -4121,26 +4121,26 @@
       });
     }catch(_e){
       registrarV3('PUENTE_LOCAL',inicioLocal,intento,'RED_O_TIMEOUT');
-      throw errorTransitorioV3('No se pudo conectar con el sistema de firma de esta computadora. Verifique que esté abierto e intente nuevamente.');
+      throw errorTransitorioV3('No se pudo comunicar con el puente IASYN Firma de ESTA computadora.');
     }finally{clearTimeout(timer);}
     if(!respuesta.ok){
       registrarV3('PUENTE_LOCAL',inicioLocal,intento,'HTTP_'+respuesta.status);
       if(respuesta.status===409 || respuesta.status===429 || respuesta.status>=500){
-        throw errorTransitorioV3('El sistema de firma no respondió correctamente (código '+respuesta.status+').');
+        throw errorTransitorioV3('El motor local no confirmó el vínculo con el ERP (HTTP '+respuesta.status+').');
       }
       if(respuesta.status===403){
-        throw new Error('No se pudo verificar la conexión segura. Ingrese desde el enlace oficial de IASYN-2.');
+        throw new Error('El motor local rechazó el origen del navegador. Verifique el enlace oficial del ERP.');
       }
-      throw new Error('No se pudo conectar con el sistema de firma (código '+respuesta.status+').');
+      throw new Error('El puente local rechazó la vinculación (HTTP '+respuesta.status+').');
     }
     let ok;
     try{ok=await respuesta.json();}catch(_e){
       registrarV3('PUENTE_LOCAL',inicioLocal,intento,'RESPUESTA_INVALIDA');
-      throw new Error('El sistema de firma no respondió correctamente. Intente nuevamente.');
+      throw new Error('El puente local devolvió una respuesta inválida; no se enviará la firma.');
     }
     if(!ok||ok.success!==true||!ok.vinculado_local_v3||!texto(ok.id_equipo)){
       registrarV3('PUENTE_LOCAL',inicioLocal,intento,'IDENTIDAD_RECHAZADA');
-      throw new Error('No fue posible verificar el sistema de firma de esta computadora. Contacte a soporte.');
+      throw new Error('La identificación del motor local fue rechazada. No se enviará la firma a otro equipo.');
     }
     registrarV3('VINCULO_CONFIRMADO',inicioLocal,intento,'OK');
     // La identidad NO sale del navegador: el backend ya la verificó usando
@@ -4159,7 +4159,7 @@
         await new Promise(resolve=>setTimeout(resolve,PAUSA_REINTENTO_MS));
       }
     }
-    throw new Error('No se pudo verificar el sistema de firma de esta computadora.');
+    throw new Error('No se confirmó el motor local.');
   }
   async function preparar(accion,data){
     if(texto(accion)!=='firmarDocumento')return data;
