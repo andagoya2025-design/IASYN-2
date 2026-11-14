@@ -4171,3 +4171,55 @@
   }
   window.iasynFirmaLocalV3=Object.freeze({vincular,preparar,diagnostico:diagnosticoV3});
 })();
+
+/* ============================================================================
+ * IASYN2 — V3.1 MULTIEQUIPO: CADA COMPUTADORA FIRMA SOLA
+ * Fecha: 14/11/2026 · Bloque ADITIVO (append-only). No modifica bloques previos.
+ *
+ * Problema: Certificados, Órdenes médicas y Recomendaciones crean la firma con
+ * su propio fetch, sin el nonce V3 de un solo uso. El servidor, sin nonce,
+ * asigna la solicitud al primer equipo en línea con ese médico, y la ventana
+ * Automática/Manual se abre en OTRA computadora.
+ *
+ * Solución: antes de enviar 'firmarDocumento' sin nonce, confirmar el motor de
+ * ESTA computadora con window.iasynFirmaLocalV3.preparar() (el mismo mecanismo
+ * que ya usa Receta). Si el motor local no confirma, NO se crea la solicitud.
+ *
+ * No toca: contenido del documento, HTML, SHA, versión, firmas_requeridas,
+ * multifirma, Cancelar, consultas de estado, Ver firmado, QR ni el motor.
+ * Solo actúa sobre POST con accion='firmarDocumento' y cuerpo JSON en texto.
+ * Las solicitudes que ya traen nonce (Receta) pasan sin cambios.
+ * ========================================================================== */
+(function iasynFirmaV31Multiequipo(){
+  'use strict';
+  if(window.__IASYN_FIRMA_V31_MULTIEQUIPO__) return;
+  if(typeof window.fetch!=='function') return;
+  const fetchOriginal=window.fetch;
+  function texto(x){return String(x==null?'':x).trim();}
+  function cuerpoFirma(init){
+    // Solo cuerpos JSON en texto con accion firmarDocumento.
+    if(!init||typeof init.body!=='string') return null;
+    if(texto(init.method||'GET').toUpperCase()!=='POST') return null;
+    if(init.body.indexOf('firmarDocumento')===-1) return null;
+    let p;
+    try{p=JSON.parse(init.body);}catch(_e){return null;}
+    if(!p||texto(p.accion)!=='firmarDocumento'||!p.data||typeof p.data!=='object') return null;
+    if(texto(p.data.nonce_vinculo_local_v3)) return null; // ya vinculada (Receta)
+    return p;
+  }
+  async function fetchMultiequipo(input,init){
+    const p=cuerpoFirma(init);
+    if(!p) return fetchOriginal.apply(window,arguments);
+    const v3=window.iasynFirmaLocalV3;
+    if(!v3||typeof v3.preparar!=='function'){
+      throw new Error('Falta el módulo de vinculación local de IASYN. No se enviará la firma a otro equipo.');
+    }
+    // preparar() decide: CREAR/REABRIR se vinculan; CANCELAR y demás pasan igual.
+    const data=await v3.preparar('firmarDocumento',p.data);
+    if(data===p.data) return fetchOriginal.apply(window,arguments);
+    const nuevoInit=Object.assign({},init,{body:JSON.stringify(Object.assign({},p,{data:data}))});
+    return fetchOriginal.call(window,input,nuevoInit);
+  }
+  window.fetch=fetchMultiequipo;
+  window.__IASYN_FIRMA_V31_MULTIEQUIPO__=Object.freeze({version:'3.1.0',activo:true});
+})();
