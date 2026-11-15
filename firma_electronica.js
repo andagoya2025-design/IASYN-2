@@ -4161,15 +4161,98 @@
     }
     throw new Error('No se confirmó el motor local.');
   }
+  /* IASYN2 FASE 1 VELOCIDAD (15/11/2026) — PRE-VÍNCULO SEGURO
+   * El vínculo con el motor de ESTA computadora (reto ERP + confirmación local)
+   * puede prepararse unos segundos ANTES del clic, mientras el médico se acerca
+   * al botón Firmar o mientras Recetas prepara el documento.
+   * - Es el MISMO vincular(): nonce nuevo, de un solo uso, confirmado por el
+   *   motor local y consumido por el servidor al crear la solicitud.
+   * - Solo se usa si pertenece a la MISMA sesión y tiene menos de 40 s
+   *   (el servidor lo invalida a los 60 s). Si no, se vincula como antes.
+   * - Si el pre-vínculo falla, no muestra nada: el clic hace el vínculo normal
+   *   y presenta su error habitual. Nunca se reutiliza un nonce dos veces.
+   */
+  const VIGENCIA_PREVINCULO_MS=40000;
+  let previnculo=null;
+  let previnculoPromesa=null;
+  function previnculoVigente(margenMs){
+    return !!(previnculo && previnculo.token===tokenSesion() &&
+      Date.now()-previnculo.en < VIGENCIA_PREVINCULO_MS-(margenMs||0));
+  }
+  function precalentar(){
+    if(previnculoPromesa) return previnculoPromesa;
+    if(previnculoVigente(10000)) return Promise.resolve(true);
+    const token=tokenSesion();
+    if(!token||!apiUrl()) return Promise.resolve(false);
+    const inicio=Date.now();
+    previnculoPromesa=vincular().then(function(r){
+      previnculo={nonce:r.nonce_vinculo_local_v3,token:token,en:inicio};
+      return true;
+    }).catch(function(){ return false; }).finally(function(){ previnculoPromesa=null; });
+    return previnculoPromesa;
+  }
+  function tomarPrevinculo(){
+    const vigente=previnculoVigente(0);
+    const p=previnculo;
+    previnculo=null; // un solo uso, también si estaba vencido
+    return vigente&&p ? {nonce_vinculo_local_v3:p.nonce} : null;
+  }
+  async function obtenerVinculo(){
+    if(previnculoPromesa){ try{ await previnculoPromesa; }catch(_e){} }
+    const listo=tomarPrevinculo();
+    if(listo){
+      registrarV3('PREVINCULO_USADO',Date.now(),0,'OK');
+      return listo;
+    }
+    return vincular();
+  }
+  /* Aviso "hay trabajo" al motor 4.1.8.18+ de ESTA PC, justo después de crear
+   * la solicitud. Sin datos. Un motor anterior responde 404 y se ignora. */
+  let ultimoDespertarV3=0;
+  function despertarMotorLocal(){
+    const ahora=Date.now();
+    if(ahora-ultimoDespertarV3<400) return;
+    ultimoDespertarV3=ahora;
+    try{
+      const c=typeof AbortController!=='undefined'?new AbortController():null;
+      const t=c?setTimeout(function(){ c.abort(); },1500):null;
+      fetch('http://127.0.0.1:48761/iasyn/v3/despertar',{
+        method:'POST',mode:'cors',cache:'no-store',signal:c?c.signal:undefined
+      }).catch(function(){}).finally(function(){ if(t) clearTimeout(t); });
+    }catch(_e){}
+  }
+  /* Disparadores del pre-vínculo: acercarse o enfocar un botón "Firmar"
+   * (cualquier módulo). Máximo un intento cada 3 s; nunca en bucle. */
+  let ultimoAcercamiento=0;
+  function esBotonFirmar(objetivo){
+    const b=objetivo&&objetivo.closest?objetivo.closest('button,[role="button"]'):null;
+    if(!b||b.disabled) return false;
+    const t=String(b.textContent||'').toLowerCase();
+    return /\bfirmar\b/.test(t) && !/cancelar|ver |descargar|imprimir/.test(t);
+  }
+  function alAcercarseAFirmar(ev){
+    if(!esBotonFirmar(ev&&ev.target)) return;
+    const ahora=Date.now();
+    if(ahora-ultimoAcercamiento<3000) return;
+    ultimoAcercamiento=ahora;
+    precalentar();
+  }
+  try{
+    document.addEventListener('pointerover',alAcercarseAFirmar,{passive:true,capture:true});
+    document.addEventListener('touchstart',alAcercarseAFirmar,{passive:true,capture:true});
+    document.addEventListener('focusin',alAcercarseAFirmar,true);
+  }catch(_e){}
+
   async function preparar(accion,data){
     if(texto(accion)!=='firmarDocumento')return data;
     const op=texto(data&&data.operacion_frontend).toUpperCase();
     if(data&&data.operacion_agente)return data;
     if(op&&op!=='REABRIR')return data;
     if(!data||(!data.tipo_documento&&!data.id_solicitud))return data;
-    return Object.assign({},data||{},await vincular());
+    return Object.assign({},data||{},await obtenerVinculo());
   }
-  window.iasynFirmaLocalV3=Object.freeze({vincular,preparar,diagnostico:diagnosticoV3});
+  window.iasynFirmaLocalV3=Object.freeze({vincular,preparar,diagnostico:diagnosticoV3,
+    precalentar:precalentar,despertar:despertarMotorLocal});
 })();
 
 /* ============================================================================
@@ -4207,9 +4290,29 @@
     if(texto(p.data.nonce_vinculo_local_v3)) return null; // ya vinculada (Receta)
     return p;
   }
+  /* FASE 1 VELOCIDAD: tras crear/reabrir una solicitud ya vinculada (4 tipos
+   * documentales), avisar al motor local para que la tome sin esperar su ciclo.
+   * Solo lectura del cuerpo; no cambia la solicitud ni la respuesta. */
+  function cuerpoYaVinculado(init){
+    return !!(init && typeof init.body==='string' &&
+      init.body.indexOf('firmarDocumento')!==-1 &&
+      init.body.indexOf('nonce_vinculo_local_v3')!==-1);
+  }
+  function despertarTrasRespuesta(promesa){
+    return promesa.then(function(resp){
+      try{
+        const v3=window.iasynFirmaLocalV3;
+        if(resp && resp.ok && v3 && typeof v3.despertar==='function') v3.despertar();
+      }catch(_e){}
+      return resp;
+    });
+  }
   async function fetchMultiequipo(input,init){
     const p=cuerpoFirma(init);
-    if(!p) return fetchOriginal.apply(window,arguments);
+    if(!p){
+      if(cuerpoYaVinculado(init)) return despertarTrasRespuesta(fetchOriginal.apply(window,arguments));
+      return fetchOriginal.apply(window,arguments);
+    }
     const v3=window.iasynFirmaLocalV3;
     if(!v3||typeof v3.preparar!=='function'){
       throw new Error('Falta el módulo de vinculación local de IASYN. No se enviará la firma a otro equipo.');
@@ -4218,7 +4321,7 @@
     const data=await v3.preparar('firmarDocumento',p.data);
     if(data===p.data) return fetchOriginal.apply(window,arguments);
     const nuevoInit=Object.assign({},init,{body:JSON.stringify(Object.assign({},p,{data:data}))});
-    return fetchOriginal.call(window,input,nuevoInit);
+    return despertarTrasRespuesta(fetchOriginal.call(window,input,nuevoInit));
   }
   window.fetch=fetchMultiequipo;
   window.__IASYN_FIRMA_V31_MULTIEQUIPO__=Object.freeze({version:'3.1.0',activo:true});
