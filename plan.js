@@ -3088,15 +3088,15 @@ function renderMedicamentosPlanTabla(){
             <tr>
               <td>${escapeHtmlPlan(m.med)}</td>
               <td>${escapeHtmlPlan(m.pres)}</td>
-              <td>${escapeHtmlPlan(auroPlanNombreViaCompleta(m.via))}</td><td>${
+              <td><span class="auro-plan-via-chip">${escapeHtmlPlan(auroPlanNombreViaCompleta(m.via))}</span></td><td>${
                   String(m.cantidad || '').trim()
                       ? escapeHtmlPlan(m.cantidad)
                       : '<span class="auro-plan-pendiente" title="Complete la cantidad antes de emitir la receta">Pendiente</span>'
               }</td>
-              <td>${escapeHtmlPlan(m.frec)}</td>
-              <td>${escapeHtmlPlan(m.dur)}</td>
+              <td>${escapeHtmlPlan(m.frec).replace(/\//g,'/&#8203;')}</td>
+              <td>${escapeHtmlPlan(m.dur).replace(/\//g,'/&#8203;')}</td>
               <td><div class="auro-plan-indicacion-tabla" title="${escapeHtmlPlan(m.ind)}">${escapeHtmlPlan(m.ind)}</div></td>
-              <td>${escapeHtmlPlan(m.continuo)}</td>
+              <td><span class="auro-plan-continuo-chip ${m.continuo === 'Sí' ? 'auro-plan-continuo-si' : 'auro-plan-continuo-no'}">${escapeHtmlPlan(m.continuo)}</span></td>
               <td>
                 <div class="auro-plan-acciones-medicamento">
                   <button type="button"
@@ -4073,7 +4073,7 @@ function instalarResponsivePlanAndroid(){
           display:block!important;
           width:100%!important;
           max-width:100%!important;
-          overflow-x:hidden!important;
+          overflow-x:auto!important;
         }
 
         #hc_plan .auro-plan-tabla-medicamentos{
@@ -4099,6 +4099,125 @@ function instalarResponsivePlanAndroid(){
 
         #hc_plan .auro-plan-tabla-medicamentos td{
           font-size:12.5px!important;
+        }
+
+        /*
+          IASYN PLAN - TABLA MEDICAMENTOS (solo escritorio)
+          - Reparto de columnas: suma mínima aprox. 943 px, cabe en laptop 1366 px.
+          - El nombre del medicamento no se parte a mitad de palabra.
+          - Diseño premium (vino/rosado) solo visual: no cambia datos ni funciones.
+          - No afecta teléfono ni tablet.
+        */
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(1),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(1){
+          min-width:112px;
+          overflow-wrap:break-word!important;
+          word-break:normal!important;
+          hyphens:none!important;
+        }
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(2),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(2){ min-width:100px; }
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(3),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(3){ min-width:105px; }
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(5),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(5){ min-width:100px; }
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(6),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(6){ min-width:90px; }
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(7),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(7){ min-width:150px; }
+
+        /* Vía, Cantidad, Trat. continuo y Acciones centrados (encabezado y contenido) */
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(3),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(3),
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(4),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(4),
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(8),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(8),
+        #hc_plan .auro-plan-tabla-medicamentos th:nth-child(9),
+        #hc_plan .auro-plan-tabla-medicamentos td:nth-child(9){
+          text-align:center!important;
+        }
+
+        /* Tarjeta redondeada con sombra suave */
+        #hc_plan .receta-medicamentos-box .table-responsive{
+          border:1px solid #efd3e2!important;
+          border-radius:16px!important;
+          background:#ffffff!important;
+          box-shadow:0 8px 24px rgba(139,30,90,.10)!important;
+        }
+        #hc_plan .auro-plan-tabla-medicamentos{
+          margin:0!important;
+          border-collapse:separate!important;
+          border-spacing:0!important;
+          border:0!important;
+        }
+
+        /* Encabezado vino */
+        #hc_plan .auro-plan-tabla-medicamentos thead th{
+          background:#8b1e5a!important;
+          color:#ffffff!important;
+          font-weight:700!important;
+          border:0!important;
+          border-bottom:3px solid #6b1546!important;
+          padding-top:13px!important;
+          padding-bottom:13px!important;
+        }
+
+        /* Filas: separador suave y alternado rosado */
+        #hc_plan .auro-plan-tabla-medicamentos tbody td{
+          background:#ffffff!important;
+          border:0!important;
+          border-bottom:1px solid #f3dfe9!important;
+          padding-top:12px!important;
+          padding-bottom:12px!important;
+          color:#1f2937!important;
+        }
+        #hc_plan .auro-plan-tabla-medicamentos tbody tr:nth-child(even) td{
+          background:#fdf6fa!important;
+        }
+        #hc_plan .auro-plan-tabla-medicamentos tbody tr:last-child td{
+          border-bottom:0!important;
+        }
+        #hc_plan .auro-plan-tabla-medicamentos tbody td:nth-child(1){
+          font-weight:700!important;
+          color:#6b1546!important;
+        }
+        #hc_plan .auro-plan-tabla-medicamentos tbody td:nth-child(2){
+          color:#64748b!important;
+        }
+        #hc_plan .auro-plan-tabla-medicamentos tbody td:nth-child(4){
+          font-weight:700!important;
+        }
+
+        /* Etiquetas (chips) */
+        #hc_plan .auro-plan-via-chip,
+        #hc_plan .auro-plan-continuo-chip{
+          display:inline-block;
+          padding:4px 10px;
+          border-radius:999px;
+          font-size:11.5px;
+          font-weight:800;
+          line-height:1.3;
+          white-space:nowrap;
+        }
+        #hc_plan .auro-plan-via-chip{ background:#f3e8ff; color:#6b21a8; }
+        #hc_plan .auro-plan-continuo-no{ background:#f1f5f9; color:#475569; padding:4px 14px; }
+        #hc_plan .auro-plan-continuo-si{ background:#dcfce7; color:#166534; padding:4px 14px; }
+
+        /* Botones de acción suaves */
+        #hc_plan .auro-plan-acciones-medicamento .btn-outline-primary{
+          background:#ede9fe!important;
+          border-color:transparent!important;
+          color:#5b21b6!important;
+        }
+        #hc_plan .auro-plan-acciones-medicamento .btn-outline-danger{
+          background:#fee2e2!important;
+          border-color:transparent!important;
+          color:#b91c1c!important;
+        }
+        #hc_plan .auro-plan-acciones-medicamento .btn:hover{
+          filter:brightness(.96);
+          box-shadow:0 2px 8px rgba(139,30,90,.18)!important;
         }
 
         #hc_plan .auro-plan-tabla-medicamentos th:nth-child(4),
