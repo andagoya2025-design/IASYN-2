@@ -733,7 +733,7 @@
 
           <div class="auro-rec-actions">
             <button type="button" class="auro-rec-btn nuevo" id="auroRecBtnNueva"><i class="bi bi-plus-circle me-1"></i> Nueva recomendación</button>
-            <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar"><i class="bi bi-arrow-repeat me-1"></i> Recargar</button>
+            <button type="button" class="auro-rec-btn" id="auroRecBtnRecargar" title="Trae recomendaciones y firmas hechas en otra computadora"><i class="bi bi-arrow-repeat me-1"></i> Actualizar</button>
             <button type="button" class="auro-rec-btn" id="auroRecBtnVista"><i class="bi bi-printer me-1"></i> Imprimir recomendaciones</button>
             <button type="button" class="auro-rec-btn primary" id="auroRecBtnGuardar"><i class="bi bi-save2 me-1"></i> Guardar recomendaciones</button>
           </div>
@@ -1227,6 +1227,28 @@
     return !recCambiosSinGuardar() || window.confirm(
       'Existen cambios sin guardar. ¿Desea continuar y descartarlos?'
     );
+  }
+
+  /* FASE 2 · ACTUALIZAR SEGURO (manual, adaptado de AUROSANAX PRUEBA 7928323)
+     - No corre durante un guardado, una carga ni con una firma en proceso.
+     - Si hay cambios sin guardar, pregunta antes (recPermitirDescartarCambios).
+     - Si se confirma, hace exactamente lo mismo que el botón Recargar anterior. */
+  function recActualizarSeguro(){
+    if(state.guardando || state.cargando){
+      setMsg('Espere: se está guardando o cargando la información.','info');
+      return null;
+    }
+    const ctx=state.contexto || contextoAtencion();
+    if(recFirmaActivaEnAtencion(ctx?.id)){
+      setMsg('Hay una firma en proceso. Espere a que termine antes de actualizar.','info');
+      return null;
+    }
+    if(!recPermitirDescartarCambios()){
+      setMsg('Actualización cancelada. Sus cambios siguen en pantalla.','info');
+      return null;
+    }
+    state.modoNuevo=false;
+    return cargar(true);
   }
 
   function recFirmaActivaEnAtencion(idAtencion){
@@ -3575,11 +3597,7 @@ html,body{background:#dfe3e8}
     }
     if(recargarBtn && recargarBtn.dataset.auroRec!=='1'){
       recargarBtn.dataset.auroRec='1';
-      recargarBtn.addEventListener('click',()=>{
-        if(!recPermitirDescartarCambios()) return;
-        state.modoNuevo=false;
-        return cargar(true);
-      });
+      recargarBtn.addEventListener('click',recActualizarSeguro); // Fase 2: antes Recargar sin control de firma en curso
     }
     if(vistaBtn && vistaBtn.dataset.auroRec!=='1'){
       vistaBtn.dataset.auroRec='1';

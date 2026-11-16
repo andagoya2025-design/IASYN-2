@@ -585,7 +585,7 @@ function html(){
       </div>
 
       <div class="ac-card">
-        <div class="ac-head">Certificados emitidos</div>
+        <div class="ac-head">Certificados emitidos <button type="button" class="ac-btn ac-soft" id="acActualizar" style="float:right;padding:4px 10px" title="Trae certificados y firmas hechos en otra computadora">Actualizar</button></div>
         <div class="ac-body" id="acHistorial"></div>
       </div>
     </div>
@@ -651,6 +651,26 @@ function toastPremium(tipo,texto){
   },3600);
 }
 
+/* FASE 2 · ACTUALIZAR SEGURO (manual, adaptado de AUROSANAX PRUEBA 7928323):
+   refresca SOLO la lista de certificados y sus firmas de la atención abierta.
+   No toca el formulario (no hay cambios que perder), no recarga la página,
+   no corre durante un guardado ni con una firma en curso. */
+async function actualizarCertificadosSeguro(){
+  const id=txt(state.idAtencion);
+  if(!id){ msg('warn','Seleccione una atención.'); return null; }
+  if(state.guardando){ msg('warn','Espere: se está guardando el certificado.'); return null; }
+  if(state.firmando){ msg('warn','Hay una firma en proceso. Espere a que termine antes de actualizar.'); return null; }
+  const btn=document.getElementById('acActualizar');
+  if(btn) btn.disabled=true;
+  try{
+    await cargarHistorial(id,state.token);
+    if(txt(state.idAtencion)===id) msg('ok','Certificados y firmas actualizados.');
+  }finally{
+    if(btn) btn.disabled=false;
+  }
+  return true;
+}
+
 function msg(t,s){
   const e=document.getElementById('acMsg');
   if(e) e.innerHTML=s?`<div class="ac-msg ac-${t}">${esc(s)}</div>`:'';
@@ -676,6 +696,7 @@ function eventos(){
   document.getElementById('acVista')?.addEventListener('click',()=>vista(false));
   document.getElementById('acImprimir')?.addEventListener('click',()=>vista(true));
   document.getElementById('acNuevo')?.addEventListener('click',nuevo);
+  document.getElementById('acActualizar')?.addEventListener('click',actualizarCertificadosSeguro);
   document.querySelectorAll('[data-acexpand]').forEach(b=>b.addEventListener('click',()=>abrirEditorAmpliado(b.dataset.acexpand)));
 }
 

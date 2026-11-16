@@ -5805,6 +5805,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
     };
     let accionActiva = false;
     let refrescoTimer = null;
+    let verCambiosOcupado = false; // Fase 2: botón manual "Ver cambios"
 
     function texto(v){ return String(v === null || v === undefined ? '' : v).trim(); }
     function escapar(v){
@@ -5953,6 +5954,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
               <button type="button" class="ipr-refresh" data-ipr-accion="REFRESCAR" title="Actualizar estado de firma" aria-label="Actualizar estado de firma"><i class="bi bi-arrow-clockwise"></i></button>
               <button type="button" class="${escapar(visual.boton.clase)}" data-ipr-accion="${escapar(visual.boton.accion)}" ${visual.boton.disabled?'disabled':''}>${escapar(visual.boton.texto)}</button>
               ${accionActiva && estadoActual.id_receta ? '<button type="button" data-ipr-accion="CANCELAR"><i class="bi bi-x-circle me-1"></i>Cancelar firma</button>' : ''}
+              <button type="button" data-ipr-accion="VERCAMBIOS" title="Trae la receta y la firma hechas en otra computadora" ${(accionActiva || verCambiosOcupado)?'disabled':''}>${verCambiosOcupado?'<i class="bi bi-hourglass-split me-1"></i>Trayendo…':'<i class="bi bi-arrow-repeat me-1"></i>Ver cambios'}</button>
             </div>
           </div>`;
 
@@ -5963,6 +5965,7 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
                 else if(accion === 'FIRMAR') firmarDesdePlan();
                 else if(accion === 'VER') verFirmadaDesdePlan();
                 else if(accion === 'CANCELAR') cancelarDesdePlan();
+                else if(accion === 'VERCAMBIOS') verCambiosDesdePlan();
             });
         });
     }
@@ -6101,6 +6104,45 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         }
     }
 
+    /* FASE 2 · VER CAMBIOS (manual, adaptado de AUROSANAX PRUEBA 5921a0e)
+       Trae recetas y firmas del paciente hechas en otra computadora mediante
+       window.auroRecetaTraerCambiosPaciente (recetas.js) y luego refleja el
+       estado oficial. No firma, no guarda, no toca medicamentos ni el Plan,
+       no corre con una firma en curso y nunca se ejecuta solo. */
+    async function verCambiosDesdePlan(){
+        if(accionActiva || verCambiosOcupado) return null;
+        const idEsperado = idAtencionActiva();
+        if(!idEsperado) return null;
+        if(typeof window.auroRecetaTraerCambiosPaciente !== 'function'){
+            estadoActual = Object.assign({},estadoActual,{mensaje:'El módulo Recetas aún no está disponible para traer cambios.'});
+            pintar();
+            return null;
+        }
+        verCambiosOcupado = true;
+        pintar();
+        let r = null;
+        try{
+            r = await window.auroRecetaTraerCambiosPaciente();
+        }catch(error){
+            console.warn('IASYN PLAN VER CAMBIOS: no se pudieron traer los cambios.',error);
+            r = null;
+        }finally{
+            verCambiosOcupado = false;
+        }
+        if(idAtencionActiva() !== idEsperado){ pintar(); return null; }
+        const estado = await sincronizar(false);
+        if(!estado || idAtencionActiva() !== idEsperado){ pintar(); return null; }
+        let aviso = 'Receta y firma al día. ';
+        if(!r || !r.success){
+            aviso = r && r.motivo === 'GUARDANDO'
+                ? 'Espere: la receta se está guardando. '
+                : 'No se pudieron traer los cambios; su trabajo en pantalla se conserva. ';
+        }
+        estadoActual = Object.assign({},estadoActual,{mensaje:aviso + texto(estadoActual.mensaje)});
+        pintar();
+        return r;
+    }
+
     function eventoAtencion(){
         secuencia++;
         accionActiva = false;
@@ -6150,7 +6192,8 @@ window.auroPlanGuardarPlanClinicoConUXPlanJS = guardarPlanClinicoConUX;
         sincronizar:function(){ return sincronizar(true); },
         obtenerEstado:function(){ return Object.assign({},estadoActual); },
         firmar:function(){ return firmarDesdePlan(); },
-        verFirmada:function(){ return verFirmadaDesdePlan(); }
+        verFirmada:function(){ return verFirmadaDesdePlan(); },
+        verCambios:function(){ return verCambiosDesdePlan(); }
     });
 
     let intentos = 0;

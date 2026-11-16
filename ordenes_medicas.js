@@ -828,7 +828,7 @@ function render(){
       </div>
       <div id="iasynOrdenMedicaAviso" class="aom-notice ${e.disabled?'warn':''}">${esc(e.nota)}</div>
       <div class="aom-history">
-        <div class="aom-history-title">Órdenes emitidas en esta atención</div>
+        <div class="aom-history-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px">Órdenes emitidas en esta atención <button type="button" class="aom-btn" id="iasynOrdenMedicaBtnActualizar" style="text-transform:none;letter-spacing:0" title="Trae órdenes y firmas hechas en otra computadora"><i class="bi bi-arrow-repeat"></i> Actualizar</button></div>
         ${emitidas.length?emitidas.map(r=>filaHistorial(r)).join(''):'<div class="aom-empty">Todavía no hay órdenes formales emitidas para esta atención.</div>'}
       </div>
     </div>`;
@@ -850,6 +850,7 @@ function render(){
     });
   });
   document.getElementById('iasynOrdenMedicaBtnPrincipal')?.addEventListener('click',accionPrincipal);
+  document.getElementById('iasynOrdenMedicaBtnActualizar')?.addEventListener('click',actualizarOrdenesSeguro);
   if(state.ultimoAviso){
     const a=document.getElementById('iasynOrdenMedicaAviso');
     if(a){a.className='aom-notice '+state.ultimoAviso.tipo;a.textContent=state.ultimoAviso.mensaje;}
@@ -897,6 +898,30 @@ function aviso(msg,tipo=''){
   if(!el) return;
   el.className='aom-notice'+(tipo?' '+tipo:'');
   el.textContent=msg;
+}
+
+/* FASE 2 · ACTUALIZAR SEGURO (manual, adaptado de AUROSANAX PRUEBA 7928323):
+   recarga órdenes y firmas de la atención abierta sin recargar la página.
+   No corre durante un guardado ni con una firma en curso; si el editor de la
+   orden está abierto, pregunta antes porque sus cambios sin guardar se perderían. */
+async function actualizarOrdenesSeguro(){
+  if(state.guardando){ aviso('Espere: se está guardando la orden.','warn'); return null; }
+  if(state.firmaProcesos && state.firmaProcesos.size){ aviso('Hay una firma en proceso. Espere a que termine antes de actualizar.','warn'); return null; }
+  if(document.getElementById('iasynOrdenMedicaEditorModal')){
+    if(!window.confirm('Tiene el editor de la orden abierto.\n\n¿Actualizar de todas formas? Se perderán los cambios sin guardar del editor.')) return null;
+    cerrarEditorFormal();
+  }
+  const btn=document.getElementById('iasynOrdenMedicaBtnActualizar');
+  if(btn) btn.disabled=true;
+  state.ultimoAviso=null;
+  let r=null;
+  try{
+    r=await cargar();
+    if(!state.cargaFallida && !state.ultimoAviso) aviso('Órdenes y firmas actualizadas.','ok');
+  }finally{
+    if(btn && btn.isConnected) btn.disabled=false;
+  }
+  return r;
 }
 
 function setGuardando(v){
